@@ -1,41 +1,147 @@
-import { useEffect, useState } from 'react';
+import type { HostSummary } from '@nftm/core';
+import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from './api.ts';
+import styles from './App.module.css';
+import { AlertIcon, LockIcon } from './components/icons.tsx';
+import { TopBar } from './components/TopBar.tsx';
+import { AddHostDialog } from './hosts/AddHostDialog.tsx';
+import { HostList } from './hosts/HostList.tsx';
+import { HostView } from './hosts/HostView.tsx';
 import { useI18n } from './i18n/I18nProvider.tsx';
-import { LanguageSelect } from './i18n/LanguageSelect.tsx';
 
-interface Health {
-  ok: boolean;
-  version: string;
-}
-
-type State = { kind: 'loading' } | { kind: 'ready'; health: Health } | { kind: 'error'; error: unknown };
+type Load = { state: 'loading' } | { state: 'ready'; version: string } | { state: 'failed'; error: unknown };
 
 export function App() {
   const { t } = useI18n();
-  const [state, setState] = useState<State>({ kind: 'loading' });
+  const [load, setLoad] = useState<Load>({ state: 'loading' });
+  const [hosts, setHosts] = useState<HostSummary[]>([]);
+  const [selectedId, setSelectedId] = useState<string>();
+  const [connecting, setConnecting] = useState<ReadonlySet<string>>(new Set());
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
-    api.get<Health>('/health').then(
-      (health) => setState({ kind: 'ready', health }),
-      (error: unknown) => setState({ kind: 'error', error }),
+    Promise.all([api.get<{ version: string }>('/health'), api.get<{ hosts: HostSummary[] }>('/hosts')]).then(
+      ([health, list]) => {
+        setHosts(list.hosts);
+        setSelectedId(list.hosts[0]?.id);
+        setLoad({ state: 'ready', version: health.version });
+      },
+      (error: unknown) => setLoad({ state: 'failed', error }),
     );
   }, []);
 
+  const replaceHost = useCallback((host: HostSummary) => {
+    setHosts((list) => list.map((item) => (item.id === host.id ? host : item)));
+  }, []);
+
+  const connect = useCallback(
+    async (id: string) => {
+      setConnecting((set) => new Set(set).add(id));
+      try {
+        const { host } = await api.post<{ host: HostSummary }>(`/hosts/${encodeURIComponent(id)}/connect`);
+        replaceHost(host);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        setHosts((list) =>
+          list.map((item) => (item.id === id ? { ...item, status: { state: 'error', error: { code: 'unknown', detail } } } : item)),
+        );
+      } finally {
+        setConnecting((set) => {
+          const next = new Set(set);
+          next.delete(id);
+          return next;
+        });
+      }
+    },
+    [replaceHost],
+  );
+
+  const selected = hosts.find((host) => host.id === selectedId);
+
+  // A host connects the first time it is shown.
+  useEffect(() => {
+    if (selected?.status.state === 'new' && !connecting.has(selected.id)) void connect(selected.id);
+  }, [selected, connecting, connect]);
+
+  async function remove(host: HostSummary) {
+    if (!window.confirm(t('host.removeConfirm', { name: host.name }))) return;
+    await api.delete(`/hosts/${encodeURIComponent(host.id)}`);
+    setHosts((list) => list.filter((item) => item.id !== host.id));
+    setSelectedId(hosts[0]?.id);
+  }
+
+  async function unlock(id: string, password: string) {
+    const { host } = await api.post<{ host: HostSummary }>(`/hosts/${encodeURIComponent(id)}/sudo-password`, { password });
+    replaceHost(host);
+  }
+
+  if (load.state !== 'ready') {
+    return (
+      <div className={styles.shell}>
+        <TopBar />
+        <div className={styles.center}>
+          {load.state === 'loading' ? (
+            <p className={styles.loading} role="status">
+              <span className="spinner" aria-hidden="true" />
+              {t('app.loading')}
+            </p>
+          ) : (
+            <FailedToLoad error={load.error} />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <main>
-      <header>
-        <h1>nftm</h1>
-        <LanguageSelect />
-      </header>
-      {state.kind === 'loading' && <p>{t('app.connecting')}</p>}
-      {state.kind === 'ready' && <p>{t('app.connected', { version: state.health.version })}</p>}
-      {state.kind === 'error' && (
-        <p role="alert">
-          {state.error instanceof ApiError && state.error.status === 401
-            ? t('app.unauthorized')
-            : t('app.error', { message: state.error instanceof Error ? state.error.message : String(state.error) })}
-        </p>
-      )}
-    </main>
+    <div className={styles.shell}>
+      <TopBar version={load.version} />
+      <div className={styles.body}>
+        <HostList
+          hosts={hosts}
+          selectedId={selectedId}
+          connecting={connecting}
+          onSelect={setSelectedId}
+          onAdd={() => setAdding(true)}
+        />
+        <main className={styles.main}>
+          {selected && (
+            <HostView
+              key={selected.id}
+              host={selected}
+              connecting={connecting.has(selected.id)}
+              onConnect={() => void connect(selected.id)}
+              onRemove={() => void remove(selected)}
+              onUnlock={(password) => unlock(selected.id, password)}
+            />
+          )}
+        </main>
+      </div>
+      <AddHostDialog
+        open={adding}
+        onClose={() => setAdding(false)}
+        onAdded={(host) => {
+          setHosts((list) => [...list, host]);
+          setSelectedId(host.id);
+          setAdding(false);
+        }}
+      />
+    </div>
+  );
+}
+
+function FailedToLoad({ error }: { error: unknown }) {
+  const { t } = useI18n();
+  const unauthorized = error instanceof ApiError && error.status === 401;
+  return (
+    <div className={styles.message} role="alert">
+      <span className={styles.messageIcon}>{unauthorized ? <LockIcon /> : <AlertIcon />}</span>
+      <h1 className={styles.messageTitle}>{t(unauthorized ? 'app.unauthorized.title' : 'app.error.title')}</h1>
+      <p className={styles.messageText}>
+        {unauthorized
+          ? t('app.unauthorized')
+          : t('app.error', { message: error instanceof Error ? error.message : String(error) })}
+      </p>
+    </div>
   );
 }

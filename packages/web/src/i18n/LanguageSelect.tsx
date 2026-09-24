@@ -5,8 +5,8 @@ export function LanguageSelect() {
   const { locale, locales, setLocale, t } = useI18n();
   return (
     <label>
-      {t('language.label')}{' '}
-      <select value={locale} onChange={(event) => setLocale(event.target.value)}>
+      <span className="visually-hidden">{t('language.label')}</span>
+      <select className="select select-compact" value={locale} onChange={(event) => setLocale(event.target.value)}>
         {locales.map((code) => (
           <option key={code} value={code} lang={code}>
             {languageName(code)}
