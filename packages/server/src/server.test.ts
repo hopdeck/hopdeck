@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { HostManager } from './hosts/manager.ts';
 import { startServer, type RunningServer } from './server.ts';
 
 describe('startServer', () => {
@@ -15,7 +16,8 @@ describe('startServer', () => {
     await mkdir(join(webRoot, 'assets'));
     await writeFile(join(webRoot, 'index.html'), '<!doctype html><title>nftm</title>');
     await writeFile(join(webRoot, 'assets', 'app.js'), 'console.log(1)');
-    server = await startServer({ port: 0, token: 'test-token', webRoot, version: '0.0.0-test' });
+    const hosts = await HostManager.open({ configDir: join(webRoot, 'config'), controlDir: webRoot });
+    server = await startServer({ port: 0, token: 'test-token', webRoot, version: '0.0.0-test', hosts });
     base = `http://127.0.0.1:${server.port}`;
   });
 

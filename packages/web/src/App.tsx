@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ApiError, apiGet } from './api.ts';
+import { api, ApiError } from './api.ts';
 import { useI18n } from './i18n/I18nProvider.tsx';
 import { LanguageSelect } from './i18n/LanguageSelect.tsx';
 
@@ -15,7 +15,7 @@ export function App() {
   const [state, setState] = useState<State>({ kind: 'loading' });
 
   useEffect(() => {
-    apiGet<Health>('/health').then(
+    api.get<Health>('/health').then(
       (health) => setState({ kind: 'ready', health }),
       (error: unknown) => setState({ kind: 'error', error }),
     );

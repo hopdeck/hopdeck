@@ -17,23 +17,38 @@ function takeToken(): string | null {
 
 const token = takeToken();
 
+/** The server answers errors with `{ error: { code, message } }`; the UI translates `code`. */
 export class ApiError extends Error {
   override name = 'ApiError';
   readonly status: number;
+  readonly code: string;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, code: string, message: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+
   const res = await fetch(`/api${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    method,
+    headers,
+    ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new ApiError(res.status, body.error ?? res.statusText);
+    const payload = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
+    throw new ApiError(res.status, payload.error?.code ?? 'unknown', payload.error?.message ?? res.statusText);
   }
-  return (await res.json()) as T;
+  return (res.status === 204 ? undefined : await res.json()) as T;
 }
+
+export const api = {
+  get: <T>(path: string) => request<T>('GET', path),
+  post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
+  delete: (path: string) => request<void>('DELETE', path),
+};

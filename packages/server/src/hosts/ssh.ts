@@ -2,6 +2,7 @@ import { chmod, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { ExecOptions, ExecResult, Executor } from '@nftm/core';
+import { HostError, type HostErrorCode } from './errors.ts';
 import { DEFAULT_TIMEOUT_MS, runProcess } from './process.ts';
 import { shellCommand } from './shell-quote.ts';
 
@@ -27,8 +28,7 @@ export class SshExecutor implements Executor {
   readonly #timeoutMs: number;
 
   constructor(options: SshExecutorOptions) {
-    // A leading "-" would turn the destination into an ssh option such as -oProxyCommand=...
-    if (options.destination === '' || options.destination.startsWith('-') || /\s/.test(options.destination)) {
+    if (!isValidDestination(options.destination)) {
       throw new Error(`invalid SSH destination: ${JSON.stringify(options.destination)}`);
     }
     // ssh splits option values on whitespace and expands % tokens in ControlPath.
@@ -48,11 +48,35 @@ export class SshExecutor implements Executor {
     ];
   }
 
-  exec(argv: readonly string[], options: ExecOptions = {}): Promise<ExecResult> {
-    if (argv.length === 0) return Promise.reject(new Error('empty command'));
+  /** Rejects with a HostError when ssh itself fails; the remote command's exit code is returned as is. */
+  async exec(argv: readonly string[], options: ExecOptions = {}): Promise<ExecResult> {
+    if (argv.length === 0) throw new Error('empty command');
     const args = [...this.#sshArgs, '--', this.host, shellCommand(argv)];
-    return runProcess(this.#sshPath, args, { stdin: options.stdin, timeoutMs: this.#timeoutMs });
+    const result = await runProcess(this.#sshPath, args, { stdin: options.stdin, timeoutMs: this.#timeoutMs });
+    const failure = result.exitCode === 255 ? sshFailure(result.stderr) : undefined;
+    if (failure !== undefined) throw new HostError(failure, result.stderr.trim());
+    return result;
   }
+}
+
+/** A leading "-" would turn the destination into an ssh option such as -oProxyCommand=... */
+export function isValidDestination(destination: string): boolean {
+  return destination.length > 0 && destination.length <= 255 && !destination.startsWith('-') && !/\s/.test(destination);
+}
+
+/**
+ * ssh exits with 255 on its own errors, but a remote command may do the same,
+ * so the message decides. OpenSSH messages are not localized.
+ */
+export function sshFailure(stderr: string): HostErrorCode | undefined {
+  // A changed key can mean a man-in-the-middle; it must never look like a first contact.
+  if (/REMOTE HOST IDENTIFICATION HAS CHANGED/.test(stderr)) return 'ssh-host-key-changed';
+  if (/Host key verification failed|No .*host key is known/.test(stderr)) return 'ssh-host-key';
+  if (/Permission denied|Too many authentication failures/.test(stderr)) return 'ssh-auth';
+  if (/^ssh: |Connection (refused|timed out|closed|reset)|Could not resolve|No route to host/m.test(stderr)) {
+    return 'ssh-connect';
+  }
+  return undefined;
 }
 
 /**

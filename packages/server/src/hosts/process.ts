@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import type { ExecResult } from '@nftm/core';
+import { HostError } from './errors.ts';
 
 export const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -27,14 +28,14 @@ export function runProcess(file: string, args: readonly string[], options: RunOp
     child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
     child.once('error', (error) => {
       clearTimeout(timer);
-      reject(error);
+      reject(new HostError('spawn-failed', `${file}: ${error.message}`));
     });
     child.once('close', (code, signal) => {
       clearTimeout(timer);
       if (timedOut) {
-        reject(new Error(`${file} timed out after ${options.timeoutMs} ms`));
+        reject(new HostError('timeout', `${file} timed out after ${options.timeoutMs} ms`));
       } else if (code === null) {
-        reject(new Error(`${file} was killed by ${signal}`));
+        reject(new HostError('command-failed', `${file} was killed by ${signal}`));
       } else {
         resolve({
           exitCode: code,

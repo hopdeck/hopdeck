@@ -1,7 +1,9 @@
 #!/usr/bin/env node
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { generateToken, startServer } from '@nftm/server';
+import { demoRuleset, ensureControlDir, generateToken, HostManager, Sandbox, startServer } from '@nftm/server';
 import pkg from '../package.json' with { type: 'json' };
 
 const HELP = `Usage: nftm [options]
@@ -10,8 +12,13 @@ Starts the nftm panel on 127.0.0.1 and prints its URL.
 
 Options:
   -p, --port <port>  port to listen on (default: 7400)
+      --sandbox      add a sandbox host: a private network namespace with a
+                     demo firewall, needs no root and never touches the real one
       --dev          serve the API only; the UI comes from the Vite dev server
   -h, --help         show this help
+
+Environment:
+  NFTM_CONFIG_DIR    where hosts.json is kept (default: ~/.config/nftm)
 `;
 
 const DEV_UI_ORIGINS = ['http://127.0.0.1:5173', 'http://localhost:5173'];
@@ -19,6 +26,7 @@ const DEV_UI_ORIGINS = ['http://127.0.0.1:5173', 'http://localhost:5173'];
 const { values } = parseArgs({
   options: {
     port: { type: 'string', short: 'p', default: '7400' },
+    sandbox: { type: 'boolean', default: false },
     dev: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },
   },
@@ -31,9 +39,27 @@ if (values.help) {
 
 const port = Number(values.port);
 if (!Number.isInteger(port) || port < 0 || port > 65535) {
-  process.stderr.write(`nftm: invalid port: ${values.port}\n`);
-  process.exit(2);
+  fail(`invalid port: ${values.port}`);
 }
+
+const configDir =
+  process.env['NFTM_CONFIG_DIR'] || join(process.env['XDG_CONFIG_HOME'] || join(homedir(), '.config'), 'nftm');
+
+let sandbox: Sandbox | undefined;
+if (values.sandbox) {
+  try {
+    sandbox = await Sandbox.start();
+    await sandbox.load(await demoRuleset());
+  } catch (error) {
+    fail(`cannot start the sandbox: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+const hosts = await HostManager.open({
+  configDir,
+  controlDir: await ensureControlDir(),
+  ...(sandbox && { sandbox: sandbox.executor }),
+});
 
 // `pnpm dev` sets NFTM_TOKEN so the browser session survives --watch restarts.
 const token = process.env['NFTM_TOKEN'] || generateToken();
@@ -44,8 +70,21 @@ const server = await startServer({
   extraOrigins: values.dev ? DEV_UI_ORIGINS : [],
   webRoot: values.dev ? undefined : fileURLToPath(new URL('../../web/dist/', import.meta.url)),
   version: pkg.version,
+  hosts,
 });
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(signal, async () => {
+    await Promise.allSettled([server.close(), sandbox?.dispose()]);
+    process.exit(0);
+  });
+}
 
 // The token goes in the fragment, which browsers never send to the server.
 const uiOrigin = values.dev ? DEV_UI_ORIGINS[0] : `http://127.0.0.1:${server.port}`;
 process.stdout.write(`nftm ${pkg.version} is running at:\n\n  ${uiOrigin}/#token=${token}\n\n`);
+
+function fail(message: string): never {
+  process.stderr.write(`nftm: ${message}\n`);
+  process.exit(2);
+}

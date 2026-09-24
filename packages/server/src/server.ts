@@ -2,6 +2,9 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { extname, join, resolve, sep } from 'node:path';
+import { handleApi } from './api.ts';
+import type { HostManager } from './hosts/manager.ts';
+import { ApiError, sendError } from './http.ts';
 import { checkAccess, createAccessPolicy, SECURITY_HEADERS, type AccessPolicy } from './security.ts';
 
 export interface ServerOptions {
@@ -13,6 +16,7 @@ export interface ServerOptions {
   /** Directory with the built web UI; without it only the API is served (dev mode). */
   webRoot?: string;
   version: string;
+  hosts: HostManager;
 }
 
 export interface RunningServer {
@@ -38,7 +42,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     handle(req, res, policy!, options).catch((error: unknown) => {
       console.error(error);
       if (res.headersSent) res.destroy();
-      else sendJson(res, 500, { error: 'internal error' });
+      else sendError(res, new ApiError(500, 'internal-error'));
     });
   });
 
@@ -65,19 +69,16 @@ async function handle(req: IncomingMessage, res: ServerResponse, policy: AccessP
   const path = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
   const isApi = path === '/api' || path.startsWith('/api/');
   const access = checkAccess(req.headers, policy, isApi);
-  if (!access.ok) return sendJson(res, access.status, { error: access.reason });
-
-  if (isApi) {
-    if (req.method === 'GET' && path === '/api/health') {
-      return sendJson(res, 200, { ok: true, version: options.version });
-    }
-    return sendJson(res, 404, { error: 'not found' });
+  if (!access.ok) {
+    return sendError(res, new ApiError(access.status, access.status === 401 ? 'unauthorized' : 'forbidden', access.reason));
   }
+
+  if (isApi) return handleApi(req, res, path, { hosts: options.hosts, version: options.version });
 
   if (options.webRoot !== undefined && (req.method === 'GET' || req.method === 'HEAD')) {
     return serveStatic(res, path, options.webRoot);
   }
-  sendJson(res, 404, { error: 'not found' });
+  sendError(res, new ApiError(404, 'not-found'));
 }
 
 /** Serves a file of the built UI, falling back to index.html for client-side routes. */
@@ -87,14 +88,14 @@ async function serveStatic(res: ServerResponse, path: string, webRoot: string) {
   try {
     file = resolve(root, `.${decodeURIComponent(path)}`);
   } catch {
-    return sendJson(res, 400, { error: 'malformed path' });
+    return sendError(res, new ApiError(400, 'malformed-path'));
   }
-  if (file !== root && !file.startsWith(root + sep)) return sendJson(res, 404, { error: 'not found' });
+  if (file !== root && !file.startsWith(root + sep)) return sendError(res, new ApiError(404, 'not-found'));
 
   let target = file;
   if (!(await isFile(target))) {
     target = join(root, 'index.html');
-    if (extname(file) !== '' || !(await isFile(target))) return sendJson(res, 404, { error: 'not found' });
+    if (extname(file) !== '' || !(await isFile(target))) return sendError(res, new ApiError(404, 'not-found'));
   }
 
   const body = await readFile(target);
@@ -104,11 +105,6 @@ async function serveStatic(res: ServerResponse, path: string, webRoot: string) {
     'Cache-Control': 'no-cache',
   });
   res.end(body);
-}
-
-function sendJson(res: ServerResponse, status: number, body: unknown) {
-  res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify(body));
 }
 
 function isFile(path: string): Promise<boolean> {
