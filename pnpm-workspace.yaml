@@ -1,0 +1,7 @@
+packages:
+  - packages/*
+
+# Supply-chain hardening, see "Dependency policy" in docs/ARCHITECTURE.md.
+# Dependency build scripts are already blocked by default (strictDepBuilds).
+minimumReleaseAge: 10080 # minutes (7 days)
+trustPolicy: no-downgrade
