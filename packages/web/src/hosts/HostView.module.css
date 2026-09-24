@@ -1,7 +1,7 @@
 .view {
   display: grid;
   gap: 18px;
-  max-width: 860px;
+  max-width: 1100px;
 }
 
 .header {
@@ -49,8 +49,31 @@
 }
 
 .subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
   color: var(--text-muted);
   font-size: var(--text-sm);
+}
+
+.accessBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px 0 6px;
+  border: 1px solid var(--ok-border);
+  border-radius: 999px;
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.accessBadge svg {
+  width: 13px;
+  height: 13px;
 }
 
 .actions {

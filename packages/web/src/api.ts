@@ -35,11 +35,17 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (token) headers['Authorization'] = `Bearer ${token}`;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
 
-  const res = await fetch(`/api${path}`, {
-    method,
-    headers,
-    ...(body !== undefined && { body: JSON.stringify(body) }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, {
+      method,
+      headers,
+      ...(body !== undefined && { body: JSON.stringify(body) }),
+    });
+  } catch (error) {
+    // fetch rejects only when no response arrived at all.
+    throw new ApiError(0, 'backend-unreachable', error instanceof Error ? error.message : String(error));
+  }
   if (!res.ok) {
     const payload = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
     // A response without the usual error body (a proxy, a crash) still says what happened.

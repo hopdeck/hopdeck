@@ -1,3 +1,5 @@
+import { RulesetParseError } from '@nftm/core';
+import { ApiError } from '../api.ts';
 import { errorText } from '../errors.ts';
 import { useI18n, type I18n } from '../i18n/I18nProvider.tsx';
 import type { Vars } from '../i18n/translate.ts';
@@ -8,6 +10,14 @@ export interface ErrorInfo {
   code: string;
   /** The raw message: stderr of ssh, sudo or nft, or the server's own message. */
   message: string;
+}
+
+/** Turns anything caught into a code and the real message. */
+export function toErrorInfo(caught: unknown): ErrorInfo {
+  if (caught instanceof ApiError) return { code: caught.code, message: caught.message };
+  if (caught instanceof RulesetParseError) return { code: 'invalid-ruleset', message: caught.message };
+  const message = caught instanceof Error ? `${caught.name}: ${caught.message}` : String(caught);
+  return { code: 'ui-error', message };
 }
 
 export function errorTitle(t: I18n['t'], code: string): string {

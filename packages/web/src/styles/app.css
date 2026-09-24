@@ -53,6 +53,15 @@
 
   --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.05);
   --shadow-lg: 0 24px 48px -12px rgb(16 24 40 / 0.28);
+
+  --syn-keyword: #6d3fc0;
+  --syn-string: #a3530b;
+  --syn-number: #0a6a9e;
+  --syn-ref: #0e7c72;
+  --syn-comment: #8a909b;
+  --syn-accept: #16803c;
+  --syn-drop: #c2283b;
+  --syn-jump: #0e7c72;
 }
 
 :root[data-theme='dark'] {
@@ -86,6 +95,15 @@
 
   --shadow-sm: none;
   --shadow-lg: 0 24px 56px -12px rgb(0 0 0 / 0.65);
+
+  --syn-keyword: #b9a3f5;
+  --syn-string: #eec27a;
+  --syn-number: #86cdf2;
+  --syn-ref: #5fd6c6;
+  --syn-comment: #6d7580;
+  --syn-accept: #4cd97b;
+  --syn-drop: #f47b86;
+  --syn-jump: #5fd6c6;
 }
 
 /* Base */
@@ -365,6 +383,64 @@ pre,
   font-size: var(--text-xs);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* nft code */
+
+.code-inline {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.code-block {
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  tab-size: 4;
+}
+
+.syn-keyword {
+  color: var(--syn-keyword);
+}
+
+.syn-string {
+  color: var(--syn-string);
+}
+
+.syn-number {
+  color: var(--syn-number);
+}
+
+.syn-ref {
+  color: var(--syn-ref);
+  font-weight: 500;
+}
+
+.syn-comment {
+  color: var(--syn-comment);
+}
+
+.syn-accept {
+  color: var(--syn-accept);
+  font-weight: 600;
+}
+
+.syn-drop {
+  color: var(--syn-drop);
+  font-weight: 600;
+}
+
+.syn-jump {
+  color: var(--syn-jump);
+  font-weight: 600;
 }
 
 /* Status */

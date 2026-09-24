@@ -1,7 +1,7 @@
 import type { HostSummary } from '@nftm/core';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { api, ApiError } from '../api.ts';
-import { ErrorCallout, type ErrorInfo } from '../components/ErrorCallout.tsx';
+import { api } from '../api.ts';
+import { ErrorCallout, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
 import { CloseIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import styles from './AddHostDialog.module.css';
@@ -45,11 +45,7 @@ export function AddHostDialog({ open, onClose, onAdded }: AddHostDialogProps) {
       form.reset();
       onAdded(host);
     } catch (caught) {
-      setError(
-        caught instanceof ApiError
-          ? { code: caught.code, message: caught.message }
-          : { code: 'backend-unreachable', message: caught instanceof Error ? caught.message : String(caught) },
-      );
+      setError(toErrorInfo(caught));
     } finally {
       setBusy(false);
     }

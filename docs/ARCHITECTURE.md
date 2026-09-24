@@ -128,7 +128,10 @@ disappears with it.
 
 ## Reading, validating, converting
 
-- Read: `nft -j list ruleset`, then `parseRuleset` from core.
+- Read: `nft -j list ruleset`, then `parseRuleset` from core. The text of
+  each rule, base chain definition and set/map/object block comes from
+  `nft -a list ruleset` (`parseListing`), matched to the JSON by handle, so
+  the UI shows exactly what the host's nft prints and needs no nft printer.
 - Validate: `nft -c -f -` on the host.
 - Convert text to JSON and normalize: load the ruleset into a throwaway network
   namespace and list it back (`unshare -rn` works without root when
@@ -145,6 +148,9 @@ disappears with it.
 
 - nftm edits only tables it manages. Everything else stays visible (including
   in the packet path view) but read-only.
+- Owners are guessed (`tableOwner` in core) and the UI always shows the
+  evidence: the iptables-nft marker nft prints, xt expressions, iptables chain
+  names, or a known tool's table name (firewalld, fail2ban, libvirt, ...).
 - Tables written by iptables-nft contain `xt` expressions that nft cannot
   recreate. They are always read-only.
 - There are two ways to change a managed table:

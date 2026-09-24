@@ -1,14 +1,31 @@
 import type { HostFacts, HostKind, HostStatus, HostSummary, Privilege } from '@nftm/core';
 import { useState, type FormEvent } from 'react';
-import { ApiError } from '../api.ts';
 import { Callout } from '../components/Callout.tsx';
-import { ErrorBody, ErrorCallout, errorTitle, type ErrorInfo } from '../components/ErrorCallout.tsx';
+import { ErrorBody, ErrorCallout, errorTitle, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
 import { AlertIcon, CheckIcon, HostKindIcon, LockIcon, RefreshIcon, SandboxIcon, TrashIcon } from '../components/icons.tsx';
+import { Tabs } from '../components/Tabs.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
+import type { MessageKey } from '../i18n/locales.ts';
+import { ListingView } from '../ruleset/ListingView.tsx';
+import { RulesetView } from '../ruleset/RulesetView.tsx';
+import { useRuleset, type RulesetState } from '../ruleset/useRuleset.ts';
 import styles from './HostView.module.css';
 import { hostSubtitle } from './status.ts';
 
 type Connected = Extract<HostStatus, { state: 'connected' }>;
+
+/** Whether nft can run as root now, i.e. the ruleset can be read. */
+function fullAccess(status: HostStatus): boolean {
+  if (status.state !== 'connected' || status.facts.nft === undefined) return false;
+  const { privilege } = status;
+  return privilege.kind === 'root' || privilege.kind === 'sudo' || (privilege.kind === 'sudo-password' && status.passwordStored);
+}
+
+const ACCESS_BADGES: Record<'root' | 'sudo' | 'sudo-password', { label: MessageKey; title: MessageKey }> = {
+  root: { label: 'access.badge.root', title: 'access.root' },
+  sudo: { label: 'access.badge.sudo', title: 'access.sudo' },
+  'sudo-password': { label: 'access.badge.sudoPassword', title: 'access.sudoPasswordStored' },
+};
 
 interface HostViewProps {
   host: HostSummary;
@@ -23,6 +40,11 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock }: Ho
   const { t } = useI18n();
   const { status } = host;
   const subtitle = hostSubtitle(host);
+  const readable = fullAccess(status);
+  const ruleset = useRuleset(host.id, readable);
+  const [tab, setTab] = useState('rules');
+  const badge =
+    readable && status.state === 'connected' && status.privilege.kind !== 'none' ? ACCESS_BADGES[status.privilege.kind] : undefined;
 
   return (
     <section className={styles.view} aria-labelledby="host-title">
@@ -35,8 +57,14 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock }: Ho
             <h1 id="host-title" className={styles.title}>
               {host.name}
             </h1>
-            <p className={'text' in subtitle ? `${styles.subtitle} mono` : styles.subtitle}>
-              {'text' in subtitle ? subtitle.text : t(subtitle.key)}
+            <p className={styles.subtitle}>
+              <span className={'text' in subtitle ? 'mono' : undefined}>{'text' in subtitle ? subtitle.text : t(subtitle.key)}</span>
+              {badge !== undefined && (
+                <span className={styles.accessBadge} title={t(badge.title)}>
+                  <CheckIcon />
+                  {t(badge.label)}
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -74,13 +102,38 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock }: Ho
         />
       )}
 
-      {status.state === 'connected' && (
+      {status.state === 'connected' && !readable && (
         <>
           <Access status={status} kind={host.kind} onUnlock={onUnlock} />
           <Facts facts={status.facts} />
         </>
       )}
+
+      {readable && status.state === 'connected' && (
+        <Tabs
+          label={t('tabs.label')}
+          active={tab}
+          onChange={setTab}
+          tabs={[
+            { id: 'rules', label: t('tabs.rules'), content: <RulesetView state={ruleset} /> },
+            { id: 'text', label: t('tabs.text'), content: <Listing state={ruleset} /> },
+            { id: 'system', label: t('tabs.system'), content: <Facts facts={status.facts} /> },
+          ]}
+        />
+      )}
     </section>
+  );
+}
+
+function Listing({ state }: { state: RulesetState }) {
+  const { t } = useI18n();
+  if (state.model !== undefined) return <ListingView text={state.model.text} />;
+  if (state.error !== undefined) return <ErrorCallout error={state.error} />;
+  return (
+    <p className={styles.loading} role="status">
+      <span className="spinner" aria-hidden="true" />
+      {t('ruleset.loading')}
+    </p>
   );
 }
 
@@ -91,20 +144,9 @@ function Access({ status, kind, onUnlock }: { status: Connected; kind: HostKind;
   if (facts.nft === undefined) {
     return <Callout tone="danger" icon={<AlertIcon />} title={t('access.nftMissing')} />;
   }
-  switch (privilege.kind) {
-    case 'root':
-      return <Callout tone="ok" icon={<CheckIcon />} title={t('access.root')} />;
-    case 'sudo':
-      return <Callout tone="ok" icon={<CheckIcon />} title={t('access.sudo')} />;
-    case 'sudo-password':
-      return status.passwordStored ? (
-        <Callout tone="ok" icon={<CheckIcon />} title={t('access.sudoPasswordStored')} />
-      ) : (
-        <PasswordPrompt onUnlock={onUnlock} />
-      );
-    case 'none':
-      return <NoAccess privilege={privilege} facts={facts} kind={kind} />;
-  }
+  if (privilege.kind === 'none') return <NoAccess privilege={privilege} facts={facts} kind={kind} />;
+  // Full access shows as a badge in the header; what is left is the password prompt.
+  return <PasswordPrompt onUnlock={onUnlock} />;
 }
 
 /** Where sudo membership comes from on common distributions. */
@@ -164,11 +206,7 @@ function PasswordPrompt({ onUnlock }: { onUnlock: HostViewProps['onUnlock'] }) {
     try {
       await onUnlock(String(new FormData(form).get('password') ?? ''));
     } catch (caught) {
-      setError(
-        caught instanceof ApiError
-          ? { code: caught.code, message: caught.message }
-          : { code: 'backend-unreachable', message: caught instanceof Error ? caught.message : String(caught) },
-      );
+      setError(toErrorInfo(caught));
       form.reset();
     } finally {
       setBusy(false);

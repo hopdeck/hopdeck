@@ -5,8 +5,9 @@ export interface ErrorText {
   hint?: MessageKey;
 }
 
-// Codes come from the server (HostErrorCode and API codes), plus
-// "backend-unreachable" when the browser cannot reach the server at all.
+// Codes come from the server (HostErrorCode and API codes), plus the UI's own:
+// backend-unreachable (no response at all), invalid-ruleset (nft's output did
+// not parse) and ui-error (a bug in the panel).
 const TEXTS = new Map<string, ErrorText>([
   ['ssh-host-key', { title: 'error.ssh-host-key.title', hint: 'error.ssh-host-key.hint' }],
   ['ssh-host-key-changed', { title: 'error.ssh-host-key-changed.title', hint: 'error.ssh-host-key-changed.hint' }],
@@ -25,6 +26,8 @@ const TEXTS = new Map<string, ErrorText>([
   ['unauthorized', { title: 'error.unauthorized.title', hint: 'error.unauthorized.hint' }],
   ['internal-error', { title: 'error.internal-error.title', hint: 'error.internal-error.hint' }],
   ['backend-unreachable', { title: 'error.backend-unreachable.title', hint: 'error.backend-unreachable.hint' }],
+  ['invalid-ruleset', { title: 'error.invalid-ruleset.title' }],
+  ['ui-error', { title: 'error.ui-error.title', hint: 'error.ui-error.hint' }],
 ]);
 
 /** Title and hint for a known code; unknown codes get a generic title that names the code. */

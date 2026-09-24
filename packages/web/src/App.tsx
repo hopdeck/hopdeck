@@ -1,8 +1,8 @@
 import type { HostSummary } from '@nftm/core';
 import { useCallback, useEffect, useState } from 'react';
-import { api, ApiError } from './api.ts';
+import { api } from './api.ts';
 import styles from './App.module.css';
-import { ErrorBody, errorTitle } from './components/ErrorCallout.tsx';
+import { ErrorBody, errorTitle, toErrorInfo } from './components/ErrorCallout.tsx';
 import { AlertIcon, LockIcon } from './components/icons.tsx';
 import { TopBar } from './components/TopBar.tsx';
 import { AddHostDialog } from './hosts/AddHostDialog.tsx';
@@ -42,10 +42,8 @@ export function App() {
         const { host } = await api.post<{ host: HostSummary }>(`/hosts/${encodeURIComponent(id)}/connect`);
         replaceHost(host);
       } catch (caught) {
-        const error =
-          caught instanceof ApiError
-            ? { code: caught.code, detail: caught.message }
-            : { code: 'backend-unreachable', detail: caught instanceof Error ? caught.message : String(caught) };
+        const { code, message } = toErrorInfo(caught);
+        const error = { code, detail: message };
         setHosts((list) => list.map((item) => (item.id === id ? { ...item, status: { state: 'error', error } } : item)));
       } finally {
         setConnecting((set) => {
@@ -134,10 +132,7 @@ export function App() {
 
 function FailedToLoad({ error }: { error: unknown }) {
   const { t } = useI18n();
-  const info =
-    error instanceof ApiError
-      ? { code: error.code, message: error.message }
-      : { code: 'backend-unreachable', message: error instanceof Error ? error.message : String(error) };
+  const info = toErrorInfo(error);
   return (
     <div className={styles.message} role="alert">
       <span className={styles.messageIcon}>{info.code === 'unauthorized' ? <LockIcon /> : <AlertIcon />}</span>
