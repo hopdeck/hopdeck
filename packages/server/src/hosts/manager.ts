@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Executor, HostErrorCode, HostKind, HostStatus, HostSummary } from '@nftm/core';
+import type { Executor, HostErrorCode, HostKind, HostStatus, HostSummary, RulesetSnapshot } from '@nftm/core';
 import { HostError } from './errors.ts';
 import { collectFacts } from './facts.ts';
 import { LocalExecutor } from './local.ts';
-import { detectPrivilege, runNft } from './privilege.ts';
+import { detectPrivilege, runNft, type NftAccess } from './privilege.ts';
 import { isValidDestination, SshExecutor } from './ssh.ts';
 
 interface Entry {
@@ -140,6 +140,41 @@ export class HostManager {
     entry.password = password;
     entry.status = { ...status, passwordStored: true };
     return summary(entry);
+  }
+
+  /**
+   * Reads the live ruleset twice, as JSON and as text with handles. The two
+   * reads are separate, so a tool changing the ruleset in between can leave a
+   * rule without its text; the UI says so instead of guessing.
+   */
+  async readRuleset(id: string): Promise<RulesetSnapshot | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    const access = this.#access(entry);
+
+    const json = await runNft(access, ['-j', 'list', 'ruleset']);
+    if (json.exitCode !== 0) throw new HostError('command-failed', json.stderr.trim() || `nft exited with code ${json.exitCode}`);
+    const listing = await runNft(access, ['-a', 'list', 'ruleset']);
+    if (listing.exitCode !== 0) {
+      throw new HostError('command-failed', listing.stderr.trim() || `nft exited with code ${listing.exitCode}`);
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(json.stdout);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new HostError('command-failed', `nft -j printed something that is not JSON (${reason}): ${json.stdout.slice(0, 300)}`);
+    }
+    return { json: parsed, listing: listing.stdout, readAt: new Date().toISOString() };
+  }
+
+  /** How to run nft as root on a connected host; throws when that is not possible yet. */
+  #access(entry: Entry): NftAccess {
+    const { status } = entry;
+    if (status.state !== 'connected') throw new HostStateError(`${entry.name} is not connected; connect to it first`);
+    if (status.facts.nft === undefined) throw new HostError('nft-missing');
+    return { executor: entry.executor, nftPath: status.facts.nft.path, privilege: status.privilege, password: entry.password };
   }
 
   #sshEntry(host: StoredHost): Entry {

@@ -66,6 +66,9 @@ describe('hosts API', () => {
     expect(form.status).toBe(415);
 
     expect((await api('/hosts', { method: 'PUT' })).status).toBe(405);
+    const notConnected = await api('/hosts/local/ruleset');
+    expect(notConnected.status).toBe(409);
+    expect(await body(notConnected)).toMatchObject({ error: { code: 'host-state-changed' } });
     expect((await api('/hosts/nope/connect', { method: 'POST' })).status).toBe(404);
   });
 });

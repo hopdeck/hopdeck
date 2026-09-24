@@ -50,6 +50,16 @@ export type HostStatus =
       error: { code: HostErrorCode | 'unknown' | (string & {}); detail: string };
     };
 
+/** The live ruleset as nft prints it; the UI parses it with parseRuleset() and parseListing(). */
+export interface RulesetSnapshot {
+  /** Output of `nft -j list ruleset`. */
+  json: unknown;
+  /** Output of `nft -a list ruleset`: the text form with handles. */
+  listing: string;
+  /** When nftm read it, ISO 8601. */
+  readAt: string;
+}
+
 export interface HostSummary {
   id: string;
   kind: HostKind;

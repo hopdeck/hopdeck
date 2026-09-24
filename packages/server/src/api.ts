@@ -60,6 +60,13 @@ const ROUTES: Route[] = [
     },
   },
   {
+    method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/ruleset$/,
+    async handle(_req, [id], ctx) {
+      return { body: { ruleset: found(await ctx.hosts.readRuleset(id!)) } };
+    },
+  },
+  {
     method: 'POST',
     pattern: /^\/api\/hosts\/([^/]+)\/sudo-password$/,
     async handle(req, [id], ctx) {
@@ -92,12 +99,24 @@ function toApiError(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
   if (error instanceof InvalidHostError) return new ApiError(400, 'invalid-host', error.message);
   if (error instanceof HostStateError) return new ApiError(409, 'host-state-changed', error.message);
-  if (error instanceof HostError) {
-    return new ApiError(error.code === 'wrong-password' ? 400 : 502, error.code, error.detail || error.code);
-  }
+  if (error instanceof HostError) return new ApiError(hostErrorStatus(error), error.code, error.detail || error.code);
   // The panel is local and for its owner only; the real message helps more than hiding it.
   console.error(error);
   return new ApiError(500, 'internal-error', error instanceof Error ? error.message : String(error));
+}
+
+/** 403 when access is missing, 400 for a wrong password, 502 when the host or the connection failed. */
+function hostErrorStatus(error: HostError): number {
+  switch (error.code) {
+    case 'wrong-password':
+      return 400;
+    case 'password-required':
+    case 'no-privileges':
+    case 'sudo-not-allowed':
+      return 403;
+    default:
+      return 502;
+  }
 }
 
 function found<T>(value: T | undefined): T {

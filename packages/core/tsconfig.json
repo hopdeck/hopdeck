@@ -4,5 +4,5 @@
     // core must stay runnable in the browser: no Node.js APIs.
     "types": []
   },
-  "include": ["src"]
+  "include": ["src", "test/*.d.ts"]
 }

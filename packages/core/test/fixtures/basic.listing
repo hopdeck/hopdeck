@@ -1,0 +1,62 @@
+table inet filter { # handle 1
+	counter web { # handle 4
+		packets 0 bytes 0
+	}
+
+	quota monthly { # handle 5
+		over 100 mbytes
+	}
+
+	limit slow { # handle 6
+		rate 10/second
+	}
+
+	ct helper ftp { # handle 7
+		type "ftp" protocol tcp
+		l3proto inet
+	}
+
+	synproxy syn { # handle 8
+		mss 1460
+		wscale 7
+	}
+
+	set admins { # handle 9
+		type ipv4_addr
+		flags interval
+		elements = { 10.0.0.0/24, 192.168.1.10 }
+	}
+
+	map port_policy { # handle 10
+		type inet_service : verdict
+		elements = { 22 : jump ssh_in,
+			     8080 : drop }
+	}
+
+	flowtable fast { # handle 11
+		hook ingress priority filter
+		devices = { lo }
+	}
+
+	chain input { # handle 1
+		type filter hook input priority filter; policy drop;
+		ct state established,related accept # handle 12
+		iif "lo" accept # handle 13
+		tcp dport vmap @port_policy # handle 14
+		tcp dport { 80, 443 } counter name "web" accept # handle 16
+	}
+
+	chain ssh_in { # handle 2
+		ip saddr @admins accept comment "ssh from admins" # handle 17
+	}
+
+	chain forward { # handle 3
+		type filter hook forward priority filter; policy drop;
+	}
+}
+table ip nat { # handle 2
+	chain postrouting { # handle 1
+		type nat hook postrouting priority srcnat; policy accept;
+		oifname "eth0" masquerade # handle 2
+	}
+}

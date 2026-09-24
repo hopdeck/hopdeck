@@ -35,8 +35,9 @@ pnpm build && pnpm start   # serve the built UI from the backend
 namespace with a demo firewall. It needs no root and never touches the real
 firewall, so everything can be tried safely.
 
-`scripts/nft-json-fixture.sh FILE.nft` prints the JSON that nft produces for a
-ruleset, using a throwaway network namespace. The host ruleset is not touched.
+`scripts/nft-fixture.sh FILE.nft` writes what nft prints for a ruleset (JSON and
+the text listing with handles) next to the file, using a throwaway network
+namespace. The host ruleset is not touched.
 
 ## Translations
 

@@ -1,3 +1,4 @@
+import { parseListing, parseRuleset, ruleKey } from '@nftm/core';
 import { spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { release, tmpdir } from 'node:os';
@@ -6,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DEBIAN_FACTS, FakeExecutor, failed, ok, type Script } from '../testing/fake-executor.ts';
 import { HostError } from './errors.ts';
 import { HostManager, HostStateError, InvalidHostError } from './manager.ts';
-import { Sandbox } from './sandbox.ts';
+import { demoRuleset, Sandbox } from './sandbox.ts';
 
 /** A host whose sudo wants the password "secret". */
 const SUDO_WITH_PASSWORD: Script = (argv, stdin) => {
@@ -84,6 +85,34 @@ describe('HostManager', () => {
     await expect(hosts.setSudoPassword('local', 'x')).rejects.toThrow(HostStateError);
   });
 
+  it('reads a ruleset only when nft can run as root', async () => {
+    const hosts = await open();
+    const { id } = await hosts.add({ destination: 'fw1' });
+    await expect(hosts.readRuleset(id)).rejects.toThrow(HostStateError);
+    await hosts.connect(id);
+    await expect(hosts.readRuleset(id)).rejects.toMatchObject({ code: 'password-required' });
+    expect(await hosts.readRuleset('missing')).toBeUndefined();
+  });
+
+  it("reports nft's own error and output that is not JSON", async () => {
+    const answers = (listed: ReturnType<Script>): Script => (argv) => (argv[0] === 'sh' ? ok(DEBIAN_FACTS) : argv.includes('--version') ? ok() : listed);
+    const failing = await open(answers(failed('Error: Could not process rule: Operation not permitted\n')));
+    const one = await failing.add({ destination: 'fw1' });
+    await failing.connect(one.id);
+    await expect(failing.readRuleset(one.id)).rejects.toMatchObject({
+      code: 'command-failed',
+      detail: 'Error: Could not process rule: Operation not permitted',
+    });
+
+    const garbled = await open(answers(ok('Welcome to fw1!\n')));
+    const two = await garbled.add({ destination: 'fw2' });
+    await garbled.connect(two.id);
+    await expect(garbled.readRuleset(two.id)).rejects.toMatchObject({
+      code: 'command-failed',
+      detail: expect.stringContaining('Welcome to fw1!'),
+    });
+  });
+
   it('turns a right password that sudo still refuses into the host state', async () => {
     const hosts = await open((argv, stdin) => {
       if (argv[0] === 'sh') return ok(DEBIAN_FACTS);
@@ -112,6 +141,17 @@ describe.skipIf(!USERNS)('HostManager with a sandbox', () => {
       const hosts = await HostManager.open({ configDir, controlDir: configDir, sandbox: sandbox.executor });
       const connected = await hosts.connect('sandbox');
       expect(connected?.status).toMatchObject({ state: 'connected', privilege: { kind: 'root' } });
+
+      await sandbox.load(await demoRuleset());
+      const snapshot = (await hosts.readRuleset('sandbox'))!;
+      const ruleset = parseRuleset(snapshot.json);
+      const listing = parseListing(snapshot.listing);
+      expect(ruleset.tables.map((node) => node.table.name)).toEqual(['filter', 'nat']);
+      expect(ruleset.unknown).toEqual([]);
+      // Every rule nft lists as JSON has its text in the listing.
+      const rules = ruleset.tables.flatMap((node) => node.chains.flatMap((chain) => chain.rules));
+      expect(rules.length).toBeGreaterThan(5);
+      for (const rule of rules) expect(listing.rules.get(ruleKey(rule.family, rule.table, rule.handle)), JSON.stringify(rule)).toBeTypeOf('string');
     } finally {
       await sandbox.dispose();
       await rm(configDir, { recursive: true, force: true });

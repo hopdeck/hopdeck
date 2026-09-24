@@ -135,7 +135,7 @@ disappears with it.
   unprivileged user namespaces are enabled). This is needed for diffs: the
   kernel rewrites rules (`10.0.0.1/8` becomes `10.0.0.0/8`, port lists become
   anonymous sets), so comparing the text as written does not work.
-  [`scripts/nft-json-fixture.sh`](../scripts/nft-json-fixture.sh) uses the same
+  [`scripts/nft-fixture.sh`](../scripts/nft-fixture.sh) uses the same
   technique for test fixtures.
 - Limitation: the namespace has only `lo`. Constructs bound to real interfaces
   (flowtables, netdev chains, `iif "eth0"`) need dummy interfaces with the same
