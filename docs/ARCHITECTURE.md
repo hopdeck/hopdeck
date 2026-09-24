@@ -233,8 +233,10 @@ The npm supply chain is a real risk for a tool with this access.
 
 ## Milestones
 
-1. **Read-only.** Sandbox, local and SSH executors, host facts and privilege
-   detection, tree and text views, packet path diagram.
+1. **Read-only** (done, 2026-09-24). Sandbox, local and SSH executors, host
+   facts and privilege detection, tree and text views, packet path diagram.
+   Still missing: confirming unknown SSH host keys in the panel, and a test
+   against a real SSH host.
 2. **Text-mode editing** of managed tables, with diff, safe apply with
    rollback, and persistence. From here nftm can do everything nftables can.
 3. **Structured rule forms** and live set/map element editing. This is where
