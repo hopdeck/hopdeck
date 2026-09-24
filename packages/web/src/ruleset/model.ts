@@ -1,4 +1,5 @@
 import {
+  chainKey,
   parseListing,
   parseRuleset,
   tableOwner,
@@ -39,6 +40,11 @@ export function buildModel(snapshot: RulesetSnapshot): RulesetModel {
     },
     readAt: new Date(snapshot.readAt),
   };
+}
+
+/** DOM id of a chain in the rules tab, so other views can scroll to it. */
+export function chainAnchor(family: string, table: string, chain: string): string {
+  return `chain-${encodeURIComponent(chainKey(family, table, chain))}`;
 }
 
 export function tableCounts(node: TableNode) {

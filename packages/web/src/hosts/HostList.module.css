@@ -1,7 +1,10 @@
 .sidebar {
+  position: sticky;
+  top: var(--topbar-height);
   display: flex;
   flex-direction: column;
   gap: 6px;
+  height: calc(100vh - var(--topbar-height));
   padding: 18px 12px;
   overflow-y: auto;
   border-right: 1px solid var(--border);
@@ -125,6 +128,8 @@
 
 @media (max-width: 760px) {
   .sidebar {
+    position: static;
+    height: auto;
     border-right: 0;
     border-bottom: 1px solid var(--border);
   }

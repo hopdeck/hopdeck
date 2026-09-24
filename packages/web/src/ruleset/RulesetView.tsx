@@ -4,7 +4,6 @@ import {
   ruleKey,
   type ChainNode,
   type Json,
-  type KnownTool,
   type NftSet,
   type TableNode,
   type TableOwner,
@@ -14,25 +13,11 @@ import { Callout } from '../components/Callout.tsx';
 import { ErrorCallout } from '../components/ErrorCallout.tsx';
 import { AlertIcon, CheckIcon, RefreshIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
-import { formatBytes, priorityText, ruleCounter, tableCounts, type RulesetModel } from './model.ts';
+import { chainAnchor, formatBytes, priorityText, ruleCounter, tableCounts, type RulesetModel } from './model.ts';
 import { NftCode } from './NftCode.tsx';
+import { OwnerBadge, toolName } from './owner.tsx';
 import styles from './Ruleset.module.css';
 import type { RulesetState } from './useRuleset.ts';
-
-const TOOL_NAMES: Record<KnownTool, string> = {
-  crowdsec: 'CrowdSec',
-  docker: 'Docker',
-  fail2ban: 'fail2ban',
-  firewalld: 'firewalld',
-  incus: 'Incus',
-  kubernetes: 'Kubernetes',
-  libvirt: 'libvirt',
-  lxd: 'LXD',
-  nixos: 'NixOS',
-  podman: 'Podman',
-  tailscale: 'Tailscale',
-  ufw: 'UFW',
-};
 
 /** Longer blocks (e.g. sets with thousands of elements) are cut; the Text tab has everything. */
 const MAX_BLOCK_LINES = 200;
@@ -156,23 +141,17 @@ function TableCard({ node, owner, model }: { node: TableNode; owner: TableOwner;
   );
 }
 
-function OwnerBadge({ owner }: { owner: TableOwner }) {
-  if (owner.kind === 'iptables-nft') return <span className={`${styles.badge} ${styles.badgeDanger}`}>iptables-nft</span>;
-  if (owner.kind === 'tool') return <span className={`${styles.badge} ${styles.badgeWarn}`}>{TOOL_NAMES[owner.tool]}</span>;
-  return null;
-}
-
 /** Why nftm thinks another tool owns the table: the evidence, never just a verdict. */
 function OwnerNote({ owner }: { owner: Exclude<TableOwner, { kind: 'unknown' }> }) {
   const { t } = useI18n();
   if (owner.kind === 'tool') {
-    return <p className={styles.ownerNote}>{t('owner.tool', { tool: TOOL_NAMES[owner.tool] })}</p>;
+    return <p className={styles.ownerNote}>{t('owner.tool', { tool: toolName(owner.tool) })}</p>;
   }
   const evidence = { marker: t('owner.evidence.marker'), xt: t('owner.evidence.xt'), chains: t('owner.evidence.chains') }[owner.evidence];
   return (
     <p className={styles.ownerNote}>
       {evidence}{' '}
-      {owner.users.length > 0 && `${t('owner.users', { tools: owner.users.map((tool) => TOOL_NAMES[tool]).join(', ') })} `}
+      {owner.users.length > 0 && `${t('owner.users', { tools: owner.users.map((tool) => toolName(tool)).join(', ') })} `}
       {t('owner.iptables')}
     </p>
   );
@@ -186,7 +165,7 @@ function Chain({ chain, node, model }: { chain: ChainNode; node: TableNode; mode
   const priority = base ? priorityText(model.listing.chainHeaders.get(chainKey(family, table, name)), chain.chain) : undefined;
 
   return (
-    <section className={styles.chain}>
+    <section id={chainAnchor(family, table, name)} className={styles.chain}>
       <header className={styles.chainHeader}>
         <h3 className={`${styles.chainName} mono`}>{name}</h3>
         {base ? (

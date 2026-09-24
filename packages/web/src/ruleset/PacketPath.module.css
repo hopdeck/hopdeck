@@ -1,0 +1,194 @@
+.view {
+  display: grid;
+  gap: 16px;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+/* A vertical pipeline: a line runs down the left through every step. */
+.pipeline {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pipeline::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  left: 21px;
+  width: 2px;
+  background: var(--border-strong);
+}
+
+.endpoint,
+.decision {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  padding: 7px 14px 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.endpoint svg,
+.decision svg {
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+}
+
+.decision {
+  border-style: dashed;
+}
+
+.stage {
+  position: relative;
+  overflow: hidden;
+}
+
+.hook {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.empty {
+  padding: 12px 16px;
+  color: var(--text-subtle);
+  font-size: var(--text-sm);
+}
+
+.chains {
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+}
+
+.chain {
+  display: grid;
+  grid-template-columns: 22px minmax(90px, 150px) minmax(0, 1fr) auto auto 16px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  text-align: left;
+  transition: background-color 120ms;
+}
+
+.chain:hover {
+  background: var(--surface-muted);
+}
+
+.order {
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-align: right;
+}
+
+.priority {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+}
+
+.tieIcon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--warn);
+}
+
+.where {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.table {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.chainName {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-weight: 600;
+}
+
+.note {
+  color: var(--text-subtle);
+  font-size: var(--text-xs);
+  font-weight: 400;
+}
+
+.tags {
+  display: flex;
+  gap: 6px;
+}
+
+.rules {
+  color: var(--text-subtle);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--text-subtle);
+}
+
+.tieNote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 12px;
+  color: var(--warn);
+  font-size: var(--text-xs);
+}
+
+.tieNote svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 760px) {
+  .chain {
+    grid-template-columns: 22px 1fr 16px;
+  }
+
+  .priority,
+  .tags,
+  .rules {
+    grid-column: 2;
+  }
+}

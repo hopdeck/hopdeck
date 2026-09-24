@@ -118,6 +118,39 @@ export const CloseIcon = (props: IconProps) => (
   </Svg>
 );
 
+export const InfoIcon = (props: IconProps) => (
+  <Svg {...props}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 11v5.5M12 7.5h.01" />
+  </Svg>
+);
+
+export const GlobeIcon = (props: IconProps) => (
+  <Svg {...props}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z" />
+  </Svg>
+);
+
+export const TerminalIcon = (props: IconProps) => (
+  <Svg {...props}>
+    <rect x="3" y="4.5" width="18" height="15" rx="2" />
+    <path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5" />
+  </Svg>
+);
+
+export const RouteIcon = (props: IconProps) => (
+  <Svg {...props}>
+    <path d="M12 3.5l8.5 8.5-8.5 8.5L3.5 12z" />
+  </Svg>
+);
+
+export const ChevronRightIcon = (props: IconProps) => (
+  <Svg {...props}>
+    <path d="M9.5 6l6 6-6 6" />
+  </Svg>
+);
+
 export function HostKindIcon({ kind, ...props }: IconProps & { kind: HostKind }) {
   if (kind === 'local') return <LaptopIcon {...props} />;
   if (kind === 'sandbox') return <SandboxIcon {...props} />;

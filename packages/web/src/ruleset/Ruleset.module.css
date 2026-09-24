@@ -120,6 +120,11 @@
   border-top: 1px solid var(--border);
 }
 
+.chain {
+  /* Keeps a chain scrolled to from the packet path clear of the sticky top bar. */
+  scroll-margin-top: calc(var(--topbar-height) + 12px);
+}
+
 .chain + .chain {
   border-top: 1px solid var(--border);
 }

@@ -1,5 +1,5 @@
 import type { HostFacts, HostKind, HostStatus, HostSummary, Privilege } from '@nftm/core';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import { ErrorBody, ErrorCallout, errorTitle, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
 import { AlertIcon, CheckIcon, HostKindIcon, LockIcon, RefreshIcon, SandboxIcon, TrashIcon } from '../components/icons.tsx';
@@ -7,6 +7,7 @@ import { Tabs } from '../components/Tabs.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import type { MessageKey } from '../i18n/locales.ts';
 import { ListingView } from '../ruleset/ListingView.tsx';
+import { PacketPathView } from '../ruleset/PacketPathView.tsx';
 import { RulesetView } from '../ruleset/RulesetView.tsx';
 import { useRuleset, type RulesetState } from '../ruleset/useRuleset.ts';
 import styles from './HostView.module.css';
@@ -43,6 +44,21 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock }: Ho
   const readable = fullAccess(status);
   const ruleset = useRuleset(host.id, readable);
   const [tab, setTab] = useState('rules');
+  // A chain to scroll to once the rules tab is shown, e.g. picked in the packet path.
+  const [scrollTarget, setScrollTarget] = useState<string>();
+
+  useEffect(() => {
+    if (tab !== 'rules' || scrollTarget === undefined) return;
+    setScrollTarget(undefined);
+    const element = document.getElementById(scrollTarget);
+    if (element === null) return;
+    element.closest('details')?.setAttribute('open', '');
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    element.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+    if (!reduceMotion) {
+      element.animate([{ backgroundColor: 'var(--accent-soft)' }, { backgroundColor: 'transparent' }], { duration: 1800 });
+    }
+  }, [tab, scrollTarget]);
   const badge =
     readable && status.state === 'connected' && status.privilege.kind !== 'none' ? ACCESS_BADGES[status.privilege.kind] : undefined;
 
@@ -116,6 +132,22 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock }: Ho
           onChange={setTab}
           tabs={[
             { id: 'rules', label: t('tabs.rules'), content: <RulesetView state={ruleset} /> },
+            {
+              id: 'path',
+              label: t('tabs.path'),
+              content:
+                ruleset.model !== undefined ? (
+                  <PacketPathView
+                    model={ruleset.model}
+                    onShowChain={(anchor) => {
+                      setScrollTarget(anchor);
+                      setTab('rules');
+                    }}
+                  />
+                ) : (
+                  <Listing state={ruleset} />
+                ),
+            },
             { id: 'text', label: t('tabs.text'), content: <Listing state={ruleset} /> },
             { id: 'system', label: t('tabs.system'), content: <Facts facts={status.facts} /> },
           ]}
