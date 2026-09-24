@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HostError } from './hosts/errors.ts';
-import { InvalidHostError, type HostManager } from './hosts/manager.ts';
+import { HostStateError, InvalidHostError, type HostManager } from './hosts/manager.ts';
 import { ApiError, readJson, sendError, sendJson } from './http.ts';
 import { SECURITY_HEADERS } from './security.ts';
 
@@ -91,11 +91,13 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, path:
 function toApiError(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
   if (error instanceof InvalidHostError) return new ApiError(400, 'invalid-host', error.message);
+  if (error instanceof HostStateError) return new ApiError(409, 'host-state-changed', error.message);
   if (error instanceof HostError) {
     return new ApiError(error.code === 'wrong-password' ? 400 : 502, error.code, error.detail || error.code);
   }
+  // The panel is local and for its owner only; the real message helps more than hiding it.
   console.error(error);
-  return new ApiError(500, 'internal-error');
+  return new ApiError(500, 'internal-error', error instanceof Error ? error.message : String(error));
 }
 
 function found<T>(value: T | undefined): T {

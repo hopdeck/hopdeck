@@ -1,4 +1,4 @@
-import { release } from 'node:os';
+import { release, userInfo } from 'node:os';
 import { describe, expect, it } from 'vitest';
 import { DEBIAN_FACTS } from '../testing/fake-executor.ts';
 import { HostError } from './errors.ts';
@@ -9,6 +9,7 @@ describe('parseFacts', () => {
   it('reads a typical host', () => {
     expect(parseFacts(DEBIAN_FACTS)).toEqual({
       uid: 1000,
+      user: 'admin',
       hostname: 'fw1',
       kernel: '6.1.0-18-amd64',
       os: { id: 'debian', version: '12', name: 'Debian GNU/Linux 12 (bookworm)' },
@@ -31,6 +32,7 @@ describe('collectFacts', () => {
   it('runs on this machine', async () => {
     const facts = await collectFacts(new LocalExecutor());
     expect(facts.uid).toBe(process.getuid!());
+    expect(facts.user).toBe(userInfo().username);
     expect(facts.kernel).toBe(release());
   });
 });

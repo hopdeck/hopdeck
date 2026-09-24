@@ -1,11 +1,14 @@
-import type { HostFacts, HostStatus, HostSummary } from '@nftm/core';
+import type { HostFacts, HostKind, HostStatus, HostSummary, Privilege } from '@nftm/core';
 import { useState, type FormEvent } from 'react';
 import { ApiError } from '../api.ts';
 import { Callout } from '../components/Callout.tsx';
+import { ErrorBody, ErrorCallout, errorTitle, type ErrorInfo } from '../components/ErrorCallout.tsx';
 import { AlertIcon, CheckIcon, HostKindIcon, LockIcon, RefreshIcon, SandboxIcon, TrashIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import styles from './HostView.module.css';
-import { errorHint, errorTitle, hostSubtitle } from './status.ts';
+import { hostSubtitle } from './status.ts';
+
+type Connected = Extract<HostStatus, { state: 'connected' }>;
 
 interface HostViewProps {
   host: HostSummary;
@@ -65,22 +68,15 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock }: Ho
       )}
 
       {status.state === 'error' && (
-        <Callout tone="danger" icon={<AlertIcon />} title={t(errorTitle(status.error.code))} role="alert">
-          {errorHint(status.error.code) !== undefined && (
-            <p>{t(errorHint(status.error.code)!, { destination: host.destination ?? host.name })}</p>
-          )}
-          {status.error.detail !== '' && (
-            <details className={styles.details}>
-              <summary>{t('error.details')}</summary>
-              <pre className="details">{status.error.detail}</pre>
-            </details>
-          )}
-        </Callout>
+        <ErrorCallout
+          error={{ code: status.error.code, message: status.error.detail }}
+          vars={{ destination: host.destination ?? host.name }}
+        />
       )}
 
       {status.state === 'connected' && (
         <>
-          <Access status={status} onUnlock={onUnlock} />
+          <Access status={status} kind={host.kind} onUnlock={onUnlock} />
           <Facts facts={status.facts} />
         </>
       )}
@@ -88,26 +84,69 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock }: Ho
   );
 }
 
-function Access({ status, onUnlock }: { status: Extract<HostStatus, { state: 'connected' }>; onUnlock: HostViewProps['onUnlock'] }) {
+function Access({ status, kind, onUnlock }: { status: Connected; kind: HostKind; onUnlock: HostViewProps['onUnlock'] }) {
   const { t } = useI18n();
-  const { privilege } = status;
+  const { privilege, facts } = status;
 
-  if (status.facts.nft === undefined) {
+  if (facts.nft === undefined) {
     return <Callout tone="danger" icon={<AlertIcon />} title={t('access.nftMissing')} />;
   }
-  if (privilege.kind === 'root') return <Callout tone="ok" icon={<CheckIcon />} title={t('access.root')} />;
-  if (privilege.kind === 'sudo') return <Callout tone="ok" icon={<CheckIcon />} title={t('access.sudo')} />;
-  if (privilege.kind === 'sudo-password') {
-    return status.passwordStored ? (
-      <Callout tone="ok" icon={<CheckIcon />} title={t('access.sudoPasswordStored')} />
-    ) : (
-      <PasswordPrompt onUnlock={onUnlock} />
-    );
+  switch (privilege.kind) {
+    case 'root':
+      return <Callout tone="ok" icon={<CheckIcon />} title={t('access.root')} />;
+    case 'sudo':
+      return <Callout tone="ok" icon={<CheckIcon />} title={t('access.sudo')} />;
+    case 'sudo-password':
+      return status.passwordStored ? (
+        <Callout tone="ok" icon={<CheckIcon />} title={t('access.sudoPasswordStored')} />
+      ) : (
+        <PasswordPrompt onUnlock={onUnlock} />
+      );
+    case 'none':
+      return <NoAccess privilege={privilege} facts={facts} kind={kind} />;
   }
+}
+
+/** Where sudo membership comes from on common distributions. */
+function sudoGroup(osId: string | undefined): string | undefined {
+  if (osId === undefined) return undefined;
+  if (['debian', 'ubuntu', 'linuxmint', 'pop', 'raspbian', 'kali'].includes(osId)) return 'sudo';
+  if (['fedora', 'rhel', 'centos', 'rocky', 'almalinux', 'ol', 'amzn', 'arch'].includes(osId)) return 'wheel';
+  return undefined;
+}
+
+function NoAccess({ privilege, facts, kind }: { privilege: Extract<Privilege, { kind: 'none' }>; facts: HostFacts; kind: HostKind }) {
+  const { t } = useI18n();
+  const user = facts.user || `uid ${facts.uid}`;
+  const raw = privilege.detail.trim();
+
+  let title: string;
+  let hints: string[];
+  if (privilege.reason === 'sudo-not-allowed') {
+    const group = sudoGroup(facts.os?.id);
+    title = t('access.notAllowedTitle', { user });
+    hints = [group ? t('access.notAllowedHintGroup', { user, group }) : t('access.notAllowedHint', { user })];
+    // sudo checks the groups of the process that runs it, i.e. of nftm itself.
+    if (kind === 'local') hints.push(t('access.restartNote'));
+  } else if (privilege.reason === 'sudo-missing') {
+    title = t('access.sudoMissingTitle');
+    hints = [t('access.sudoMissingHint')];
+  } else {
+    title = t('access.noneTitle');
+    hints = [t('access.noneHint')];
+  }
+
   return (
-    <Callout tone="warn" icon={<AlertIcon />} title={t('access.noneTitle')}>
-      <p>{t('access.noneHint')}</p>
-      {privilege.detail !== '' && <pre className="details">{privilege.detail}</pre>}
+    <Callout tone="warn" icon={<AlertIcon />} title={title}>
+      {hints.map((hint) => (
+        <p key={hint}>{hint}</p>
+      ))}
+      {raw !== '' && (
+        <div>
+          <p className="details-label">{t('error.original')}</p>
+          <pre className="details">{raw}</pre>
+        </div>
+      )}
     </Callout>
   );
 }
@@ -115,7 +154,7 @@ function Access({ status, onUnlock }: { status: Extract<HostStatus, { state: 'co
 function PasswordPrompt({ onUnlock }: { onUnlock: HostViewProps['onUnlock'] }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | Error | null>(null);
+  const [error, setError] = useState<ErrorInfo | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -125,7 +164,11 @@ function PasswordPrompt({ onUnlock }: { onUnlock: HostViewProps['onUnlock'] }) {
     try {
       await onUnlock(String(new FormData(form).get('password') ?? ''));
     } catch (caught) {
-      setError(caught instanceof Error ? caught : new Error(String(caught)));
+      setError(
+        caught instanceof ApiError
+          ? { code: caught.code, message: caught.message }
+          : { code: 'backend-unreachable', message: caught instanceof Error ? caught.message : String(caught) },
+      );
       form.reset();
     } finally {
       setBusy(false);
@@ -154,9 +197,10 @@ function PasswordPrompt({ onUnlock }: { onUnlock: HostViewProps['onUnlock'] }) {
         </button>
       </form>
       {error !== null && (
-        <p className={styles.error} role="alert">
-          {t(errorTitle(error instanceof ApiError ? error.code : 'unknown'))}
-        </p>
+        <div className={styles.error} role="alert">
+          <p className={styles.errorTitle}>{errorTitle(t, error.code)}</p>
+          <ErrorBody error={error} />
+        </div>
       )}
     </Callout>
   );
@@ -185,7 +229,7 @@ function Facts({ facts }: { facts: HostFacts }) {
         <dt>{t('facts.hostname')}</dt>
         <dd className="mono">{facts.hostname}</dd>
         <dt>{t('facts.user')}</dt>
-        <dd>{facts.uid === 0 ? <span className="mono">root</span> : t('facts.uid', { uid: facts.uid })}</dd>
+        <dd className="mono">{facts.user ? `${facts.user} (uid ${facts.uid})` : `uid ${facts.uid}`}</dd>
       </dl>
     </div>
   );

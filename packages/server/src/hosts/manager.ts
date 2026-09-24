@@ -36,8 +36,14 @@ export interface HostManagerOptions {
   createSshExecutor?: (destination: string) => Executor;
 }
 
+/** Bad input for a new host: an invalid or duplicate destination, a name too long. */
 export class InvalidHostError extends Error {
   override name = 'InvalidHostError';
+}
+
+/** The request does not fit the host's current state, e.g. a password it does not need. */
+export class HostStateError extends Error {
+  override name = 'HostStateError';
 }
 
 export class HostManager {
@@ -113,11 +119,24 @@ export class HostManager {
     if (entry === undefined) return undefined;
     const { status } = entry;
     if (status.state !== 'connected' || status.privilege.kind !== 'sudo-password' || status.facts.nft === undefined) {
-      throw new InvalidHostError('host does not need a sudo password');
+      throw new HostStateError(`${entry.name} does not need a sudo password in its current state; reconnect to refresh it`);
     }
     const access = { executor: entry.executor, nftPath: status.facts.nft.path, privilege: status.privilege, password };
-    const result = await runNft(access, ['--version']);
-    if (result.exitCode !== 0) throw new HostError('command-failed', result.stderr.trim());
+    let result;
+    try {
+      result = await runNft(access, ['--version']);
+    } catch (error) {
+      // The password was right, but sudo will not run nft for this user: that is
+      // the host's real state, so the status says so instead of an error popup.
+      if (error instanceof HostError && error.code === 'sudo-not-allowed') {
+        entry.status = { ...status, privilege: { kind: 'none', reason: 'sudo-not-allowed', detail: error.detail } };
+        return summary(entry);
+      }
+      throw error;
+    }
+    if (result.exitCode !== 0) {
+      throw new HostError('command-failed', result.stderr.trim() || `nft exited with code ${result.exitCode}`);
+    }
     entry.password = password;
     entry.status = { ...status, passwordStored: true };
     return summary(entry);

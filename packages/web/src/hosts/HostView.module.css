@@ -65,16 +65,6 @@
   color: var(--text-muted);
 }
 
-.details summary {
-  width: fit-content;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.details[open] summary {
-  margin-bottom: 8px;
-}
-
 .passwordForm {
   display: flex;
   gap: 8px;
@@ -82,8 +72,15 @@
 }
 
 .error {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--warn-border);
+}
+
+.errorTitle {
   color: var(--danger);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .cardTitle {

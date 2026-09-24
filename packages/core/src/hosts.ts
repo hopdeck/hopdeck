@@ -17,10 +17,12 @@ export type HostErrorCode =
   | 'nft-missing'
   | 'no-privileges'
   | 'password-required'
-  | 'wrong-password';
+  | 'wrong-password'
+  | 'sudo-not-allowed';
 
 export interface HostFacts {
   uid: number;
+  user: string;
   hostname: string;
   kernel: string;
   os: { id: string; version: string; name: string } | undefined;
@@ -29,17 +31,24 @@ export interface HostFacts {
   nft: { path: string; version: string } | undefined;
 }
 
+/** Why nft cannot get root on a host; `detail` of the privilege carries the raw message. */
+export type NoAccessReason = 'nft-missing' | 'sudo-missing' | 'sudo-not-allowed' | 'other';
+
 /** How nft gets root on a host. */
 export type Privilege =
   | { kind: 'root' }
   | { kind: 'sudo' }
   | { kind: 'sudo-password' }
-  | { kind: 'none'; detail: string };
+  | { kind: 'none'; reason: NoAccessReason; detail: string };
 
 export type HostStatus =
   | { state: 'new' }
   | { state: 'connected'; facts: HostFacts; privilege: Privilege; passwordStored: boolean }
-  | { state: 'error'; error: { code: HostErrorCode | 'unknown'; detail: string } };
+  | {
+      state: 'error';
+      /** `code` is a HostErrorCode from the server, or "unknown"; the UI also records API error codes here. */
+      error: { code: HostErrorCode | 'unknown' | (string & {}); detail: string };
+    };
 
 export interface HostSummary {
   id: string;

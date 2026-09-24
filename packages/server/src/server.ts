@@ -42,7 +42,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     handle(req, res, policy!, options).catch((error: unknown) => {
       console.error(error);
       if (res.headersSent) res.destroy();
-      else sendError(res, new ApiError(500, 'internal-error'));
+      else sendError(res, new ApiError(500, 'internal-error', error instanceof Error ? error.message : String(error)));
     });
   });
 

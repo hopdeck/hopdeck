@@ -26,6 +26,7 @@ export const failed = (stderr: string, exitCode = 1): ExecResult => ({ exitCode,
 
 /** What the facts script prints on a typical Debian host with a normal user. */
 export const DEBIAN_FACTS = `uid=1000
+user=admin
 hostname=fw1
 kernel=6.1.0-18-amd64
 os_id=debian

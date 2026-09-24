@@ -1,11 +1,10 @@
 import type { HostSummary } from '@nftm/core';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api.ts';
-import { Callout } from '../components/Callout.tsx';
-import { AlertIcon, CloseIcon } from '../components/icons.tsx';
+import { ErrorCallout, type ErrorInfo } from '../components/ErrorCallout.tsx';
+import { CloseIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import styles from './AddHostDialog.module.css';
-import { errorTitle } from './status.ts';
 
 interface AddHostDialogProps {
   open: boolean;
@@ -17,7 +16,7 @@ export function AddHostDialog({ open, onClose, onAdded }: AddHostDialogProps) {
   const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
   const destination = useRef<HTMLInputElement>(null);
-  const [error, setError] = useState<ApiError | null>(null);
+  const [error, setError] = useState<ErrorInfo | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -46,7 +45,11 @@ export function AddHostDialog({ open, onClose, onAdded }: AddHostDialogProps) {
       form.reset();
       onAdded(host);
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught : new ApiError(0, 'unknown', String(caught)));
+      setError(
+        caught instanceof ApiError
+          ? { code: caught.code, message: caught.message }
+          : { code: 'backend-unreachable', message: caught instanceof Error ? caught.message : String(caught) },
+      );
     } finally {
       setBusy(false);
     }
@@ -84,11 +87,7 @@ export function AddHostDialog({ open, onClose, onAdded }: AddHostDialogProps) {
           <input name="name" className="input" maxLength={100} autoComplete="off" />
         </label>
 
-        {error !== null && (
-          <Callout tone="danger" icon={<AlertIcon />} title={t(errorTitle(error.code))} role="alert">
-            <span className="mono">{error.message}</span>
-          </Callout>
-        )}
+        {error !== null && <ErrorCallout error={error} />}
 
         <div className={styles.footer}>
           <button type="button" className="btn" onClick={onClose}>

@@ -5,6 +5,7 @@ import { HostError } from './errors.ts';
 // "key=value" lines. os-release is meant to be sourced by shells.
 const FACTS_SCRIPT = `
 echo "uid=$(id -u)"
+echo "user=$(id -un)"
 echo "hostname=$(cat /proc/sys/kernel/hostname 2>/dev/null)"
 echo "kernel=$(uname -r)"
 if [ -r /etc/os-release ]; then
@@ -40,6 +41,7 @@ export function parseFacts(output: string): HostFacts {
   const nftPath = get('nft');
   return {
     uid,
+    user: get('user'),
     hostname: get('hostname'),
     kernel: get('kernel'),
     os: values.has('os_id') ? { id: get('os_id'), version: get('os_version'), name: get('os_name') } : undefined,

@@ -2,6 +2,7 @@ import type { HostSummary } from '@nftm/core';
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from './api.ts';
 import styles from './App.module.css';
+import { ErrorBody, errorTitle } from './components/ErrorCallout.tsx';
 import { AlertIcon, LockIcon } from './components/icons.tsx';
 import { TopBar } from './components/TopBar.tsx';
 import { AddHostDialog } from './hosts/AddHostDialog.tsx';
@@ -40,11 +41,12 @@ export function App() {
       try {
         const { host } = await api.post<{ host: HostSummary }>(`/hosts/${encodeURIComponent(id)}/connect`);
         replaceHost(host);
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        setHosts((list) =>
-          list.map((item) => (item.id === id ? { ...item, status: { state: 'error', error: { code: 'unknown', detail } } } : item)),
-        );
+      } catch (caught) {
+        const error =
+          caught instanceof ApiError
+            ? { code: caught.code, detail: caught.message }
+            : { code: 'backend-unreachable', detail: caught instanceof Error ? caught.message : String(caught) };
+        setHosts((list) => list.map((item) => (item.id === id ? { ...item, status: { state: 'error', error } } : item)));
       } finally {
         setConnecting((set) => {
           const next = new Set(set);
@@ -132,16 +134,17 @@ export function App() {
 
 function FailedToLoad({ error }: { error: unknown }) {
   const { t } = useI18n();
-  const unauthorized = error instanceof ApiError && error.status === 401;
+  const info =
+    error instanceof ApiError
+      ? { code: error.code, message: error.message }
+      : { code: 'backend-unreachable', message: error instanceof Error ? error.message : String(error) };
   return (
     <div className={styles.message} role="alert">
-      <span className={styles.messageIcon}>{unauthorized ? <LockIcon /> : <AlertIcon />}</span>
-      <h1 className={styles.messageTitle}>{t(unauthorized ? 'app.unauthorized.title' : 'app.error.title')}</h1>
-      <p className={styles.messageText}>
-        {unauthorized
-          ? t('app.unauthorized')
-          : t('app.error', { message: error instanceof Error ? error.message : String(error) })}
-      </p>
+      <span className={styles.messageIcon}>{info.code === 'unauthorized' ? <LockIcon /> : <AlertIcon />}</span>
+      <h1 className={styles.messageTitle}>{errorTitle(t, info.code)}</h1>
+      <div className={styles.messageText}>
+        <ErrorBody error={info} />
+      </div>
     </div>
   );
 }

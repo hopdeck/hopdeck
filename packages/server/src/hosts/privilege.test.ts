@@ -24,11 +24,25 @@ describe('detectPrivilege', () => {
     const asking = new FakeExecutor(() => failed('sudo: a password is required\n'));
     expect(await detectPrivilege(asking, facts)).toEqual({ kind: 'sudo-password' });
 
-    const refusing = new FakeExecutor(() => failed('admin is not in the sudoers file.\n'));
-    expect(await detectPrivilege(refusing, facts)).toEqual({ kind: 'none', detail: 'admin is not in the sudoers file.' });
+    const refusing = new FakeExecutor(() => failed("Sorry, user admin is not allowed to execute '/usr/sbin/nft --version' as root on fw1.\n"));
+    expect(await detectPrivilege(refusing, facts)).toEqual({
+      kind: 'none',
+      reason: 'sudo-not-allowed',
+      detail: "Sorry, user admin is not allowed to execute '/usr/sbin/nft --version' as root on fw1.",
+    });
+
+    const noSudo = new FakeExecutor(() => failed('sh: 1: sudo: not found\n', 127));
+    expect(await detectPrivilege(noSudo, facts)).toMatchObject({ kind: 'none', reason: 'sudo-missing' });
+
+    const odd = new FakeExecutor(() => failed('sudo: account validation failure, is your account locked?\n'));
+    expect(await detectPrivilege(odd, facts)).toEqual({
+      kind: 'none',
+      reason: 'other',
+      detail: 'sudo: account validation failure, is your account locked?',
+    });
 
     const noNft = new FakeExecutor(() => new Error('must not run'));
-    expect((await detectPrivilege(noNft, { ...facts, nft: undefined })).kind).toBe('none');
+    expect(await detectPrivilege(noNft, { ...facts, nft: undefined })).toMatchObject({ kind: 'none', reason: 'nft-missing' });
   });
 });
 
@@ -65,7 +79,15 @@ describe('runNft', () => {
   it('reports a missing or wrong password and missing privileges', async () => {
     await expect(run({ kind: 'sudo-password' }).result).rejects.toMatchObject({ code: 'password-required' });
     const wrong = run({ kind: 'sudo-password' }, 'nope', () => failed('Sorry, try again.\nsudo: 1 incorrect password attempt\n'));
-    await expect(wrong.result).rejects.toMatchObject({ code: 'wrong-password' });
-    await expect(run({ kind: 'none', detail: 'x' }).result).rejects.toBeInstanceOf(HostError);
+    await expect(wrong.result).rejects.toMatchObject({ code: 'wrong-password', detail: expect.stringContaining('incorrect password') });
+    await expect(run({ kind: 'none', reason: 'other', detail: 'x' }).result).rejects.toBeInstanceOf(HostError);
+  });
+
+  it('tells sudo refusing the user apart from nft failing', async () => {
+    const refused = run({ kind: 'sudo-password' }, 'right', () => failed('tenir is not in the sudoers file.\n'));
+    await expect(refused.result).rejects.toMatchObject({ code: 'sudo-not-allowed', detail: 'tenir is not in the sudoers file.' });
+
+    const nftError = run({ kind: 'sudo' }, undefined, () => failed('Error: syntax error, unexpected junk\n'));
+    expect((await nftError.result).exitCode).toBe(1);
   });
 });

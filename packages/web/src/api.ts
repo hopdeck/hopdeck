@@ -42,7 +42,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   });
   if (!res.ok) {
     const payload = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
-    throw new ApiError(res.status, payload.error?.code ?? 'unknown', payload.error?.message ?? res.statusText);
+    // A response without the usual error body (a proxy, a crash) still says what happened.
+    const fallback = `HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`;
+    throw new ApiError(res.status, payload.error?.code ?? `http-${res.status}`, payload.error?.message ?? fallback);
   }
   return (res.status === 204 ? undefined : await res.json()) as T;
 }

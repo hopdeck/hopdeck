@@ -1,9 +1,10 @@
 import type { HostFacts, HostStatus, HostSummary } from '@nftm/core';
 import { describe, expect, it } from 'vitest';
-import { errorHint, errorTitle, hostStatus } from './status.ts';
+import { hostStatus } from './status.ts';
 
 const facts: HostFacts = {
   uid: 1000,
+  user: 'admin',
   hostname: 'fw1',
   kernel: '6.1.0',
   os: undefined,
@@ -26,7 +27,7 @@ describe('hostStatus', () => {
     expect(hostStatus(connected({ kind: 'sudo' }), false).tone).toBe('ok');
     expect(hostStatus(connected({ kind: 'sudo-password' }), false)).toEqual({ tone: 'warn', label: 'status.locked' });
     expect(hostStatus(connected({ kind: 'sudo-password' }, true), false).tone).toBe('ok');
-    expect(hostStatus(connected({ kind: 'none', detail: '' }), false).tone).toBe('warn');
+    expect(hostStatus(connected({ kind: 'none', reason: 'sudo-not-allowed', detail: '' }), false).tone).toBe('warn');
   });
 
   it('is red on errors and without nftables', () => {
@@ -34,14 +35,5 @@ describe('hostStatus', () => {
     expect(hostStatus(failed, false).tone).toBe('danger');
     const noNft = host({ state: 'connected', facts: { ...facts, nft: undefined }, privilege: { kind: 'root' }, passwordStored: false });
     expect(hostStatus(noNft, false)).toEqual({ tone: 'danger', label: 'status.nftMissing' });
-  });
-});
-
-describe('errorTitle', () => {
-  it('translates known codes and falls back for the rest', () => {
-    expect(errorTitle('ssh-host-key-changed')).toBe('error.ssh-host-key-changed.title');
-    expect(errorTitle('something-new')).toBe('error.unknown.title');
-    expect(errorHint('ssh-auth')).toBe('error.ssh-auth.hint');
-    expect(errorHint('timeout')).toBeUndefined();
   });
 });

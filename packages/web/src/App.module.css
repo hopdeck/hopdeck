@@ -59,7 +59,10 @@
 }
 
 .messageText {
+  display: grid;
+  gap: 10px;
   color: var(--text-muted);
+  text-align: left;
 }
 
 @media (max-width: 760px) {

@@ -1,4 +1,4 @@
-import type { HostErrorCode, HostSummary } from '@nftm/core';
+import type { HostSummary } from '@nftm/core';
 import type { MessageKey } from '../i18n/locales.ts';
 
 export type Tone = 'neutral' | 'busy' | 'ok' | 'warn' | 'danger';
@@ -26,33 +26,4 @@ export function hostSubtitle(host: HostSummary): { key: MessageKey } | { text: s
   if (host.kind === 'local') return { key: 'hosts.kind.local' };
   if (host.kind === 'sandbox') return { key: 'hosts.kind.sandbox' };
   return { text: host.destination ?? '' };
-}
-
-type ErrorCode = HostErrorCode | 'invalid-host' | 'unknown';
-
-const ERROR_TITLES: Partial<Record<ErrorCode, MessageKey>> = {
-  'ssh-host-key': 'error.ssh-host-key.title',
-  'ssh-host-key-changed': 'error.ssh-host-key-changed.title',
-  'ssh-auth': 'error.ssh-auth.title',
-  'ssh-connect': 'error.ssh-connect.title',
-  timeout: 'error.timeout.title',
-  'spawn-failed': 'error.spawn-failed.title',
-  'wrong-password': 'error.wrong-password.title',
-  'invalid-host': 'error.invalid-host.title',
-};
-
-const ERROR_HINTS: Partial<Record<ErrorCode, MessageKey>> = {
-  'ssh-host-key': 'error.ssh-host-key.hint',
-  'ssh-host-key-changed': 'error.ssh-host-key-changed.hint',
-  'ssh-auth': 'error.ssh-auth.hint',
-  'ssh-connect': 'error.ssh-connect.hint',
-};
-
-/** Error codes come from the server; unknown ones get a generic title. */
-export function errorTitle(code: string): MessageKey {
-  return ERROR_TITLES[code as ErrorCode] ?? 'error.unknown.title';
-}
-
-export function errorHint(code: string): MessageKey | undefined {
-  return ERROR_HINTS[code as ErrorCode];
 }

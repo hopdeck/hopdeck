@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DEBIAN_FACTS, FakeExecutor, failed, ok, type Script } from '../testing/fake-executor.ts';
 import { HostError } from './errors.ts';
-import { HostManager, InvalidHostError } from './manager.ts';
+import { HostManager, HostStateError, InvalidHostError } from './manager.ts';
 import { Sandbox } from './sandbox.ts';
 
 /** A host whose sudo wants the password "secret". */
@@ -81,7 +81,24 @@ describe('HostManager', () => {
     expect(unlocked?.status).toMatchObject({ passwordStored: true });
     expect(JSON.stringify(hosts.list())).not.toContain('secret');
 
-    await expect(hosts.setSudoPassword('local', 'x')).rejects.toThrow(InvalidHostError);
+    await expect(hosts.setSudoPassword('local', 'x')).rejects.toThrow(HostStateError);
+  });
+
+  it('turns a right password that sudo still refuses into the host state', async () => {
+    const hosts = await open((argv, stdin) => {
+      if (argv[0] === 'sh') return ok(DEBIAN_FACTS);
+      if (argv.includes('-n')) return failed('sudo: a password is required\n');
+      return stdin === 'secret\n' ? failed('admin is not in the sudoers file.\n') : failed('Sorry, try again.\n');
+    });
+    const { id } = await hosts.add({ destination: 'fw1' });
+    await hosts.connect(id);
+
+    const refused = await hosts.setSudoPassword(id, 'secret');
+    expect(refused?.status).toMatchObject({
+      state: 'connected',
+      privilege: { kind: 'none', reason: 'sudo-not-allowed', detail: 'admin is not in the sudoers file.' },
+      passwordStored: false,
+    });
   });
 });
 
