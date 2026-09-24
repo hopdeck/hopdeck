@@ -12,8 +12,9 @@ export interface ExecResult {
 }
 
 /**
- * Runs commands on one managed host. Implementations: local (via sudo or
- * pkexec) and SSH (system OpenSSH); an agent could be added later.
+ * Runs commands on one managed host as the login user. Implementations: local,
+ * SSH (system OpenSSH) and sandbox (a private namespace); an agent could be
+ * added later. Privilege escalation (sudo) is layered on top, not built in.
  *
  * `argv` is never interpreted by a local shell. The SSH implementation must
  * quote every argument for the remote shell, since ssh joins them into one

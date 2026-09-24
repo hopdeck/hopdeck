@@ -34,6 +34,8 @@ easier. It manages the local machine and remote hosts over SSH.
 | UI | React + Vite | Ecosystem for the complex editors listed in [UI plan](#ui-plan) |
 | Transport | System OpenSSH (`ssh` binary) | Honours `~/.ssh/config`, ProxyJump, ssh-agent, FIDO keys, known_hosts |
 | Source of truth | Live host first (model A), project files later (model B) | Same pipeline; see [Model B](#model-b-future) |
+| Privileges | Root login, or sudo: passwordless, or a password typed in the panel | See [Talking to hosts](#talking-to-hosts) |
+| UI languages | English and Polish | One JSON file per language; adding one needs no code changes |
 | Managed hosts | Debian 11+ (nft 0.9.8), RHEL 9+ | Admin machine: Linux; macOS likely works; Windows later |
 | License | GPL-3.0-or-later | |
 
@@ -43,7 +45,7 @@ easier. It manages the local machine and remote hosts over SSH.
  browser ── packages/web (React)
     │  HTTP (+ WebSocket later), 127.0.0.1 only, token
  nftm backend ── packages/server, started by packages/cli
-    │  Executor: local (sudo/pkexec) or system ssh
+    │  Executor: local, system ssh, or sandbox namespace
  managed host ── nft, sh, systemd-run
 ```
 
@@ -64,18 +66,64 @@ The two seams that keep options open are in
 
 ## Talking to hosts
 
-- The SSH executor runs `ssh -o BatchMode=yes -o ControlMaster=auto
-  -o ControlPath=... -o ControlPersist=... HOST -- <quoted argv>`. ssh joins
-  its arguments into one remote command line, so every argument is quoted for
-  the remote shell.
-- `BatchMode` means no interactive prompts. Host keys must already be known and
-  authentication goes through keys or the agent. Prompts are an open question.
-- Privileges: log in as a normal user and run `sudo -n nft ...`. A sudoers rule
-  can limit this to `nft` and the rollback helper. `nft -f` as root is still
-  effectively root, so this reduces mistakes; it is not a sandbox.
-- On connect, nftm collects the host's facts: nft and kernel versions, systemd
-  presence, distribution and its persistence file, whether sudo works, and
-  which tables belong to other tools.
+There are three kinds of hosts, one `Executor` implementation each:
+
+| Kind | How commands run |
+|---|---|
+| **Local** | Spawned directly, never through a local shell |
+| **SSH** | System `ssh` with ControlMaster (see below) |
+| **Sandbox** | `nsenter` into a private user and network namespace (see [Sandbox host](#sandbox-host)) |
+
+**SSH command line.** The SSH executor runs `ssh -o BatchMode=yes
+-o ControlMaster=auto -o ControlPath=... -o ControlPersist=... -- DEST
+<quoted argv>`. ssh joins its arguments into one command line for the remote
+login shell, so every argument is single-quoted. The login shell must be
+POSIX-compatible (sh, bash, dash, zsh, ksh, ash); fish and csh are not
+supported.
+
+**SSH authentication.** Keys or ssh-agent only; no SSH passwords. `BatchMode`
+rules out interactive prompts. An unknown host key makes the connection fail:
+the panel then shows the key's fingerprint, and adds it to `known_hosts` only
+after the user confirms. Keys are never accepted automatically.
+
+**Privileges.** nft needs root. On connect nftm checks, in order:
+
+1. `id -u` is 0 (root login, or the sandbox): run nft directly.
+2. `sudo -n <nft> --version` succeeds: prefix commands with `sudo -n --`.
+3. sudo wants a password: the panel asks for it once per host and session.
+   nftm keeps it in backend memory only, never on disk, and sends it with
+   `sudo -S -p ''` as the first line of standard input. Consequence: under
+   `sudo -S` a ruleset is never piped to `nft -f -`. It is uploaded to a file
+   first, because a password line mixed into the ruleset could end up in
+   nft's error message.
+4. Otherwise the host is read-only: nothing can be listed or changed.
+
+A sudoers rule that allows only `nft` is **not** a real restriction:
+`nft -f /any/file` run as root prints lines of that file in its error messages.
+It reduces mistakes, nothing more.
+
+**nft location.** `/usr/sbin` is often missing from a normal user's PATH, so
+the absolute path of `nft` is detected once per host and used everywhere.
+
+**Host facts.** On connect, nftm also collects: nft and kernel versions,
+systemd presence, distribution and its persistence file, and which tables
+belong to other tools.
+
+## Sandbox host
+
+`unshare -rn` creates a user and network namespace without root, on
+distributions that allow unprivileged user namespaces (Debian 11+ does). A
+keep-alive process holds the namespace open, and each command enters it with
+`nsenter --preserve-credentials`. Inside, nftm is root with its own empty
+nftables ruleset. The real firewall is never touched.
+
+- **Development and tests:** every feature can be exercised against a real
+  `nft` without root and without the risk of a lockout.
+- **Later, for users:** a place to try a ruleset before applying it anywhere.
+
+The keep-alive process reads its standard input from nftm. When nftm exits,
+even by crashing, the input closes, the process ends and the namespace
+disappears with it.
 
 ## Reading, validating, converting
 
@@ -178,8 +226,8 @@ The npm supply chain is a real risk for a tool with this access.
 
 ## Milestones
 
-1. **Read-only.** Local and SSH executors, host facts, tree and text views,
-   packet path diagram.
+1. **Read-only.** Sandbox, local and SSH executors, host facts and privilege
+   detection, tree and text views, packet path diagram.
 2. **Text-mode editing** of managed tables, with diff, safe apply with
    rollback, and persistence. From here nftm can do everything nftables can.
 3. **Structured rule forms** and live set/map element editing. This is where
@@ -210,9 +258,9 @@ forms add convenience without ever limiting what can be done.
 - **Managed-table marker:** how to mark a table as managed. A table comment
   (if all supported nft versions allow it) or a registry file on the host
   (`/etc/nftm/`)?
-- **Interactive prompts:** unknown host keys, SSH passwords, sudo passwords.
-  Bridge `SSH_ASKPASS` / `SUDO_ASKPASS` to the UI?
 - **Windows as the admin machine:** its OpenSSH has no ControlMaster.
 - **Distribution:** npm package, Node single executable, distribution packages,
   or a desktop wrapper.
 - **Local state:** the host inventory format and how long snapshots are kept.
+- **Sandbox for users:** should the sandbox become a regular feature, and should
+  it copy the interfaces of a real host (as dummy interfaces)?
