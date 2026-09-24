@@ -1,0 +1,7 @@
+{
+  "app.connecting": "Connecting…",
+  "app.connected": "Connected to the nftm backend {{version}}.",
+  "app.unauthorized": "Not authorized. Open the URL printed by the nftm command.",
+  "app.error": "Cannot reach the backend: {{message}}",
+  "language.label": "Language"
+}

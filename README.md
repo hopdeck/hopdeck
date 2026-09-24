@@ -34,6 +34,18 @@ pnpm build && pnpm start   # serve the built UI from the backend
 `scripts/nft-json-fixture.sh FILE.nft` prints the JSON that nft produces for a
 ruleset, using a throwaway network namespace. The host ruleset is not touched.
 
+## Translations
+
+The UI is available in English and Polish. Texts live in
+`packages/web/src/i18n/locales/<language>.json` (i18next JSON v4 format). To
+add a language:
+
+1. Copy `en.json` to e.g. `de.json` and translate the values.
+2. Run `pnpm test`. It lists missing keys, including the plural forms your
+   language needs.
+
+No code changes are needed: every file in that directory becomes a language.
+
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).

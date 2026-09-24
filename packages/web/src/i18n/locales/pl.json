@@ -1,0 +1,7 @@
+{
+  "app.connecting": "Łączenie…",
+  "app.connected": "Połączono z backendem nftm {{version}}.",
+  "app.unauthorized": "Brak autoryzacji. Otwórz adres wypisany przez polecenie nftm.",
+  "app.error": "Nie można połączyć się z backendem: {{message}}",
+  "language.label": "Język"
+}
