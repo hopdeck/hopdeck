@@ -1,15 +1,5 @@
-import type { Executor } from '@nftm/core';
+import type { Executor, HostFacts } from '@nftm/core';
 import { HostError } from './errors.ts';
-
-export interface HostFacts {
-  uid: number;
-  hostname: string;
-  kernel: string;
-  os: { id: string; version: string; name: string } | undefined;
-  systemd: boolean;
-  /** `path` is absolute: /usr/sbin is often missing from a normal user's PATH. */
-  nft: { path: string; version: string } | undefined;
-}
 
 // One round trip collects everything; `nft --version` needs no root. Output is
 // "key=value" lines. os-release is meant to be sourced by shells.

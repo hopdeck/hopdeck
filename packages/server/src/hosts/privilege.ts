@@ -1,13 +1,5 @@
-import type { ExecOptions, ExecResult, Executor } from '@nftm/core';
+import type { ExecOptions, ExecResult, Executor, HostFacts, Privilege } from '@nftm/core';
 import { HostError } from './errors.ts';
-import type { HostFacts } from './facts.ts';
-
-/** How nft gets root on a host. */
-export type Privilege =
-  | { kind: 'root' }
-  | { kind: 'sudo' }
-  | { kind: 'sudo-password' }
-  | { kind: 'none'; detail: string };
 
 // sudo's messages are localized; nftm parses them, so it asks for English.
 const SUDO = ['env', 'LC_ALL=C', 'sudo'];

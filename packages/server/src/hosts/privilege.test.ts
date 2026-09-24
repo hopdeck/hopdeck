@@ -1,8 +1,9 @@
+import type { Privilege } from '@nftm/core';
 import { describe, expect, it } from 'vitest';
 import { DEBIAN_FACTS, FakeExecutor, failed, ok } from '../testing/fake-executor.ts';
 import { HostError } from './errors.ts';
 import { parseFacts } from './facts.ts';
-import { detectPrivilege, runNft, type Privilege } from './privilege.ts';
+import { detectPrivilege, runNft } from './privilege.ts';
 
 const facts = parseFacts(DEBIAN_FACTS);
 const NFT = '/usr/sbin/nft';

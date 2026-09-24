@@ -1,20 +1,8 @@
-/**
- * Stable codes the UI translates; `detail` carries the raw message (usually
- * stderr of ssh, sudo or nft) for display next to the translation.
- */
-export type HostErrorCode =
-  | 'ssh-host-key'
-  | 'ssh-host-key-changed'
-  | 'ssh-auth'
-  | 'ssh-connect'
-  | 'timeout'
-  | 'spawn-failed'
-  | 'command-failed'
-  | 'nft-missing'
-  | 'no-privileges'
-  | 'password-required'
-  | 'wrong-password';
+import type { HostErrorCode } from '@nftm/core';
 
+export type { HostErrorCode };
+
+/** A failure on a host; `detail` is the raw message, shown next to the translated code. */
 export class HostError extends Error {
   override name = 'HostError';
   readonly code: HostErrorCode;

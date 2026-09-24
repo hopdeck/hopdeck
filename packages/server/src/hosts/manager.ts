@@ -1,27 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Executor } from '@nftm/core';
-import { HostError, type HostErrorCode } from './errors.ts';
-import { collectFacts, type HostFacts } from './facts.ts';
+import type { Executor, HostErrorCode, HostKind, HostStatus, HostSummary } from '@nftm/core';
+import { HostError } from './errors.ts';
+import { collectFacts } from './facts.ts';
 import { LocalExecutor } from './local.ts';
-import { detectPrivilege, runNft, type Privilege } from './privilege.ts';
+import { detectPrivilege, runNft } from './privilege.ts';
 import { isValidDestination, SshExecutor } from './ssh.ts';
-
-export type HostKind = 'local' | 'ssh' | 'sandbox';
-
-export type HostStatus =
-  | { state: 'new' }
-  | { state: 'connected'; facts: HostFacts; privilege: Privilege; passwordStored: boolean }
-  | { state: 'error'; error: { code: HostErrorCode | 'unknown'; detail: string } };
-
-export interface HostSummary {
-  id: string;
-  kind: HostKind;
-  name: string;
-  destination?: string;
-  status: HostStatus;
-}
 
 interface Entry {
   id: string;
