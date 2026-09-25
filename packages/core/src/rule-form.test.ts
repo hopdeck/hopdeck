@@ -6,52 +6,28 @@ import { parseListing, stripHandles } from './listing.ts';
 import { ruleKey } from './keys.ts';
 import { emptyRule, renderRule, ruleForm, type RuleForm } from './rule-form.ts';
 import { parseRuleset } from './ruleset.ts';
-import { chainPolicy, chains, editableTable, newChain, newSetBlock, newTable, refreshUntouched, renderTable, withPolicy } from './table-edit.ts';
+import { chainPolicy, chains, editableTable, editSetBlock, newChain, newSetBlock, newTable, refreshUntouched, renderTable, setSpecOf, withPolicy } from './table-edit.ts';
 
 const ruleset = parseRuleset(rulesJson);
 const listing = parseListing(rulesListing);
 const rules = ruleset.tables[0]!.chains.flatMap((chain) => chain.rules);
 const printed = (handle: number) => listing.rules.get(ruleKey('inet', 't', handle))!;
-const form = (handle: number) => ruleForm(rules.find((rule) => rule.handle === handle)!, printed(handle));
+/** The form of the fixture rule nft printed as `text`; handles shift whenever the fixture grows. */
+const form = (text: string) => {
+  const rule = rules.find((candidate) => printed(candidate.handle) === text);
+  if (rule === undefined) throw new Error(`no rule "${text}" in the fixture`);
+  return ruleForm(rule, text);
+};
 
 describe('ruleForm', () => {
-  it('covers the common rules, each rendering back to exactly what nft printed', () => {
-    const covered = rules.filter((rule) => ruleForm(rule, printed(rule.handle)) !== undefined).map((rule) => printed(rule.handle));
-    expect(covered).toEqual([
-      'ct state established,related accept',
-      'ct state new tcp dport 22 accept',
-      'ct state invalid drop',
-      'iif "lo" accept',
-      'iifname "eth0" oifname "wg*" accept',
-      'ip saddr 10.0.0.0/24 tcp dport { 80, 443 } counter packets 0 bytes 0 accept',
-      'ip saddr != 192.168.1.1 udp sport 1000-2000 drop',
-      'ip6 daddr fe80::/10 icmpv6 type echo-request accept',
-      'ip saddr @admins tcp dport 22 accept comment "ssh from admins"',
-      'meta l4proto tcp reject with tcp reset',
-      'icmp type echo-request limit rate 5/second burst 5 packets accept',
-      'tcp dport 8080 log prefix "web: " level info drop',
-      'tcp dport 25 reject',
-      'udp dport 53 jump other',
-      'tcp dport 3000-3010 goto other',
-      'ip daddr 10.0.0.1-10.0.0.9 return',
-      'ip saddr 1.2.3.4 counter name "hits" drop',
-      'tcp dport 22 ip saddr 10.0.0.1 accept',
-      'tcp dport 80 dnat ip to 10.0.0.2:8080',
-      'tcp dport 81 redirect to :8081',
-      'oifname "eth0" masquerade',
-      'ip saddr 10.0.0.0/24 snat ip to 1.2.3.4',
-      'iifname { "wg0", "eth0" } accept',
-      'oifname != { "eth1", "eth2" } drop',
-      'tcp dport != { 80, 443 } drop',
-      'ip saddr { 10.0.0.0/24, 192.168.1.10 } accept',
-      'icmp type { echo-reply, echo-request } accept',
-      'tcp dport { 80, 443, 8000-8080 } counter packets 0 bytes 0 accept',
-    ]);
-    expect(covered).toHaveLength(rules.length);
+  it('covers every rule of the fixture, each rendering back to exactly what nft printed', () => {
+    const uncovered = rules.filter((rule) => ruleForm(rule, printed(rule.handle)) === undefined).map((rule) => printed(rule.handle));
+    expect(uncovered).toEqual([]);
+    expect(rules.length).toBeGreaterThan(60);
   });
 
   it('reads the fields of a rule', () => {
-    expect(form(17)).toEqual({
+    expect(form('ip saddr @admins tcp dport 22 accept comment "ssh from admins"')).toEqual({
       ipVersion: 'ip',
       srcAddress: { value: '@admins', negate: false },
       protocol: 'tcp',
@@ -63,22 +39,47 @@ describe('ruleForm', () => {
   });
 
   it('shows several values as a plain list, without the braces of the set', () => {
-    expect(form(36)).toMatchObject({ protocol: 'tcp', dstPort: { value: '80, 443', negate: true } });
-    expect(form(32)).toMatchObject({ inInterface: { value: 'wg0, eth0', negate: false, byIndex: false } });
-    expect(form(40)).toMatchObject({ protocol: 'icmp', icmpType: 'echo-reply, echo-request' });
+    expect(form('tcp dport != { 80, 443 } drop')).toMatchObject({ protocol: 'tcp', dstPort: { value: '80, 443', negate: true } });
+    expect(form('iifname { "wg0", "eth0" } accept')).toMatchObject({ inInterface: { value: 'wg0, eth0', negate: false, byIndex: false } });
+    expect(form('icmp type { echo-reply, echo-request } accept')).toMatchObject({ protocol: 'icmp', icmpType: 'echo-reply, echo-request' });
+  });
+
+  it('reads TCP flags in each of the ways nft writes them', () => {
+    expect(form('tcp flags syn accept')?.tcpFlags).toEqual({ set: ['syn'], unset: [], any: true });
+    expect(form('tcp flags ! syn,ack drop')?.tcpFlags).toEqual({ set: [], unset: ['syn', 'ack'] });
+    expect(form('tcp flags & (fin | syn | rst | ack) == syn accept')?.tcpFlags).toEqual({ set: ['syn'], unset: ['fin', 'rst', 'ack'] });
+    expect(form('tcp flags == 0x12 accept')?.tcpFlags).toEqual({ set: ['syn', 'ack'], unset: ['fin', 'rst', 'psh', 'urg', 'ecn', 'cwr'] });
+  });
+
+  it('reads limits, quotas, marks and per-source limits', () => {
+    expect(form('limit rate 100 kbytes/second burst 500 kbytes accept')?.limit).toEqual({ rate: 100, per: 'second', unit: 'kbytes', burst: 500, burstUnit: 'kbytes' });
+    expect(form('limit rate over 10/second burst 5 packets drop')?.limit).toEqual({ rate: 10, per: 'second', burst: 5, over: true });
+    expect(form('quota over 1000 mbytes drop')?.quota).toEqual({ amount: 1000, unit: 'mbytes', over: true });
+    expect(form('ct mark set 0x00000002 accept')?.markSet).toEqual({ target: 'ct', value: '0x00000002' });
+    expect(form('update @dyn { ip saddr timeout 1m limit rate over 5/minute burst 3 packets } drop')?.keyedLimit).toEqual({
+      verb: 'update',
+      set: 'dyn',
+      key: 'ip saddr',
+      timeout: '1m',
+      limit: { rate: 5, per: 'minute', burst: 3, over: true },
+    });
+    expect(form('tcp dport vmap { 22 : accept, 80 : jump other, 443 : drop }')?.action).toEqual({
+      kind: 'vmap',
+      key: 'tcp dport',
+      map: '{ 22 : accept, 80 : jump other, 443 : drop }',
+    });
   });
 
   it('leaves a rule as text when the form cannot hold all of it', () => {
-    expect(basicListing).toContain('tcp dport vmap @port_policy');
-    const vmap = { vmap: { key: { payload: { protocol: 'tcp', field: 'dport' } }, data: '@port_policy' } };
-    const rule = { family: 'inet' as const, table: 'filter', chain: 'input', handle: 14, expr: [vmap] };
-    expect(ruleForm(rule, 'tcp dport vmap @port_policy')).toBeUndefined();
+    const copyMark = { mangle: { key: { ct: { key: 'mark' } }, value: { meta: { key: 'mark' } } } };
+    const rule = { family: 'inet' as const, table: 'filter', chain: 'input', handle: 14, expr: [copyMark] };
+    expect(ruleForm(rule, 'ct mark set meta mark')).toBeUndefined();
   });
 });
 
 describe('renderRule', () => {
   it('keeps the order of existing parts and puts new ones in canonical places', () => {
-    const edited: RuleForm = { ...form(26)!, ctState: ['new'], comment: 'admin' };
+    const edited: RuleForm = { ...form('tcp dport 22 ip saddr 10.0.0.1 accept')!, ctState: ['new'], comment: 'admin' };
     expect(renderRule(edited, 'inet')).toBe('ct state new tcp dport 22 ip saddr 10.0.0.1 accept comment "admin"');
   });
 
@@ -124,6 +125,7 @@ describe('editableTable', () => {
       ['nat', 2],
       ['post', 2],
       ['lists', 6],
+      ['more', 33],
     ]);
   });
 
@@ -198,6 +200,44 @@ describe('newTable and newChain', () => {
     expect(newSetBlock({ kind: 'map', name: 'm', type: 'ifname', value: 'verdict', flags: [], counter: false, elements: [] }).lines).toEqual([
       '\tmap m {',
       '\t\ttype ifname : verdict',
+      '\t}',
+    ]);
+  });
+});
+
+describe('setSpecOf and editSetBlock', () => {
+  const dyn = { kind: 'set', name: 'dyn', lines: ['\tset dyn {', '\t\ttype ipv4_addr', '\t\tsize 65535', '\t\tflags dynamic,timeout', '\t\ttimeout 1m', '\t\telements = { 1.1.1.1 expires 30s,', '\t\t\t     2.2.2.2 expires 10s }', '\t}'] };
+
+  it('reads what the dialog shows', () => {
+    expect(setSpecOf(dyn)).toEqual({
+      kind: 'set',
+      name: 'dyn',
+      type: 'ipv4_addr',
+      flags: ['dynamic', 'timeout'],
+      timeout: '1m',
+      counter: false,
+      elements: ['1.1.1.1 expires 30s', '2.2.2.2 expires 10s'],
+    });
+  });
+
+  it('changes lines in place and keeps what it does not know', () => {
+    expect(editSetBlock(dyn, setSpecOf(dyn)!)).toEqual(dyn);
+    const edited = editSetBlock(dyn, { ...setSpecOf(dyn)!, timeout: '5m', counter: true, elements: ['1.1.1.1'] });
+    expect(edited.lines).toEqual([
+      '\tset dyn {',
+      '\t\ttype ipv4_addr',
+      '\t\tsize 65535',
+      '\t\tflags dynamic,timeout',
+      '\t\tcounter',
+      '\t\ttimeout 5m',
+      '\t\telements = { 1.1.1.1 }',
+      '\t}',
+    ]);
+    const map = { kind: 'map', name: 'm', lines: ['\tmap m {', '\t\ttype inet_service : verdict', '\t}'] };
+    expect(editSetBlock(map, { ...setSpecOf(map)!, value: 'ipv4_addr', flags: ['interval'] }).lines).toEqual([
+      '\tmap m {',
+      '\t\ttype inet_service : ipv4_addr',
+      '\t\tflags interval',
       '\t}',
     ]);
   });

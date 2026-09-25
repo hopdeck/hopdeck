@@ -1,4 +1,4 @@
-import { editableTable, emptyRule, findTable, newSetBlock, renderRule, renderTable } from '@nftm/core';
+import { editableTable, editSetBlock, emptyRule, findTable, newSetBlock, renderRule, renderTable, setSpecOf } from '@nftm/core';
 import { describe, expect, it } from 'vitest';
 import basicJson from '../../../core/test/fixtures/basic.json' with { type: 'json' };
 import basicListing from '../../../core/test/fixtures/basic.listing?raw';
@@ -32,6 +32,7 @@ describe('initialChains', () => {
       ['nat', 2, 'accept', 'dstnat'],
       ['post', 2, 'accept', 'srcnat'],
       ['lists', 6, undefined, undefined],
+      ['more', 33, undefined, undefined],
     ]);
   });
 
@@ -43,10 +44,8 @@ describe('initialChains', () => {
 
     const basic = buildModel({ json: basicJson, listing: basicListing, readAt: '2026-09-25T12:00:00Z' });
     const filter = findTable(basic.ruleset, 'inet', 'filter')!;
-    const textOnly = initialChains(editableTable(basic.text, 'inet', 'filter')!, filter, basic)
-      .flatMap((state) => state.rows)
-      .filter((row) => row.form === undefined);
-    expect(textOnly.map((row) => row.text)).toContain('tcp dport vmap @port_policy');
+    const rows = initialChains(editableTable(basic.text, 'inet', 'filter')!, filter, basic).flatMap((state) => state.rows);
+    expect(rows.find((row) => row.text === 'tcp dport vmap @port_policy')?.form?.action).toEqual({ kind: 'vmap', key: 'tcp dport', map: '@port_policy' });
   });
 });
 
@@ -107,14 +106,25 @@ describe('chains added and deleted in the editor', () => {
 describe('sets added and deleted in the editor', () => {
   it('writes new sets before the first chain and drops deleted ones', () => {
     const sets = setsOf();
-    expect(sets.map((state) => `${state.block.kind} ${state.block.name}`)).toEqual(['set admins']);
+    expect(sets.map((state) => `${state.block.kind} ${state.block.name}`)).toEqual(['set admins', 'map ports', 'set dyn', 'set m1']);
     const ban = newSetBlock({ kind: 'set', name: 'ban', type: 'ipv4_addr', flags: ['timeout'], counter: false, elements: [] });
-    const { text } = definitionOf(table, chainsOf(), [{ block: ban, isNew: true }]);
+    const { text } = definitionOf(table, chainsOf(), [...sets.filter((state) => state.block.name !== 'admins'), { block: ban, isNew: true }]);
     expect(text).not.toContain('set admins');
     expect(text).toContain('\tcounter hits {');
     expect(text).not.toContain('\n\n\n');
     expect(text).toContain('\tset ban {\n\t\ttype ipv4_addr\n\t\tflags timeout\n\t}\n\n\tchain other {');
     expectLinesMatch(chainsOf());
+  });
+});
+
+describe('sets edited in the editor', () => {
+  it('writes the edited block in place of the old one', () => {
+    const sets = setsOf();
+    const ports = sets.find((state) => state.block.name === 'ports')!;
+    const block = editSetBlock(ports.block, { ...setSpecOf(ports.block)!, elements: ['22 : accept', '80 : drop'] });
+    const { text } = definitionOf(table, chainsOf(), sets.map((state) => (state === ports ? { ...state, block, edited: true } : state)));
+    expect(text).toContain('\tmap ports {\n\t\ttype inet_service : verdict\n\t\telements = { 22 : accept, 80 : drop }\n\t}');
+    expect(text.indexOf('map ports')).toBeLessThan(text.indexOf('set dyn'));
   });
 });
 

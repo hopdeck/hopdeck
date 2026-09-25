@@ -36,6 +36,8 @@ const COLUMNS: readonly { id: Column; label: MessageKey; mono: boolean }[] = [
   { id: 'input', label: 'editor.col.input', mono: true },
   { id: 'output', label: 'editor.col.output', mono: true },
   { id: 'state', label: 'editor.col.state', mono: false },
+  { id: 'packet', label: 'editor.col.packet', mono: true },
+  { id: 'limits', label: 'editor.col.limits', mono: true },
   { id: 'extra', label: 'editor.col.extra', mono: false },
   { id: 'comment', label: 'editor.col.comment', mono: false },
 ];
@@ -48,7 +50,14 @@ export function VisualEditor({ family, chains, sets, counters, counterOf, errorR
   const [editing, setEditing] = useState<{ chain: number; row: number | 'new' } | undefined>();
   const [addingChain, setAddingChain] = useState(false);
   const [addingSet, setAddingSet] = useState(false);
+  const [editingSet, setEditingSet] = useState<SetState>();
   const names = chains.map((state) => state.chain.name);
+  const setInfos = sets.flatMap((state) => {
+    const { kind, name, lines } = state.block;
+    if (kind !== 'set' && kind !== 'map') return [];
+    const parsed = parseSetBlock(lines.map((line) => line.replace(/^\t/, '')).join('\n'));
+    return [{ kind: kind as 'set' | 'map', name, declaration: parsed?.declaration ?? [] }];
+  });
   // jump and goto lead to regular chains only.
   const targets = chains.filter((state) => state.base === undefined).map((state) => state.chain.name);
 
@@ -104,7 +113,12 @@ export function VisualEditor({ family, chains, sets, counters, counterOf, errorR
                     {[...(parsed?.declaration ?? []), t('counts.elements', { count: parsed?.elements.length ?? 0 })].join(' · ')}
                   </span>
                   {state.isNew && <span className={styles.newBadge}>{t('editor.newChain')}</span>}
+                  {state.edited && !state.isNew && <span className={styles.editedBadge}>{t('editor.edited')}</span>}
                   <span className={styles.spacer} />
+                  <button type="button" className="btn btn-ghost btn-sm btn-icon" title={t('editor.editSet')} aria-label={t('editor.editSet')}
+                    onClick={() => setEditingSet(state)}>
+                    <EditIcon />
+                  </button>
                   <button type="button" className="btn btn-ghost btn-sm btn-icon btn-danger" title={t('editor.deleteSet')} aria-label={t('editor.deleteSet')}
                     onClick={() => onSetsChange(sets.filter((other) => other !== state))}>
                     <TrashIcon />
@@ -180,13 +194,22 @@ export function VisualEditor({ family, chains, sets, counters, counterOf, errorR
       </div>
 
       <SetDialog
-        open={addingSet}
+        open={addingSet || editingSet !== undefined}
+        initial={editingSet?.block}
         existing={sets.map((state) => state.block.name)}
-        onAdd={(block) => {
-          onSetsChange([...sets, { block, isNew: true }]);
+        onSave={(block) => {
+          if (editingSet === undefined) {
+            onSetsChange([...sets, { block, isNew: true }]);
+          } else if (block.lines.join('\n') !== editingSet.block.lines.join('\n')) {
+            onSetsChange(sets.map((state) => (state === editingSet ? { ...state, block, edited: true } : state)));
+          }
           setAddingSet(false);
+          setEditingSet(undefined);
         }}
-        onClose={() => setAddingSet(false)}
+        onClose={() => {
+          setAddingSet(false);
+          setEditingSet(undefined);
+        }}
       />
 
       <ChainDialog
@@ -206,6 +229,7 @@ export function VisualEditor({ family, chains, sets, counters, counterOf, errorR
         chain={editing === undefined ? '' : names[editing.chain]!}
         chains={targets.filter((name) => editing === undefined || name !== names[editing.chain])}
         counters={counters}
+        sets={setInfos}
         onSave={save}
         onClose={() => setEditing(undefined)}
       />

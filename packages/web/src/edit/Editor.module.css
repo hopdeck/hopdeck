@@ -83,6 +83,23 @@
   font-weight: 600;
 }
 
+.editedBadge {
+  padding: 1px 7px;
+  border: 1px solid var(--warn-border);
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.textarea {
+  height: auto;
+  padding: 8px 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
 .regular {
   color: var(--text-subtle);
   font-size: var(--text-sm);
@@ -436,6 +453,79 @@
   align-items: center;
   gap: 8px;
   font-size: var(--text-sm);
+}
+
+.section {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.section legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
+
+.sectionOff {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.sectionOff legend {
+  padding: 0;
+}
+
+.sectionBody {
+  display: grid;
+  gap: 10px;
+}
+
+.unit {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.flagsField {
+  display: grid;
+  gap: 8px;
+}
+
+.flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.flag {
+  min-width: 52px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.flag-set {
+  border-color: var(--ok-border);
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.flag-unset {
+  border-color: var(--danger-border);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-weight: 600;
 }
 
 .preview {

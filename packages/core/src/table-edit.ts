@@ -1,4 +1,5 @@
 import { MANAGED_COMMENT, nftName } from './changes.ts';
+import { parseSetBlock } from './set-elements.ts';
 import type { Family } from './nft-json.ts';
 
 export interface EditableRule {
@@ -164,6 +165,67 @@ export interface SetSpec {
   timeout?: string;
   counter: boolean;
   elements: string[];
+}
+
+/** What the set dialog can show of an existing set or map; the other declaration lines stay as they are. */
+export function setSpecOf(block: EditableBlock): SetSpec | undefined {
+  const parsed = parseSetBlock(block.lines.map((line) => line.replace(/^\t/, '')).join('\n'));
+  if (parsed === undefined) return undefined;
+  const typeLine = parsed.declaration.find((line) => line.startsWith('type '));
+  if (typeLine === undefined) return undefined;
+  const [type, value] = typeLine.slice('type '.length).split(' : ');
+  const flags = parsed.declaration.find((line) => line.startsWith('flags '))?.slice('flags '.length).split(',') ?? [];
+  const timeout = parsed.declaration.find((line) => line.startsWith('timeout '))?.slice('timeout '.length);
+  return {
+    kind: parsed.kind,
+    name: parsed.name,
+    type: type!,
+    ...(parsed.kind === 'map' && value !== undefined && { value }),
+    flags,
+    ...(timeout !== undefined && { timeout }),
+    counter: parsed.declaration.includes('counter'),
+    elements: parsed.elements,
+  };
+}
+
+/**
+ * The block with the dialog's changes, in nft's line order: lines the dialog
+ * does not know (size, policy, ...) stay, and unchanged elements keep nft's
+ * own wrapping.
+ */
+export function editSetBlock(block: EditableBlock, spec: SetSpec): EditableBlock {
+  const original = setSpecOf(block);
+  const parsed = parseSetBlock(block.lines.map((line) => line.replace(/^\t/, '')).join('\n'));
+  if (original === undefined || parsed === undefined) return newSetBlock(spec);
+
+  const wanted = {
+    flags: spec.flags.length > 0 ? `flags ${spec.flags.join(',')}` : undefined,
+    counter: spec.counter ? 'counter' : undefined,
+    timeout: spec.timeout !== undefined ? `timeout ${spec.timeout}` : undefined,
+  };
+  const declaration: string[] = [];
+  const placed = new Set<string>();
+  for (const line of parsed.declaration) {
+    if (line.startsWith('type ')) declaration.push(`type ${spec.type}${spec.kind === 'map' ? ` : ${spec.value}` : ''}`);
+    else if (line.startsWith('flags ')) (placed.add('flags'), wanted.flags && declaration.push(wanted.flags));
+    else if (line === 'counter') (placed.add('counter'), wanted.counter && declaration.push(wanted.counter));
+    else if (line.startsWith('timeout ')) (placed.add('timeout'), wanted.timeout && declaration.push(wanted.timeout));
+    else declaration.push(line);
+  }
+  // New lines go where nft prints them: type, flags, counter, timeout.
+  const prefixes = ['type ', 'flags ', 'counter', 'timeout '];
+  (['flags', 'counter', 'timeout'] as const).forEach((key, index) => {
+    const line = wanted[key];
+    if (placed.has(key) || line === undefined) return;
+    const earlier = prefixes.slice(0, index + 1);
+    const after = declaration.findLastIndex((existing) => earlier.some((prefix) => existing.startsWith(prefix)));
+    declaration.splice(after + 1, 0, line);
+  });
+
+  const sameElements = spec.elements.length === original.elements.length && spec.elements.every((element, index) => element === original.elements[index]);
+  const start = block.lines.findIndex((line) => /^\t\telements = \{/.test(line));
+  const elements = sameElements && start !== -1 ? block.lines.slice(start, -1) : spec.elements.length > 0 ? [`\t\telements = { ${spec.elements.join(', ')} }`] : [];
+  return { kind: spec.kind, name: spec.name, lines: [block.lines[0]!, ...declaration.map((line) => `\t\t${line}`), ...elements, '\t}'] };
 }
 
 /** A new set or map, written the way nft lists them. */

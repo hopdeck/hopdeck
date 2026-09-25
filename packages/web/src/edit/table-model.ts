@@ -45,6 +45,8 @@ export interface SetState {
   block: EditableBlock;
   /** Added in the editor; not on the host yet. */
   isNew: boolean;
+  /** Changed in the editor. */
+  edited?: boolean;
 }
 
 /** What the editor starts from: the table on the host, or a new one. */
@@ -176,7 +178,7 @@ export function initialChains(table: EditableTable, node: TableNode, model: Rule
  */
 export function definitionOf(table: EditableTable, chains: ChainState[], sets: SetState[]): { text: string; lines: Map<string, number> } {
   const byName = new Map(chains.map((state) => [state.chain.name, state]));
-  const keptSets = new Set(sets.filter((state) => !state.isNew).map((state) => `${state.block.kind} ${state.block.name}`));
+  const keptSets = new Map(sets.filter((state) => !state.isNew).map((state) => [`${state.block.kind} ${state.block.name}`, state]));
   const output: string[] = [];
   const lines = new Map<string, number>();
   let setsPlaced = false;
@@ -224,7 +226,9 @@ export function definitionOf(table: EditableTable, chains: ChainState[], sets: S
       output.push(part.text);
     } else if (part.kind === 'block') {
       const { kind, name, lines: blockLines } = part.block;
-      if ((kind !== 'set' && kind !== 'map') || keptSets.has(`${kind} ${name}`)) output.push(...blockLines);
+      const kept = keptSets.get(`${kind} ${name}`);
+      if (kind !== 'set' && kind !== 'map') output.push(...blockLines);
+      else if (kept !== undefined) output.push(...kept.block.lines);
       else skip();
     } else {
       const state = byName.get(part.chain.name);

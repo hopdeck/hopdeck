@@ -26,4 +26,24 @@ describe('ruleColumns', () => {
       extra: 'counter, log "web: "',
     });
   });
+
+  it('sums up packet matches and limits in their own columns', () => {
+    const columns = ruleColumns({
+      ...emptyRule(),
+      tcpFlags: { set: ['syn'], unset: ['ack'] },
+      length: { op: '>', value: '1000' },
+      limit: { rate: 10, per: 'second', burst: 5, over: true },
+      keyedLimit: { verb: 'meter', set: 'ssh', key: 'ip saddr', limit: { rate: 3, per: 'minute' } },
+      quota: { amount: 1, unit: 'mbytes', over: false },
+      notrack: true,
+      action: { kind: 'vmap', key: 'tcp dport', map: '@ports' },
+    });
+    expect(columns).toMatchObject({
+      action: 'vmap @ports',
+      actionTone: 'jump',
+      packet: 'flags syn !ack, length > 1000',
+      limits: 'over 10/second, ip saddr: 3/minute, quota 1 mbytes',
+      extra: 'notrack',
+    });
+  });
 });

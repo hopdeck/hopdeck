@@ -1,4 +1,4 @@
-import { elementProblem, newSetBlock, splitList, type EditableBlock, type SetSpec } from '@nftm/core';
+import { editSetBlock, elementProblem, newSetBlock, setSpecOf, splitList, type EditableBlock, type SetSpec } from '@nftm/core';
 import { useEffect, useRef, useState } from 'react';
 import { Segmented } from '../components/Segmented.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
@@ -9,9 +9,11 @@ import { Choice, Field } from './fields.tsx';
 
 interface SetDialogProps {
   open: boolean;
+  /** The set or map being edited; undefined for a new one. */
+  initial?: EditableBlock | undefined;
   /** Names of the sets and maps the table has; they share one namespace. */
   existing: readonly string[];
-  onAdd(block: EditableBlock): void;
+  onSave(block: EditableBlock): void;
   onClose(): void;
 }
 
@@ -21,7 +23,7 @@ const TIMEOUTS = ['1m', '10m', '1h', '1d', '7d'];
 const NAME = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 
 /** Declares a named set or map: its types, flags and first elements. */
-export function SetDialog({ open, existing, onAdd, onClose }: SetDialogProps) {
+export function SetDialog({ open, initial, existing, onSave, onClose }: SetDialogProps) {
   const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
   const [opening, setOpening] = useState(0);
@@ -34,50 +36,59 @@ export function SetDialog({ open, existing, onAdd, onClose }: SetDialogProps) {
   const [timeout, setDefaultTimeout] = useState<string | undefined>();
   const [counter, setCounter] = useState(false);
   const [elements, setElements] = useState('');
+  // Flags the dialog has no checkbox for, e.g. dynamic or constant; kept as they are.
+  const [otherFlags, setOtherFlags] = useState<string[]>([]);
+  const [flagOrder, setFlagOrder] = useState<string[]>([]);
 
   useEffect(() => {
     const element = dialog.current;
     if (element === null) return;
     if (open && !element.open) {
+      const spec = initial === undefined ? undefined : setSpecOf(initial);
       setOpening((count) => count + 1);
-      setKind('set');
-      setName('');
-      setType('ipv4_addr');
-      setValue('verdict');
-      setIntervalFlag(false);
-      setTimeouts(false);
-      setDefaultTimeout(undefined);
-      setCounter(false);
-      setElements('');
+      setKind(spec?.kind ?? 'set');
+      setName(spec?.name ?? '');
+      setType(spec?.type ?? 'ipv4_addr');
+      setValue(spec?.value ?? 'verdict');
+      setIntervalFlag(spec?.flags.includes('interval') ?? false);
+      setTimeouts(spec?.flags.includes('timeout') ?? false);
+      setDefaultTimeout(spec?.timeout);
+      setCounter(spec?.counter ?? false);
+      setElements(spec?.elements.join('\n') ?? '');
+      setOtherFlags(spec?.flags.filter((flag) => flag !== 'interval' && flag !== 'timeout') ?? []);
+      setFlagOrder(spec?.flags ?? []);
       element.showModal();
     } else if (!open && element.open) {
       element.close();
     }
   }, [open]);
 
-  const list = splitList(elements);
+  const list = splitList(elements.replace(/\n/g, ','));
+  // Flags keep the order the set had them in; new ones go last.
+  const chosen = [...otherFlags, ...(interval ? ['interval'] : []), ...(timeouts ? ['timeout'] : [])];
+  const flags = [...flagOrder.filter((flag) => chosen.includes(flag)), ...chosen.filter((flag) => !flagOrder.includes(flag))];
   const spec: SetSpec = {
     kind,
     name,
     type: type?.trim() || 'ipv4_addr',
     ...(kind === 'map' && { value: value?.trim() || 'verdict' }),
-    flags: [...(interval ? ['interval'] : []), ...(timeouts ? ['timeout'] : [])],
+    flags,
     ...(timeouts && timeout !== undefined && { timeout: timeout.trim() }),
     counter,
     elements: list,
   };
   const found: MessageKey[] = [];
   if (!NAME.test(name)) found.push('chain.problem.name');
-  if (existing.includes(name)) found.push('set.problem.taken');
+  if (existing.includes(name) && name !== initial?.name) found.push('set.problem.taken');
   const elementProblems = list.map((element) => elementProblem(element)).filter((problem) => problem !== undefined);
-  const block = newSetBlock({ ...spec, name: name || '…' });
+  const block = initial !== undefined ? editSetBlock(initial, spec) : newSetBlock({ ...spec, name: name || '…' });
   const preview = block.lines.map((line) => line.slice(1)).join('\n');
 
   return (
     <dialog ref={dialog} className={styles.dialog} onClose={onClose} aria-labelledby="set-title">
       <div key={opening} className={styles.dialogBody}>
         <h2 id="set-title" className={styles.dialogTitle}>
-          {t('set.add')}
+          {initial !== undefined ? t('set.edit', { name: initial.name }) : t('set.add')}
         </h2>
         <div className={styles.fields}>
           <Field label={t('set.kind')} group>
@@ -86,14 +97,14 @@ export function SetDialog({ open, existing, onAdd, onClose }: SetDialogProps) {
               value={kind}
               onChange={setKind}
               options={[
-                { value: 'set', label: t('set.kindSet') },
-                { value: 'map', label: t('set.kindMap') },
+                { value: 'set', label: t('set.kindSet'), disabled: initial !== undefined },
+                { value: 'map', label: t('set.kindMap'), disabled: initial !== undefined },
               ]}
             />
           </Field>
           <p className={styles.note}>{t(kind === 'set' ? 'set.kindSetHint' : 'set.kindMapHint')}</p>
           <Field label={t('chain.name')}>
-            <input className="input mono" value={name} onChange={(event) => setName(event.target.value.trim())} spellCheck={false} />
+            <input className="input mono" value={name} disabled={initial !== undefined} onChange={(event) => setName(event.target.value.trim())} spellCheck={false} />
           </Field>
           <Field label={t(kind === 'set' ? 'set.type' : 'set.keyType')} group>
             <Choice label={t(kind === 'set' ? 'set.type' : 'set.keyType')} value={type} options={KEY_TYPES} onChange={setType} />
@@ -124,10 +135,12 @@ export function SetDialog({ open, existing, onAdd, onClose }: SetDialogProps) {
               <Choice label={t('set.defaultTimeout')} value={timeout} options={TIMEOUTS} empty={t('elements.timeoutNone')} onChange={setDefaultTimeout} />
             </Field>
           )}
-          <Field label={t('set.elements')}>
-            <input className="input mono" value={elements} placeholder={kind === 'map' ? '22 : accept, 80 : drop' : '192.168.1.10, 10.0.0.0/24'}
+          <Field label={t(initial !== undefined ? 'set.elementsAll' : 'set.elements')}>
+            <textarea className={`input mono ${styles.textarea}`} value={elements} rows={Math.min(10, Math.max(3, elements.split('\n').length))}
+              placeholder={kind === 'map' ? '22 : accept\n80 : drop' : '192.168.1.10\n10.0.0.0/24'}
               onChange={(event) => setElements(event.target.value)} spellCheck={false} />
           </Field>
+          {initial !== undefined && <p className={styles.note}>{t('set.elementsNote')}</p>}
           <p className={styles.note}>{t('set.intervalHint')}</p>
         </div>
         <div className={styles.preview}>
@@ -146,8 +159,9 @@ export function SetDialog({ open, existing, onAdd, onClose }: SetDialogProps) {
         <button type="button" className="btn" onClick={onClose}>
           {t('common.cancel')}
         </button>
-        <button type="button" className="btn btn-primary" disabled={found.length > 0 || elementProblems.length > 0} onClick={() => onAdd(newSetBlock(spec))}>
-          {t('chain.addOk')}
+        <button type="button" className="btn btn-primary" disabled={found.length > 0 || elementProblems.length > 0}
+          onClick={() => onSave(initial !== undefined ? editSetBlock(initial, spec) : newSetBlock(spec))}>
+          {t(initial !== undefined ? 'rule.ok' : 'chain.addOk')}
         </button>
       </div>
     </dialog>

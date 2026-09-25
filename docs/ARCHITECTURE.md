@@ -295,10 +295,17 @@ The npm supply chain is a real risk for a tool with this access.
   priority. This is the most confusing part of nftables, and nothing else
   shows it well.
 - **Table editor** with two modes over the same table:
-  - **Visual**, MikroTik style: a grid per chain (action, protocol, addresses,
-    ports, interfaces, connection state, other statements, comment, counter),
-    reordering, copying and deleting rules, the base chain policy, and a
-    dialog with tabs to edit one rule with a live preview of its nft text.
+  - **Visual**, inspired by MikroTik but not limited to it: a grid per chain
+    (action, protocol, addresses, ports, interfaces, connection state, packet
+    matches, limits, other statements, comment, counter), reordering, copying
+    and deleting rules, the base chain policy, and a dialog with tabs to edit
+    one rule with a live preview of its nft text. Besides the basics the form
+    covers TCP flags (set, clear, any of), packet length and type, marks
+    (match and set), reverse path filtering, rate limits (within or over, in
+    packets or bytes, with burst), limits per source address kept in a
+    dynamic set, connection counts, quotas, nflog groups, notrack and verdict
+    maps (vmap). Sets and maps are declared, changed and deleted in the same
+    editor.
     A rule gets the form only when the form renders back exactly what nft
     printed (`ruleForm` in core); any other rule stays in the grid as nft
     text and is edited as text, so the form never drops part of a rule.

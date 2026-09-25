@@ -1,6 +1,6 @@
 import { elementParts, elementProblem, splitList, type Family, type SetBlock, type TableChange } from '@nftm/core';
 import { useEffect, useRef, useState } from 'react';
-import { CloseIcon, TrashIcon } from '../components/icons.tsx';
+import { CloseIcon, EditIcon, TrashIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import styles from './Editor.module.css';
 import { Choice, Field } from './fields.tsx';
@@ -32,6 +32,9 @@ export function ElementsDialog({ family, table, set, chains, onReview, onClose }
   const [value, setValue] = useState<string | undefined>();
   const [timeout, setElementTimeout] = useState<string | undefined>();
   const [comment, setComment] = useState('');
+  // The key of an element being replaced through the form.
+  const [replacing, setReplacing] = useState<string>();
+  const entryInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const element = dialog.current;
@@ -44,6 +47,7 @@ export function ElementsDialog({ family, table, set, chains, onReview, onClose }
       setValue(undefined);
       setElementTimeout(undefined);
       setComment('');
+      setReplacing(undefined);
       element.showModal();
     } else if (set === undefined && element.open) {
       element.close();
@@ -81,6 +85,18 @@ export function ElementsDialog({ family, table, set, chains, onReview, onClose }
     setAdd((current) => [...current, ...typed.filter((element) => !current.includes(element))]);
     setEntry('');
     setComment('');
+    setReplacing(undefined);
+  }
+
+  /** Loads an element into the form; saving it replaces the old one. */
+  function edit(parts: ReturnType<typeof elementParts>) {
+    setRemove((current) => (current.includes(parts.key) ? current : [...current, parts.key]));
+    setReplacing(parts.key);
+    setEntry(parts.key);
+    setValue(parts.value);
+    setElementTimeout(parts.timeout);
+    setComment(parts.comment ?? '');
+    entryInput.current?.focus();
   }
 
   const toggle = (key: string) => setRemove((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]));
@@ -103,6 +119,7 @@ export function ElementsDialog({ family, table, set, chains, onReview, onClose }
             <Field label={t('elements.add')} group>
               <span className={styles.inline}>
                 <input
+                  ref={entryInput}
                   className="input mono"
                   value={entry}
                   placeholder={map ? '22, 80' : '192.168.1.10, 10.0.0.0/24'}
@@ -143,8 +160,18 @@ export function ElementsDialog({ family, table, set, chains, onReview, onClose }
             </Field>
             <div className={styles.addActions}>
               {entryProblem !== undefined && <span className={styles.problemText}>{entryProblem}</span>}
+              {replacing !== undefined && (
+                <button type="button" className="btn btn-ghost" onClick={() => {
+                  setRemove((current) => current.filter((key) => key !== replacing));
+                  setReplacing(undefined);
+                  setEntry('');
+                  setComment('');
+                }}>
+                  {t('common.cancel')}
+                </button>
+              )}
               <button type="button" className="btn" disabled={entry.trim() === '' || entryProblem !== undefined} onClick={addTyped}>
-                {t('elements.addButton', { count: Math.max(typed.length, 1) })}
+                {replacing !== undefined ? t('elements.replaceButton') : t('elements.addButton', { count: Math.max(typed.length, 1) })}
               </button>
             </div>
           </div>
@@ -205,6 +232,12 @@ export function ElementsDialog({ family, table, set, chains, onReview, onClose }
                           <td className={styles.counter}>{parts.counter && `${parts.counter.packets} / ${parts.counter.bytes} B`}</td>
                         )}
                         <td className={styles.rowActions}>
+                          {!removed && (
+                            <button type="button" className="btn btn-ghost btn-sm btn-icon" title={t('elements.edit')} aria-label={t('elements.edit')}
+                              onClick={() => edit(parts)}>
+                              <EditIcon />
+                            </button>
+                          )}
                           <button type="button" className={`btn btn-ghost btn-sm btn-icon${removed ? '' : ' btn-danger'}`}
                             title={t(removed ? 'elements.undo' : 'elements.remove')} aria-label={t(removed ? 'elements.undo' : 'elements.remove')}
                             onClick={() => toggle(parts.key)}>
