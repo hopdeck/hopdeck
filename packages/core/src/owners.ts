@@ -13,6 +13,7 @@ export type KnownTool =
   | 'libvirt'
   | 'lxd'
   | 'nixos'
+  | 'openwrt'
   | 'podman'
   | 'tailscale'
   | 'ufw';
@@ -44,6 +45,8 @@ const TABLE_NAMES: ReadonlyMap<string, KnownTool> = new Map([
   ['kube-proxy', 'kubernetes'],
   ['docker-bridges', 'docker'],
   ['nixos-fw', 'nixos'],
+  // OpenWrt's firewall4 generates this table from /etc/config/firewall.
+  ['fw4', 'openwrt'],
 ]);
 
 const CHAIN_PREFIXES: readonly [string, KnownTool][] = [

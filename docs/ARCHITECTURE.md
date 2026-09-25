@@ -160,8 +160,27 @@ disappears with it.
 
 ## Ownership and coexistence
 
-- nftm edits only tables it manages. Everything else stays visible (including
-  in the packet path view) but read-only.
+- nftm edits only tables it manages: ones it created, or ones the user
+  **adopted** with an explicit action. Everything else stays visible
+  (including in the packet path view) but read-only.
+- **Marker:** a managed table carries `comment "managed by nftm"`, visible in
+  a plain `nft list ruleset` and independent of which admin machine connects.
+  nft cannot add a comment to an existing table: `nft add table ... {
+  comment ... }` exits 0 and silently changes nothing (nft 1.1.3). Adopting
+  therefore rewrites the table in one transaction (`table X {}`, `delete
+  table X`, then the table as listed plus the comment), which keeps counter
+  values and dynamic set elements with their expiry. It goes through the same
+  pipeline as any change: diff, validation, automatic rollback. Tables of
+  other tools cannot be adopted.
+- **Manual override** (PL: Ręczne sterowanie). A per-host switch that lifts
+  the ownership rule: any table can be edited without adopting, including
+  other tools' tables (each with a warning that the tool may overwrite the
+  change). It lasts for the session only, is never saved to disk, shows a
+  short warning when switched on, stays visible as a banner, and is noted in
+  the change log. It never switches off the safety net (validation, diff,
+  atomic apply, rollback, fresh-connection check). Tables with xt
+  expressions stay read-only even then: nft cannot recreate those
+  statements, so rewriting them would silently lose rules.
 - Owners are guessed (`tableOwner` in core) and the UI always shows the
   evidence: the iptables-nft marker nft prints, xt expressions, iptables chain
   names, or a known tool's table name (firewalld, fail2ban, libvirt, ...).
@@ -276,11 +295,19 @@ forms add convenience without ever limiting what can be done.
 - **Integration:** it is just another `RulesetSource`; the apply pipeline stays
   the same.
 
+## Future: beyond nftables on servers
+
+The project is meant to grow into managing OpenWrt routers and other parts of
+Linux networking. Designs should not assume systemd, sudo, an OpenSSH server
+or GNU tools on hosts (OpenWrt has procd, root login, dropbear and BusyBox),
+and persistence must be pluggable per platform: OpenWrt's firewall4 owns
+`inet fw4` (recognised already) and includes `/etc/nftables.d/*.nft` inside
+it.
+
 ## Open questions
 
-- **Managed-table marker:** how to mark a table as managed. A table comment
-  (if all supported nft versions allow it) or a registry file on the host
-  (`/etc/nftm/`)?
+- **Table comments on old systems:** they need nft 0.9.7+ and kernel
+  support; check on Debian 11 and RHEL 9 before relying on them there.
 - **Windows as the admin machine:** its OpenSSH has no ControlMaster.
 - **Distribution:** npm package, Node single executable, distribution packages,
   or a desktop wrapper.

@@ -18,6 +18,11 @@ describe('tableOwner', () => {
     expect(owners['ip libvirt_network']).toEqual({ kind: 'tool', tool: 'libvirt', evidence: 'table-name' });
   });
 
+  it('recognises OpenWrt firewall4', () => {
+    const fw4: TableNode = { ...table('fw4', []), table: { family: 'inet', name: 'fw4', handle: 1 } };
+    expect(tableOwner(fw4)).toEqual({ kind: 'tool', tool: 'openwrt', evidence: 'table-name' });
+  });
+
   it('recognises iptables-nft tables and the tools inside them', () => {
     expect(owners['ip filter']).toEqual({ kind: 'iptables-nft', evidence: 'chains', users: ['docker'] });
   });
