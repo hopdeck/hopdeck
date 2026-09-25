@@ -91,6 +91,16 @@ rules out interactive prompts. An unknown host key makes the connection fail:
 the panel then shows the key's fingerprint, and adds it to `known_hosts` only
 after the user confirms. Keys are never accepted automatically.
 
+**Host keys** (`hosts/host-keys.ts`). `ssh -G` gives the host's effective
+settings (known_hosts files, host name form, hashing). To read the key the
+server presents, nftm runs ssh with every authentication method off and a
+throwaway known_hosts in `accept-new` mode: the key is recorded during key
+exchange and nothing is sent to the unverified server. Unlike `ssh-keyscan`,
+this honours ProxyJump. On confirmation the server is asked again, and the key
+is written only if its fingerprint is still the one the user saw. A changed
+key is replaced only on explicit request, through `ssh-keygen -R` (which keeps
+`FILE.old`); keys in system-wide files are left to root.
+
 **Privileges.** nft needs root. On connect nftm checks, in order:
 
 1. `id -u` is 0 (root login, or the sandbox): run nft directly.
@@ -239,8 +249,8 @@ The npm supply chain is a real risk for a tool with this access.
 
 1. **Read-only** (done, 2026-09-24). Sandbox, local and SSH executors, host
    facts and privilege detection, tree and text views, packet path diagram.
-   Tested against a real Debian 13 host over SSH (`dev/test-host`). Still
-   missing: confirming unknown SSH host keys in the panel.
+   Tested against a real Debian 13 host over SSH (`dev/test-host`), including
+   confirming unknown and changed host keys in the panel.
 2. **Text-mode editing** of managed tables, with diff, safe apply with
    rollback, and persistence. From here nftm can do everything nftables can.
 3. **Structured rule forms** and live set/map element editing. This is where

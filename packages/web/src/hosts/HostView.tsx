@@ -10,6 +10,7 @@ import { ListingView } from '../ruleset/ListingView.tsx';
 import { PacketPathView } from '../ruleset/PacketPathView.tsx';
 import { RulesetView } from '../ruleset/RulesetView.tsx';
 import { useRuleset, type RulesetState } from '../ruleset/useRuleset.ts';
+import { HostKeyPanel } from './HostKeyPanel.tsx';
 import styles from './HostView.module.css';
 import { hostSubtitle } from './status.ts';
 
@@ -35,9 +36,11 @@ interface HostViewProps {
   onRemove(): void;
   /** Rejects with an ApiError, e.g. code "wrong-password". */
   onUnlock(password: string): Promise<void>;
+  /** A newer state of this host, e.g. after its key was trusted. */
+  onUpdate(host: HostSummary): void;
 }
 
-export function HostView({ host, connecting, onConnect, onRemove, onUnlock }: HostViewProps) {
+export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUpdate }: HostViewProps) {
   const { t } = useI18n();
   const { status } = host;
   const subtitle = hostSubtitle(host);
@@ -116,6 +119,10 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock }: Ho
           error={{ code: status.error.code, message: status.error.detail }}
           vars={{ destination: host.destination ?? host.name }}
         />
+      )}
+
+      {status.state === 'error' && host.kind === 'ssh' && ['ssh-host-key', 'ssh-host-key-changed'].includes(status.error.code) && (
+        <HostKeyPanel hostId={host.id} changed={status.error.code === 'ssh-host-key-changed'} onTrusted={onUpdate} />
       )}
 
       {status.state === 'connected' && !readable && (

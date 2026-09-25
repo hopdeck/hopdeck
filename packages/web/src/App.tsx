@@ -113,6 +113,7 @@ export function App() {
               onConnect={() => void connect(selected.id)}
               onRemove={() => void remove(selected)}
               onUnlock={(password) => unlock(selected.id, password)}
+              onUpdate={replaceHost}
             />
           )}
         </main>

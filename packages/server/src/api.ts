@@ -67,6 +67,22 @@ const ROUTES: Route[] = [
     },
   },
   {
+    method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/host-key$/,
+    async handle(_req, [id], ctx) {
+      return { body: { hostKey: found(await ctx.hosts.checkHostKey(id!)) } };
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/hosts\/([^/]+)\/host-key$/,
+    async handle(req, [id], ctx) {
+      const body = asObject(await readJson(req));
+      const fingerprint = requiredString(body, 'fingerprint', 200);
+      return { body: { host: found(await ctx.hosts.trustHostKey(id!, fingerprint, body['replace'] === true)) } };
+    },
+  },
+  {
     method: 'POST',
     pattern: /^\/api\/hosts\/([^/]+)\/sudo-password$/,
     async handle(req, [id], ctx) {
@@ -113,7 +129,12 @@ function hostErrorStatus(error: HostError): number {
     case 'password-required':
     case 'no-privileges':
     case 'sudo-not-allowed':
+    case 'known-hosts-unwritable':
+    case 'host-key-in-global-file':
       return 403;
+    case 'host-key-mismatch':
+    case 'ssh-host-key-changed':
+      return 409;
     default:
       return 502;
   }

@@ -49,7 +49,10 @@ until ssh-keyscan -T 2 -p "$port" 127.0.0.1 >"$state/known_hosts" 2>/dev/null &&
 	fi
 	sleep 1
 done
+# Each run starts both key scenarios afresh: no key known, and a wrong key known.
+: >"$state/known_hosts.unknown"
 printf '[127.0.0.1]:%s %s\n' "$port" "$(cut -d' ' -f1,2 "$state/other_host_key.pub")" >"$state/known_hosts.changed"
+rm -f "$state/known_hosts.changed.old"
 
 # ssh uses the first value it finds, so specific hosts come before the wildcard.
 cat >"$state/ssh_config" <<CONFIG
@@ -64,7 +67,7 @@ Host nftm-test-plain
 	User plain
 Host nftm-test-unknown-key
 	User root
-	UserKnownHostsFile /dev/null
+	UserKnownHostsFile "$state/known_hosts.unknown"
 Host nftm-test-changed-key
 	User root
 	UserKnownHostsFile "$state/known_hosts.changed"

@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Executor, HostErrorCode, HostKind, HostStatus, HostSummary, RulesetSnapshot } from '@nftm/core';
+import type { Executor, HostErrorCode, HostKeyCheck, HostKind, HostStatus, HostSummary, RulesetSnapshot } from '@nftm/core';
 import { HostError } from './errors.ts';
 import { collectFacts } from './facts.ts';
+import { HostKeys } from './host-keys.ts';
 import { LocalExecutor } from './local.ts';
 import { detectPrivilege, runNft, type NftAccess } from './privilege.ts';
 import { isValidDestination, SshExecutor } from './ssh.ts';
@@ -36,6 +37,8 @@ export interface HostManagerOptions {
   sandbox?: Executor;
   /** Replaces the SSH executor, for tests. */
   createSshExecutor?: (destination: string) => Executor;
+  /** Replaces host key handling, for tests. */
+  hostKeys?: HostKeys;
 }
 
 /** Bad input for a new host: an invalid or duplicate destination, a name too long. */
@@ -51,9 +54,11 @@ export class HostStateError extends Error {
 export class HostManager {
   readonly #options: HostManagerOptions;
   readonly #entries = new Map<string, Entry>();
+  readonly #hostKeys: HostKeys;
 
   private constructor(options: HostManagerOptions) {
     this.#options = options;
+    this.#hostKeys = options.hostKeys ?? new HostKeys({ configFile: options.sshConfigFile });
   }
 
   static async open(options: HostManagerOptions): Promise<HostManager> {
@@ -142,6 +147,28 @@ export class HostManager {
     entry.password = password;
     entry.status = { ...status, passwordStored: true };
     return summary(entry);
+  }
+
+  /** Reads the key an SSH host presents and what known_hosts says about it. */
+  async checkHostKey(id: string): Promise<HostKeyCheck | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    return this.#hostKeys.check(this.#destination(entry));
+  }
+
+  /** Records the host key the user confirmed by its fingerprint, then connects again. */
+  async trustHostKey(id: string, fingerprint: string, replace: boolean): Promise<HostSummary | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    await this.#hostKeys.trust(this.#destination(entry), fingerprint, replace);
+    return this.connect(id);
+  }
+
+  #destination(entry: Entry): string {
+    if (entry.kind !== 'ssh' || entry.destination === undefined) {
+      throw new HostStateError(`${entry.name} is not an SSH host, so it has no host key`);
+    }
+    return entry.destination;
   }
 
   /**

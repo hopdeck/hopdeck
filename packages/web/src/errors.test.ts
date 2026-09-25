@@ -17,6 +17,9 @@ const HOST_ERROR_CODES = {
   'password-required': true,
   'wrong-password': true,
   'sudo-not-allowed': true,
+  'host-key-mismatch': true,
+  'known-hosts-unwritable': true,
+  'host-key-in-global-file': true,
 } satisfies Record<HostErrorCode, true>;
 
 describe('errorText', () => {

@@ -41,7 +41,8 @@ firewall, so everything can be tried safely.
 needs `podman`, `passt` and `uidmap`) that plays a remote firewall: systemd,
 sshd, nftables, and one account per privilege case (root, sudo with a
 password, sudo without one, no sudo). `pnpm dev:test-host` then starts nftm
-with those hosts. Its key, known_hosts and ssh config live in
+with those hosts, and `NFTM_TEST_HOST=1 pnpm test` adds the tests that need
+it. Its key, known_hosts and ssh config live in
 `.dev/test-host`; `~/.ssh` is never touched, and the container's ruleset is
 separate from the real one. `dev/test-host/down.sh` removes it.
 
