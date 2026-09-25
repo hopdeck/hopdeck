@@ -36,6 +36,8 @@ const TEXTS = new Map<string, ErrorText>([
   ['rollback-unavailable', { title: 'error.rollback-unavailable.title', hint: 'error.rollback-unavailable.hint' }],
   ['deployment-state', { title: 'error.deployment-state.title', hint: 'error.deployment-state.hint' }],
   ['deployment-not-found', { title: 'error.deployment-not-found.title', hint: 'error.deployment-not-found.hint' }],
+  ['persistence-unavailable', { title: 'error.persistence-unavailable.title' }],
+  ['include-rejected', { title: 'error.include-rejected.title', hint: 'error.include-rejected.hint' }],
   ['ui-error', { title: 'error.ui-error.title', hint: 'error.ui-error.hint' }],
 ]);
 

@@ -227,10 +227,21 @@ A change is a list of table operations: adopt, replace (or create), delete.
    through nft. Without a decision the host rolls back by itself, and nftm
    reads the watchdog's record to report it. Directories older than a day are
    cleaned up by the next deployment.
-5. **Persist** (not yet): write the managed tables to `/etc/nftm/*.nft` and,
-   once and with the user's consent, add `include "/etc/nftm/*.nft"` to the
-   distribution's main config (`/etc/nftables.conf` on Debian,
-   `/etc/sysconfig/nftables.conf` on RHEL).
+5. **Persist** ([`persist.ts`](../packages/server/src/hosts/persist.ts)). A
+   kept change is saved for boot at once: each managed table goes to
+   `/etc/nftm/<family>-<name>.nft` (counters at zero, expiring elements with
+   their full timeout), written as root through a staged file and a rename;
+   a deleted table's file is removed. Tables changed with Manual override that
+   nftm does not manage are not saved: their owner decides what loads at boot.
+   The file loaded at boot is read from the nftables service's command line
+   (`systemctl show -p ExecStart`), else found at its usual path. With the
+   user's consent, nftm adds `include "/etc/nftm/*.nft"` at its end, keeping a
+   dated copy, and checks the whole file with `nft -c`, putting the copy back
+   if nft rejects it. Because the include comes last, nftm's copy of a table
+   replaces a definition earlier in the file; the UI says when a table is
+   defined there too, since deleting it in nftm does not remove it from there.
+   Saving needs root: with sudo for nft only, the UI explains why it cannot.
+   Tested with a real restart of the Debian test host.
 
 Every step is logged as a JSON line in `changes.log` next to `hosts.json`.
 
@@ -291,7 +302,7 @@ The npm supply chain is a real risk for a tool with this access.
 2. **Text-mode editing** of managed tables, with diff, safe apply with
    rollback, and persistence. From here nftm can do everything nftables can.
    Done so far: safe apply with the watchdog, adopting and deleting tables,
-   Manual override.
+   Manual override, persistence across reboots.
 3. **Structured rule forms** and live set/map element editing. This is where
    "easier" starts.
 4. **Monitoring:** tracing, `nft monitor`, live counters.

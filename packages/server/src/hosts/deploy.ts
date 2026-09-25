@@ -13,6 +13,7 @@ import {
   type Family,
   type HostKind,
   type Listing,
+  type PersistResult,
   type TableChange,
   type TableNode,
   type TableOwner,
@@ -48,6 +49,8 @@ export interface DeploymentsOptions {
   seconds?: number;
   /** Records what happened, e.g. into the change log. */
   log?: (entry: DeployLogEntry) => void | Promise<void>;
+  /** Saves a kept change for boot. */
+  afterConfirm?: (view: DeploymentView, target: DeployTarget) => Promise<PersistResult>;
 }
 
 /** A table as it is on the host now. */
@@ -93,10 +96,12 @@ export class Deployments {
   readonly #deployments = new Map<string, Deployment>();
   readonly #seconds: number;
   readonly #log: DeploymentsOptions['log'];
+  readonly #afterConfirm: DeploymentsOptions['afterConfirm'];
 
   constructor(options: DeploymentsOptions = {}) {
     this.#seconds = options.seconds ?? 60;
     this.#log = options.log;
+    this.#afterConfirm = options.afterConfirm;
   }
 
   hostOf(id: string): string | undefined {
@@ -231,6 +236,7 @@ export class Deployments {
     view.state = 'confirmed';
     delete view.deadline;
     await this.#record(view, 'confirmed');
+    if (this.#afterConfirm !== undefined) view.persisted = await this.#afterConfirm(view, target);
     return view;
   }
 

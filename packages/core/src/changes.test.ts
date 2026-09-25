@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isManaged, nftName, replaceTableScript, withManagedComment } from './changes.ts';
+import { isManaged, nftName, replaceTableScript, userComment, withManagedComment } from './changes.ts';
 import { diffLines, hasChanges } from './diff.ts';
 
 const table = 'table inet filter {\n\tchain input {\n\t\ttype filter hook input priority filter; policy drop;\n\t}\n}\n';
@@ -16,6 +16,12 @@ describe('managed marker', () => {
     const adopted = withManagedComment(commented);
     expect(adopted).toBe('table inet filter {\n\tcomment "managed by nftm: office firewall"\n}\n');
     expect(withManagedComment(adopted)).toBe(adopted);
+  });
+
+  it("shows only the user's part of a comment", () => {
+    expect(userComment('managed by nftm')).toBeUndefined();
+    expect(userComment('managed by nftm: office firewall')).toBe('office firewall');
+    expect(userComment('office firewall')).toBe('office firewall');
   });
 
   it('recognises managed tables', () => {

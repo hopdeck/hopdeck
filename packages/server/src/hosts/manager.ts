@@ -1,11 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { DeploymentView, Executor, HostErrorCode, HostKeyCheck, HostKind, HostStatus, HostSummary, RulesetSnapshot, TableChange } from '@nftm/core';
+import type {
+  DeploymentView,
+  Executor,
+  HostErrorCode,
+  HostKeyCheck,
+  HostKind,
+  HostStatus,
+  HostSummary,
+  PersistenceStatus,
+  PersistResult,
+  RulesetSnapshot,
+  TableChange,
+} from '@nftm/core';
 import { HostError } from './errors.ts';
 import { Deployments, type DeployLogEntry, type DeployTarget } from './deploy.ts';
 import { collectFacts } from './facts.ts';
 import { HostKeys } from './host-keys.ts';
+import { addInclude, enableService, persistenceStatus, persistTables, saveAll, type PersistTarget } from './persist.ts';
 import { LocalExecutor } from './local.ts';
 import { detectPrivilege, runNft, type NftAccess } from './privilege.ts';
 import { isValidDestination, SshExecutor } from './ssh.ts';
@@ -68,6 +81,11 @@ export class HostManager {
     this.#deployments = new Deployments({
       ...(options.rollbackSeconds !== undefined && { seconds: options.rollbackSeconds }),
       log: (entry) => this.#logChange(entry),
+      afterConfirm: (view) => {
+        const entry = this.#entries.get(view.hostId);
+        if (entry === undefined) throw new Error(`host ${view.hostId} is gone`);
+        return persistTables(this.#persistTarget(entry), view.tables);
+      },
     });
   }
 
@@ -194,6 +212,29 @@ export class HostManager {
         return view;
       }
     }
+  }
+
+  async persistence(id: string): Promise<PersistenceStatus | undefined> {
+    const entry = this.#entries.get(id);
+    return entry === undefined ? undefined : persistenceStatus(this.#persistTarget(entry));
+  }
+
+  /** save: write every managed table; include: add the include line (the user agreed); service: enable nftables.service. */
+  async persist(id: string, action: 'save' | 'include' | 'service'): Promise<{ status: PersistenceStatus; result?: PersistResult } | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    const target = this.#persistTarget(entry);
+    let result: PersistResult | undefined;
+    if (action === 'save') result = await saveAll(target);
+    else if (action === 'include') await addInclude(target);
+    else await enableService(target);
+    return { status: await persistenceStatus(target), ...(result && { result }) };
+  }
+
+  #persistTarget(entry: Entry): PersistTarget {
+    const access = this.#access(entry);
+    const status = entry.status as Extract<HostStatus, { state: 'connected' }>;
+    return { kind: entry.kind, executor: entry.executor, access, facts: status.facts };
   }
 
   #target(entry: Entry): DeployTarget {

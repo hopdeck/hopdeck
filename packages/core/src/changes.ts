@@ -3,6 +3,12 @@ import type { NftTable } from './nft-json.ts';
 /** The comment that marks a table as managed by nftm; see docs/ARCHITECTURE.md, "Ownership". */
 export const MANAGED_COMMENT = 'managed by nftm';
 
+/** The user's own part of a table comment, without the nftm marker. */
+export function userComment(comment: string | undefined): string | undefined {
+  if (comment === undefined || comment === MANAGED_COMMENT) return undefined;
+  return comment.startsWith(`${MANAGED_COMMENT}: `) ? comment.slice(MANAGED_COMMENT.length + 2) : comment;
+}
+
 /** A table is managed when its comment is the marker, or starts with it followed by the user's own comment. */
 export function isManaged(table: Pick<NftTable, 'comment'>): boolean {
   const comment = table.comment;

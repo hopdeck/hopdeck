@@ -3,6 +3,7 @@ import {
   chainKey,
   isManaged,
   ruleKey,
+  userComment,
   type TableChange,
   type ChainNode,
   type Json,
@@ -157,7 +158,7 @@ function TableCard({ node, owner, model, actions }: TableCardProps) {
       )}
 
       {owner.kind !== 'unknown' && <OwnerNote owner={owner} />}
-      {node.table.comment && <p className={styles.comment}>{node.table.comment}</p>}
+      {userComment(node.table.comment) !== undefined && <p className={styles.comment}>{userComment(node.table.comment)}</p>}
 
       <div className={styles.chains}>
         {node.chains.map((chain) => (

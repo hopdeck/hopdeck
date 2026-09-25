@@ -81,6 +81,11 @@
   gap: 8px;
 }
 
+.rules {
+  display: grid;
+  gap: 16px;
+}
+
 .loading {
   display: flex;
   align-items: center;

@@ -29,7 +29,9 @@ export type HostErrorCode =
   | 'invalid-definition'
   | 'ruleset-changed'
   | 'rollback-unavailable'
-  | 'deployment-state';
+  | 'deployment-state'
+  | 'persistence-unavailable'
+  | 'include-rejected';
 
 export interface HostFacts {
   uid: number;
@@ -152,4 +154,44 @@ export interface DeploymentView {
   /** Why a change failed or was rolled back, with the raw message. */
   outcome?: { reason: 'nft-error' | 'fresh-connection-failed' | 'timeout' | 'user'; detail: string };
   manualOverride: boolean;
+  /** What was saved for boot once the change was kept. */
+  persisted?: PersistResult;
+}
+
+/** Saving kept changes into /etc/nftm; see docs/ARCHITECTURE.md, "Persisting". */
+export interface PersistResult {
+  /** Files written or removed. */
+  written: string[];
+  removed: string[];
+  /** Tables changed through Manual override that nftm does not manage, hence not saved. */
+  notManaged: string[];
+  /** Why nothing (or not everything) could be saved. */
+  problem?: { code: HostErrorCode; detail: string };
+}
+
+export interface PersistedTable {
+  family: Family;
+  name: string;
+  file: string;
+  /** saved: the file matches the live table; differs or missing: a reboot would load something else; orphaned: a file without a managed live table. */
+  state: 'saved' | 'differs' | 'missing' | 'orphaned';
+  /** The main configuration defines the table too; nftm's file replaces that definition at boot. */
+  alsoInMainConfig: boolean;
+}
+
+/** Whether what nftm manages on a host survives a reboot. */
+export interface PersistenceStatus {
+  /** The file loaded at boot, e.g. /etc/nftables.conf. */
+  mainConfig: string | undefined;
+  /** service: read from the nftables service's command line; guess: a known path that exists. */
+  source: 'service' | 'guess' | 'none';
+  /** Whether the nftables service starts at boot; undefined without systemd or without the service. */
+  serviceEnabled: boolean | undefined;
+  /** The main configuration includes /etc/nftm/*.nft. */
+  includePresent: boolean;
+  /** The exact line nftm adds, to show before asking. */
+  includeLine: string;
+  tables: PersistedTable[];
+  /** Why nftm cannot save anything on this host. */
+  problem?: { code: HostErrorCode; detail: string };
 }

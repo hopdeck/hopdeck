@@ -66,8 +66,14 @@ export async function runAsRoot(access: NftAccess, argv: readonly string[], opti
   switch (privilege.kind) {
     case 'root':
       return executor.exec(argv, options);
-    case 'sudo':
-      return checkSudo(await executor.exec([...SUDO, '-n', '--', ...argv], options));
+    case 'sudo': {
+      // Passwordless sudo that wants a password for this command does not allow it without one.
+      const result = await executor.exec([...SUDO, '-n', '--', ...argv], options);
+      if (result.exitCode !== 0 && /a password is required/.test(result.stderr)) {
+        throw new HostError('sudo-not-allowed', `sudo needs a password for ${argv[0]}: ${result.stderr.trim()}`);
+      }
+      return checkSudo(result);
+    }
     case 'sudo-password': {
       if (password === undefined) throw new HostError('password-required');
       // The password is the first line of stdin. Mixed with a ruleset, it could

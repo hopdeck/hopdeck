@@ -210,9 +210,46 @@ function Safety({ view }: { view: DeploymentView }) {
   );
 }
 
+/** What a kept change left for the next boot. */
+function Persisted({ result }: { result: NonNullable<DeploymentView['persisted']> }) {
+  const { t } = useI18n();
+  const saved = result.written.length > 0 || result.removed.length > 0;
+  return (
+    <>
+      {saved && (
+        <Callout tone="ok" icon={<CheckIcon />} title={t('deploy.persisted.title')}>
+          <ul className={styles.files}>
+            {result.written.map((file) => (
+              <li key={file}>{t('deploy.persisted.written', { file })}</li>
+            ))}
+            {result.removed.map((file) => (
+              <li key={file}>{t('deploy.persisted.removed', { file })}</li>
+            ))}
+          </ul>
+        </Callout>
+      )}
+      {result.notManaged.length > 0 && (
+        <Callout tone="warn" icon={<AlertIcon />} title={t('deploy.persisted.notManaged', { tables: result.notManaged.join(', ') })} />
+      )}
+      {result.problem !== undefined && (
+        <Callout tone="warn" icon={<AlertIcon />} title={t('deploy.persisted.problem')} role="alert">
+          <pre className="details">{result.problem.detail}</pre>
+        </Callout>
+      )}
+    </>
+  );
+}
+
 function Outcome({ view }: { view: DeploymentView }) {
   const { t } = useI18n();
-  if (view.state === 'confirmed') return <Callout tone="ok" icon={<CheckIcon />} title={t('deploy.confirmed')} />;
+  if (view.state === 'confirmed') {
+    return (
+      <>
+        <Callout tone="ok" icon={<CheckIcon />} title={t('deploy.confirmed')} />
+        {view.persisted !== undefined && <Persisted result={view.persisted} />}
+      </>
+    );
+  }
   const detail = view.outcome?.detail.trim() ?? '';
   const title: MessageKey =
     view.state === 'failed'

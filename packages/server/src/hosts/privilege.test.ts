@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DEBIAN_FACTS, FakeExecutor, failed, ok } from '../testing/fake-executor.ts';
 import { HostError } from './errors.ts';
 import { parseFacts } from './facts.ts';
-import { detectPrivilege, runNft } from './privilege.ts';
+import { detectPrivilege, runAsRoot, runNft } from './privilege.ts';
 
 const facts = parseFacts(DEBIAN_FACTS);
 const NFT = '/usr/sbin/nft';
@@ -89,5 +89,10 @@ describe('runNft', () => {
 
     const nftError = run({ kind: 'sudo' }, undefined, () => failed('Error: syntax error, unexpected junk\n'));
     expect((await nftError.result).exitCode).toBe(1);
+
+    // NOPASSWD for nft only: anything else wants a password, which means it is not allowed.
+    const executor = new FakeExecutor(() => failed('sudo: a password is required\n'));
+    const access = { executor, nftPath: NFT, privilege: { kind: 'sudo' } as const };
+    await expect(runAsRoot(access, ['systemctl', 'enable', 'nftables'])).rejects.toMatchObject({ code: 'sudo-not-allowed' });
   });
 });

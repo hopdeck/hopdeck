@@ -25,6 +25,8 @@ const HOST_ERROR_CODES = {
   'ruleset-changed': true,
   'rollback-unavailable': true,
   'deployment-state': true,
+  'persistence-unavailable': true,
+  'include-rejected': true,
 } satisfies Record<HostErrorCode, true>;
 
 describe('errorText', () => {

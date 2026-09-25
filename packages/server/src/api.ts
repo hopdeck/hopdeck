@@ -89,6 +89,21 @@ const ROUTES: Route[] = [
   },
   {
     method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/persistence$/,
+    async handle(_req, [id], ctx) {
+      return { body: { persistence: found(await ctx.hosts.persistence(id!)) } };
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/hosts\/([^/]+)\/persistence\/(save|include|service)$/,
+    async handle(_req, [id, action], ctx) {
+      const done = found(await ctx.hosts.persist(id!, action as 'save' | 'include' | 'service'));
+      return { body: { persistence: done.status, ...(done.result && { result: done.result }) } };
+    },
+  },
+  {
+    method: 'GET',
     pattern: /^\/api\/deployments\/([^/]+)$/,
     async handle(_req, [id], ctx) {
       return { body: { deployment: foundDeployment(await ctx.hosts.deployment(id!, 'get')) } };
@@ -173,6 +188,8 @@ function hostErrorStatus(error: HostError): number {
     case 'ruleset-changed':
     case 'rollback-unavailable':
     case 'deployment-state':
+    case 'persistence-unavailable':
+    case 'include-rejected':
       return 409;
     case 'table-not-editable':
       return 403;

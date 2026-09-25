@@ -11,6 +11,7 @@ import { PacketPathView } from '../ruleset/PacketPathView.tsx';
 import { RulesetView } from '../ruleset/RulesetView.tsx';
 import { useRuleset, type RulesetState } from '../ruleset/useRuleset.ts';
 import { DeploymentDialog } from '../deploy/DeploymentDialog.tsx';
+import { PersistencePanel } from '../deploy/PersistencePanel.tsx';
 import { HostKeyPanel } from './HostKeyPanel.tsx';
 import { ManualOverrideBanner, ManualOverrideButton } from './ManualOverride.tsx';
 import styles from './HostView.module.css';
@@ -148,7 +149,12 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
             {
               id: 'rules',
               label: t('tabs.rules'),
-              content: <RulesetView state={ruleset} actions={{ manualOverride: host.manualOverride, onChange: setChanges }} />,
+              content: (
+                <div className={styles.rules}>
+                  <PersistencePanel hostId={host.id} version={ruleset.model?.readAt} />
+                  <RulesetView state={ruleset} actions={{ manualOverride: host.manualOverride, onChange: setChanges }} />
+                </div>
+              ),
             },
             {
               id: 'path',
