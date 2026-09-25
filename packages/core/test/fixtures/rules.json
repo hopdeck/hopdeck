@@ -59,11 +59,19 @@
       }
     },
     {
+      "chain": {
+        "family": "inet",
+        "table": "t",
+        "name": "lists",
+        "handle": 5
+      }
+    },
+    {
       "counter": {
         "family": "inet",
         "name": "hits",
         "table": "t",
-        "handle": 5,
+        "handle": 6,
         "packets": 0,
         "bytes": 0
       }
@@ -74,7 +82,7 @@
         "name": "admins",
         "table": "t",
         "type": "ipv4_addr",
-        "handle": 6
+        "handle": 7
       }
     },
     {
@@ -82,7 +90,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 7,
+        "handle": 8,
         "expr": [
           {
             "match": {
@@ -109,7 +117,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 8,
+        "handle": 9,
         "expr": [
           {
             "match": {
@@ -145,7 +153,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 9,
+        "handle": 10,
         "expr": [
           {
             "match": {
@@ -169,7 +177,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 10,
+        "handle": 11,
         "expr": [
           {
             "match": {
@@ -193,7 +201,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 11,
+        "handle": 12,
         "expr": [
           {
             "match": {
@@ -228,7 +236,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 13,
+        "handle": 14,
         "expr": [
           {
             "match": {
@@ -281,7 +289,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 14,
+        "handle": 15,
         "expr": [
           {
             "match": {
@@ -323,7 +331,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 15,
+        "handle": 16,
         "expr": [
           {
             "match": {
@@ -365,7 +373,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 16,
+        "handle": 17,
         "comment": "ssh from admins",
         "expr": [
           {
@@ -403,7 +411,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 17,
+        "handle": 18,
         "expr": [
           {
             "match": {
@@ -429,7 +437,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 18,
+        "handle": 19,
         "expr": [
           {
             "match": {
@@ -461,7 +469,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 19,
+        "handle": 20,
         "expr": [
           {
             "match": {
@@ -492,7 +500,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 20,
+        "handle": 21,
         "expr": [
           {
             "match": {
@@ -520,7 +528,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 21,
+        "handle": 22,
         "expr": [
           {
             "match": {
@@ -547,7 +555,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 22,
+        "handle": 23,
         "expr": [
           {
             "match": {
@@ -579,7 +587,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 23,
+        "handle": 24,
         "expr": [
           {
             "match": {
@@ -609,7 +617,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 24,
+        "handle": 25,
         "expr": [
           {
             "match": {
@@ -637,7 +645,7 @@
         "family": "inet",
         "table": "t",
         "chain": "c",
-        "handle": 25,
+        "handle": 26,
         "expr": [
           {
             "match": {
@@ -674,7 +682,7 @@
         "family": "inet",
         "table": "t",
         "chain": "nat",
-        "handle": 26,
+        "handle": 27,
         "expr": [
           {
             "match": {
@@ -703,7 +711,7 @@
         "family": "inet",
         "table": "t",
         "chain": "nat",
-        "handle": 27,
+        "handle": 28,
         "expr": [
           {
             "match": {
@@ -730,7 +738,7 @@
         "family": "inet",
         "table": "t",
         "chain": "post",
-        "handle": 28,
+        "handle": 29,
         "expr": [
           {
             "match": {
@@ -754,7 +762,7 @@
         "family": "inet",
         "table": "t",
         "chain": "post",
-        "handle": 29,
+        "handle": 30,
         "expr": [
           {
             "match": {
@@ -778,6 +786,201 @@
               "family": "ip",
               "addr": "1.2.3.4"
             }
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "t",
+        "chain": "lists",
+        "handle": 32,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "meta": {
+                  "key": "iifname"
+                }
+              },
+              "right": {
+                "set": [
+                  "wg0",
+                  "eth0"
+                ]
+              }
+            }
+          },
+          {
+            "accept": null
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "t",
+        "chain": "lists",
+        "handle": 34,
+        "expr": [
+          {
+            "match": {
+              "op": "!=",
+              "left": {
+                "meta": {
+                  "key": "oifname"
+                }
+              },
+              "right": {
+                "set": [
+                  "eth1",
+                  "eth2"
+                ]
+              }
+            }
+          },
+          {
+            "drop": null
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "t",
+        "chain": "lists",
+        "handle": 36,
+        "expr": [
+          {
+            "match": {
+              "op": "!=",
+              "left": {
+                "payload": {
+                  "protocol": "tcp",
+                  "field": "dport"
+                }
+              },
+              "right": {
+                "set": [
+                  80,
+                  443
+                ]
+              }
+            }
+          },
+          {
+            "drop": null
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "t",
+        "chain": "lists",
+        "handle": 38,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "payload": {
+                  "protocol": "ip",
+                  "field": "saddr"
+                }
+              },
+              "right": {
+                "set": [
+                  {
+                    "prefix": {
+                      "addr": "10.0.0.0",
+                      "len": 24
+                    }
+                  },
+                  "192.168.1.10"
+                ]
+              }
+            }
+          },
+          {
+            "accept": null
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "t",
+        "chain": "lists",
+        "handle": 40,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "payload": {
+                  "protocol": "icmp",
+                  "field": "type"
+                }
+              },
+              "right": {
+                "set": [
+                  "echo-reply",
+                  "echo-request"
+                ]
+              }
+            }
+          },
+          {
+            "accept": null
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "t",
+        "chain": "lists",
+        "handle": 42,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "payload": {
+                  "protocol": "tcp",
+                  "field": "dport"
+                }
+              },
+              "right": {
+                "set": [
+                  80,
+                  443,
+                  {
+                    "range": [
+                      8000,
+                      8080
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "counter": {
+              "packets": 0,
+              "bytes": 0
+            }
+          },
+          {
+            "accept": null
           }
         ]
       }

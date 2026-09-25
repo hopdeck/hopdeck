@@ -30,6 +30,7 @@ describe('initialChains', () => {
       ['c', 18, 'drop', 'filter'],
       ['nat', 2, 'accept', 'dstnat'],
       ['post', 2, 'accept', 'srcnat'],
+      ['lists', 6, undefined, undefined],
     ]);
   });
 

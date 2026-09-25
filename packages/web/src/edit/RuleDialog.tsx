@@ -24,10 +24,17 @@ interface RuleDialogProps {
 const PROTOCOLS = ['tcp', 'udp', 'icmp', 'icmpv6', 'sctp', 'udplite', 'dccp', 'gre', 'esp', 'ah'];
 const PORT_PROTOCOLS = new Set(['tcp', 'udp', 'udplite', 'sctp', 'dccp']);
 const CT_STATES = ['new', 'established', 'related', 'invalid', 'untracked'];
-const ICMP_TYPES = ['echo-request', 'echo-reply', 'destination-unreachable', 'time-exceeded', 'parameter-problem', 'nd-neighbor-solicit', 'nd-neighbor-advert', 'nd-router-solicit', 'nd-router-advert'];
+const ICMP_TYPES = ['echo-request', 'echo-reply', 'destination-unreachable', 'time-exceeded', 'parameter-problem', 'redirect', 'router-advertisement', 'router-solicitation'];
+const ICMPV6_TYPES = ['echo-request', 'echo-reply', 'destination-unreachable', 'packet-too-big', 'time-exceeded', 'parameter-problem', 'nd-router-solicit', 'nd-router-advert', 'nd-neighbor-solicit', 'nd-neighbor-advert', 'mld-listener-query', 'mld-listener-report'];
+/** Reject types per family, without the one plain `reject` means. */
+const REJECT_WITH: Partial<Record<Family, string[]>> = {
+  ip: ['tcp reset', 'icmp host-unreachable', 'icmp net-unreachable', 'icmp admin-prohibited'],
+  ip6: ['tcp reset', 'icmpv6 admin-prohibited', 'icmpv6 no-route', 'icmpv6 addr-unreachable'],
+  inet: ['tcp reset', 'icmpx admin-prohibited', 'icmpx host-unreachable', 'icmpx no-route'],
+  bridge: ['tcp reset', 'icmpx admin-prohibited', 'icmpx host-unreachable', 'icmpx no-route'],
+};
 const LIMIT_UNITS = ['second', 'minute', 'hour', 'day', 'week'];
 const LOG_LEVELS = ['emerg', 'alert', 'crit', 'err', 'warn', 'notice', 'info', 'debug'];
-const REJECT_WITH = ['tcp reset', 'icmpx port-unreachable', 'icmpx admin-prohibited', 'icmp port-unreachable', 'icmp host-unreachable', 'icmpv6 admin-prohibited'];
 const ACTIONS: RuleAction['kind'][] = ['accept', 'drop', 'reject', 'jump', 'goto', 'return', 'continue', 'masquerade', 'snat', 'dnat', 'redirect', 'none'];
 
 /** Why the form cannot be saved yet; nft on the host checks everything else. */
@@ -41,9 +48,23 @@ function problems(form: RuleForm): MessageKey[] {
   if ((action.kind === 'snat' || action.kind === 'dnat') && action.to === '') found.push('rule.problem.natTo');
   if (action.kind === 'redirect' && action.port === '') found.push('rule.problem.redirect');
   if (form.limit !== undefined && !(form.limit.rate > 0)) found.push('rule.problem.limit');
-  const strings = [form.comment, form.log?.prefix, form.inInterface?.value, form.outInterface?.value];
-  if (strings.some((text) => text?.includes('"'))) found.push('rule.problem.quote');
+  if ([form.comment, form.log?.prefix].some((text) => text?.includes('"'))) found.push('rule.problem.quote');
   return found;
+}
+
+/** Values typed in the free-text choices, without stray spaces; empty ones dropped. */
+function tidy(form: RuleForm): RuleForm {
+  const { protocol: rawProtocol, icmpType: rawIcmpType, action, ...rest } = form;
+  const clean = (text: string | undefined) => (text?.trim() ? text.trim() : undefined);
+  const protocol = clean(rawProtocol);
+  const icmpType = clean(rawIcmpType);
+  const rejectWith = action.kind === 'reject' ? clean(action.with) : undefined;
+  return {
+    ...rest,
+    ...(protocol !== undefined ? { protocol } : {}),
+    ...(icmpType !== undefined ? { icmpType } : {}),
+    action: action.kind !== 'reject' ? action : rejectWith === undefined ? { kind: 'reject' } : { kind: 'reject', with: rejectWith },
+  };
 }
 
 /** Edits one rule, MikroTik style: tabs of fields and a live preview of the nft line. */
@@ -53,11 +74,14 @@ export function RuleDialog({ rule, family, chain, chains, counters, onSave, onCl
   const [form, setForm] = useState<RuleForm>(emptyRule);
   const [text, setText] = useState<string | undefined>();
   const [tab, setTab] = useState('general');
+  // Each opening starts the fields afresh, including their local state.
+  const [opening, setOpening] = useState(0);
 
   useEffect(() => {
     const element = dialog.current;
     if (element === null) return;
     if (rule !== undefined && !element.open) {
+      setOpening((count) => count + 1);
       setTab('general');
       if (rule === 'new') {
         setForm(emptyRule());
@@ -75,20 +99,24 @@ export function RuleDialog({ rule, family, chain, chains, counters, onSave, onCl
   }, [rule]);
 
   const update = (patch: Partial<RuleForm>) => setForm((current) => ({ ...current, ...patch }));
-  const rendered = renderRule(form, family);
+  // Ports need a protocol; tcp is what a port usually means, and the field shows it.
+  const setPort = (part: 'srcPort' | 'dstPort', match: Match | undefined) =>
+    update({ [part]: match, ...(match !== undefined && form.protocol === undefined && { protocol: 'tcp' }) });
+  const icmpv6 = form.protocol === 'icmpv6' || (form.protocol !== 'icmp' && family === 'ip6');
+  const protocols = PROTOCOLS.filter((name) => !(family === 'ip' && name === 'icmpv6') && !(family === 'ip6' && name === 'icmp'));
+  const rendered = renderRule(tidy(form), family);
   const found = text === undefined ? problems(form) : text.trim() === '' || text.includes('\n') ? (['rule.problem.text'] as MessageKey[]) : [];
 
   function save() {
     if (found.length > 0) return;
-    onSave(text === undefined ? { form, text: rendered } : { text: text.trim() });
+    onSave(text === undefined ? { form: tidy(form), text: rendered } : { text: text.trim() });
   }
 
   const general = (
     <div className={styles.fields}>
-      <Field label={t('rule.protocol')}>
-        <input className="input" list="rule-protocols" value={form.protocol ?? ''} placeholder={t('rule.any')}
-          onChange={(event) => update({ protocol: event.target.value.trim() || undefined })} />
-        <datalist id="rule-protocols">{PROTOCOLS.map((name) => <option key={name} value={name} />)}</datalist>
+      <p className={styles.note}>{t('rule.valuesHint')}</p>
+      <Field label={t('rule.protocol')} group>
+        <Choice label={t('rule.protocol')} value={form.protocol} options={protocols} empty={t('rule.any')} onChange={(protocol) => update({ protocol })} />
       </Field>
       {family === 'inet' && (
         <Field label={t('rule.ipVersion')}>
@@ -98,10 +126,10 @@ export function RuleDialog({ rule, family, chain, chains, counters, onSave, onCl
           </select>
         </Field>
       )}
-      <MatchField label={t('rule.srcAddress')} match={form.srcAddress} placeholder="10.0.0.0/24, @set" onChange={(srcAddress) => update({ srcAddress })} />
+      <MatchField label={t('rule.srcAddress')} match={form.srcAddress} placeholder="10.0.0.0/24, 192.168.1.10" onChange={(srcAddress) => update({ srcAddress })} />
       <MatchField label={t('rule.dstAddress')} match={form.dstAddress} placeholder="192.168.1.10" onChange={(dstAddress) => update({ dstAddress })} />
-      <MatchField label={t('rule.srcPort')} match={form.srcPort} placeholder="1024-65535" onChange={(srcPort) => update({ srcPort })} />
-      <MatchField label={t('rule.dstPort')} match={form.dstPort} placeholder="22, { 80, 443 }" onChange={(dstPort) => update({ dstPort })} />
+      <MatchField label={t('rule.srcPort')} match={form.srcPort} placeholder="1024-65535" onChange={(match) => setPort('srcPort', match)} />
+      <MatchField label={t('rule.dstPort')} match={form.dstPort} placeholder="80, 443" onChange={(match) => setPort('dstPort', match)} />
       <InterfaceField label={t('rule.inInterface')} match={form.inInterface} onChange={(inInterface) => update({ inInterface })} />
       <InterfaceField label={t('rule.outInterface')} match={form.outInterface} onChange={(outInterface) => update({ outInterface })} />
       <Field label={t('rule.ctState')} group>
@@ -124,9 +152,16 @@ export function RuleDialog({ rule, family, chain, chains, counters, onSave, onCl
 
   const advanced = (
     <div className={styles.fields}>
-      <Field label={t('rule.icmpType')}>
-        <input className="input" list="rule-icmp" value={form.icmpType ?? ''} onChange={(event) => update({ icmpType: event.target.value.trim() || undefined })} />
-        <datalist id="rule-icmp">{ICMP_TYPES.map((name) => <option key={name} value={name} />)}</datalist>
+      <Field label={t('rule.icmpType')} group>
+        <Choice
+          label={t('rule.icmpType')}
+          value={form.icmpType}
+          options={icmpv6 ? ICMPV6_TYPES : ICMP_TYPES}
+          empty={t('rule.any')}
+          onChange={(icmpType) =>
+            update({ icmpType, ...(icmpType !== undefined && form.protocol === undefined && { protocol: icmpv6 ? 'icmpv6' : 'icmp' }) })
+          }
+        />
       </Field>
       <Field label={t('rule.limit')} group>
         <div className={styles.inline}>
@@ -204,10 +239,14 @@ export function RuleDialog({ rule, family, chain, chains, counters, onSave, onCl
         </select>
       </Field>
       {action.kind === 'reject' && (
-        <Field label={t('rule.rejectWith')}>
-          <input className="input" list="rule-reject" value={action.with ?? ''} placeholder={t('rule.rejectDefault')}
-            onChange={(event) => update({ action: event.target.value.trim() === '' ? { kind: 'reject' } : { kind: 'reject', with: event.target.value } })} />
-          <datalist id="rule-reject">{REJECT_WITH.map((name) => <option key={name} value={name} />)}</datalist>
+        <Field label={t('rule.rejectWith')} group>
+          <Choice
+            label={t('rule.rejectWith')}
+            value={action.with}
+            options={REJECT_WITH[family] ?? []}
+            empty={t('rule.rejectDefault')}
+            onChange={(type) => update({ action: type === undefined ? { kind: 'reject' } : { kind: 'reject', with: type } })}
+          />
         </Field>
       )}
       {(action.kind === 'jump' || action.kind === 'goto') && (
@@ -250,7 +289,7 @@ export function RuleDialog({ rule, family, chain, chains, counters, onSave, onCl
 
   return (
     <dialog ref={dialog} className={styles.dialog} onClose={onClose} aria-labelledby="rule-title">
-      <div className={styles.dialogBody}>
+      <div key={opening} className={styles.dialogBody}>
         <h2 id="rule-title" className={styles.dialogTitle}>
           {t(rule === 'new' ? 'rule.titleNew' : 'rule.titleEdit', { chain })}
         </h2>
@@ -348,7 +387,7 @@ function InterfaceField({ label, match, onChange }: { label: string; match: Inte
             onChange={(event) => match && onChange({ ...match, negate: event.target.checked })} />
           !
         </label>
-        <input className="input mono" value={match?.value ?? ''} placeholder="eth0, wg*" aria-label={label}
+        <input className="input mono" value={match?.value ?? ''} placeholder="eth0, wg0" aria-label={label}
           onChange={(event) => onChange(event.target.value.trim() === '' ? undefined : { negate: match?.negate ?? false, byIndex: match?.byIndex ?? false, value: event.target.value.trim() })} />
         <label className={styles.check} title={t('rule.byIndexTitle')}>
           <input type="checkbox" checked={match?.byIndex ?? false} disabled={match === undefined}
@@ -357,5 +396,40 @@ function InterfaceField({ label, match, onChange }: { label: string; match: Inte
         </label>
       </span>
     </Field>
+  );
+}
+
+const CUSTOM = '\u0000custom';
+
+/** A list of common values, plus "other" to type any value nft accepts. */
+function Choice({ label, value, options, empty, onChange }: { label: string; value: string | undefined; options: readonly string[]; empty: string; onChange(value: string | undefined): void }) {
+  const { t } = useI18n();
+  const [typing, setTyping] = useState(value !== undefined && !options.includes(value));
+  const custom = typing || (value !== undefined && !options.includes(value));
+  return (
+    <span className={styles.inline}>
+      <select
+        className="select"
+        aria-label={label}
+        value={custom ? CUSTOM : (value ?? '')}
+        onChange={(event) => {
+          const next = event.target.value;
+          setTyping(next === CUSTOM);
+          if (next !== CUSTOM) onChange(next === '' ? undefined : next);
+        }}
+      >
+        <option value="">{empty}</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+        <option value={CUSTOM}>{t('rule.other')}</option>
+      </select>
+      {custom && (
+        <input className="input mono" aria-label={label} value={value ?? ''} autoFocus spellCheck={false}
+          onChange={(event) => onChange(event.target.value === '' ? undefined : event.target.value)} />
+      )}
+    </span>
   );
 }

@@ -2,7 +2,9 @@ import type { Family, Json, NftRule } from './nft-json.ts';
 
 /**
  * A rule as the form editor sees it. Values are nft syntax as typed ("10.0.0.0/24",
- * "{ 80, 443 }", "@admins", "1000-2000"); nft on the host validates them.
+ * "@admins", "1000-2000"); several values are separated by commas ("80, 443")
+ * and get the braces of an anonymous set when rendered. nft on the host
+ * validates them.
  */
 export interface RuleForm {
   /** Layer 4 protocol. Ports and ICMP types need one; on its own it is `meta l4proto`. */
@@ -168,7 +170,7 @@ function renderPart(form: RuleForm, part: RulePart, family: Family): string | un
     case 'dstPort':
       return `${form.protocol ?? 'tcp'} dport ${renderMatch(form.dstPort!)}`;
     case 'icmpType':
-      return `${form.protocol === 'icmpv6' ? 'icmpv6' : 'icmp'} type ${form.icmpType}`;
+      return `${form.protocol === 'icmpv6' ? 'icmpv6' : 'icmp'} type ${list(form.icmpType!)}`;
     case 'ctState':
       return `ct state ${[...form.ctState!].sort((a, b) => CT_STATES.indexOf(a) - CT_STATES.indexOf(b)).join(',')}`;
     case 'limit': {
@@ -188,11 +190,24 @@ function renderPart(form: RuleForm, part: RulePart, family: Family): string | un
 
 function renderInterface(direction: 'i' | 'o', match: InterfaceMatch): string {
   const key = match.byIndex ? `${direction}if` : `${direction}ifname`;
-  return `${key} ${match.negate ? '!= ' : ''}${quote(match.value)}`;
+  const value = match.value.trim();
+  const names = value.startsWith('{') ? value : list(value.split(',').map((name) => quote(name.trim().replace(/^"(.*)"$/, '$1'))).join(', '));
+  return `${key} ${match.negate ? '!= ' : ''}${names}`;
 }
 
 function renderMatch(match: Match): string {
-  return `${match.negate ? '!= ' : ''}${match.value.trim()}`;
+  return `${match.negate ? '!= ' : ''}${list(match.value)}`;
+}
+
+/** Several comma-separated values become an anonymous set: "80, 443" is `{ 80, 443 }`. */
+function list(value: string): string {
+  const text = value.trim();
+  if (!text.includes(',') || text.startsWith('{')) return text;
+  const items = text
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item !== '');
+  return items.length > 1 ? `{ ${items.join(', ')} }` : (items[0] ?? '');
 }
 
 function renderAction(action: RuleAction, family: Family): string | undefined {
@@ -289,10 +304,10 @@ function parseMatch(form: RuleForm, match: JsonObject, add: (part: RulePart) => 
       add('protocol');
       return;
     }
-    if (['iif', 'iifname', 'oif', 'oifname'].includes(key) && typeof right === 'string') {
+    if (['iif', 'iifname', 'oif', 'oifname'].includes(key)) {
       const part = key.startsWith('i') ? 'inInterface' : 'outInterface';
       add(part);
-      form[part] = { value: right, negate, byIndex: !key.endsWith('name') };
+      form[part] = { value: interfaces(right), negate, byIndex: !key.endsWith('name') };
       return;
     }
     throw new Unsupported();
@@ -386,7 +401,16 @@ function value(right: Json): string {
     return `${string(prefix['addr'])}/${number(prefix['len'])}`;
   }
   if (kind === 'range' && Array.isArray(body) && body.length === 2) return `${value(body[0]!)}-${value(body[1]!)}`;
-  if (kind === 'set' && Array.isArray(body)) return `{ ${body.map(value).join(', ')} }`;
+  // nft prints a set of one element as the element, so a set here has several.
+  if (kind === 'set' && Array.isArray(body)) return body.map(value).join(', ');
+  throw new Unsupported();
+}
+
+/** Interface names, one or a set of them, without quotes: "eth0" or "eth0, wg0". */
+function interfaces(right: Json): string {
+  if (typeof right === 'string') return right;
+  const [kind, body] = single(right);
+  if (kind === 'set' && Array.isArray(body)) return body.map(string).join(', ');
   throw new Unsupported();
 }
 

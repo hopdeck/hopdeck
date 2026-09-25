@@ -40,12 +40,18 @@ describe('ruleForm', () => {
       'tcp dport 81 redirect to :8081',
       'oifname "eth0" masquerade',
       'ip saddr 10.0.0.0/24 snat ip to 1.2.3.4',
+      'iifname { "wg0", "eth0" } accept',
+      'oifname != { "eth1", "eth2" } drop',
+      'tcp dport != { 80, 443 } drop',
+      'ip saddr { 10.0.0.0/24, 192.168.1.10 } accept',
+      'icmp type { echo-reply, echo-request } accept',
+      'tcp dport { 80, 443, 8000-8080 } counter packets 0 bytes 0 accept',
     ]);
     expect(covered).toHaveLength(rules.length);
   });
 
   it('reads the fields of a rule', () => {
-    expect(form(16)).toEqual({
+    expect(form(17)).toEqual({
       ipVersion: 'ip',
       srcAddress: { value: '@admins', negate: false },
       protocol: 'tcp',
@@ -54,6 +60,12 @@ describe('ruleForm', () => {
       comment: 'ssh from admins',
       order: ['srcAddress', 'dstPort', 'action'],
     });
+  });
+
+  it('shows several values as a plain list, without the braces of the set', () => {
+    expect(form(36)).toMatchObject({ protocol: 'tcp', dstPort: { value: '80, 443', negate: true } });
+    expect(form(32)).toMatchObject({ inInterface: { value: 'wg0, eth0', negate: false, byIndex: false } });
+    expect(form(40)).toMatchObject({ protocol: 'icmp', icmpType: 'echo-reply, echo-request' });
   });
 
   it('leaves a rule as text when the form cannot hold all of it', () => {
@@ -66,7 +78,7 @@ describe('ruleForm', () => {
 
 describe('renderRule', () => {
   it('keeps the order of existing parts and puts new ones in canonical places', () => {
-    const edited: RuleForm = { ...form(25)!, ctState: ['new'], comment: 'admin' };
+    const edited: RuleForm = { ...form(26)!, ctState: ['new'], comment: 'admin' };
     expect(renderRule(edited, 'inet')).toBe('ct state new tcp dport 22 ip saddr 10.0.0.1 accept comment "admin"');
   });
 
@@ -74,13 +86,28 @@ describe('renderRule', () => {
     const rule: RuleForm = {
       ...emptyRule(),
       protocol: 'udp',
-      dstPort: { value: '{ 53, 123 }', negate: false },
+      dstPort: { value: '53,123', negate: false },
       inInterface: { value: 'eth0', negate: true, byIndex: false },
       ctState: ['related', 'established'],
       counter: true,
       action: { kind: 'accept' },
     };
     expect(renderRule(rule, 'inet')).toBe('ct state established,related iifname != "eth0" udp dport { 53, 123 } counter accept');
+    expect(
+      renderRule(
+        {
+          ...emptyRule(),
+          srcAddress: { value: '10.0.0.0/24, 192.168.1.10', negate: false },
+          inInterface: { value: 'eth0, "wg0"', negate: false, byIndex: false },
+          protocol: 'icmp',
+          icmpType: 'echo-request, echo-reply',
+        },
+        'ip',
+      ),
+    ).toBe('iifname { "eth0", "wg0" } ip saddr { 10.0.0.0/24, 192.168.1.10 } icmp type { echo-request, echo-reply } accept');
+    expect(renderRule({ ...emptyRule(), protocol: 'tcp', dstPort: { value: '{ 80, 443 }', negate: true } }, 'inet')).toBe(
+      'tcp dport != { 80, 443 } accept',
+    );
     expect(renderRule({ ...emptyRule(), protocol: 'tcp', action: { kind: 'reject', with: 'tcp reset' } }, 'inet')).toBe(
       'meta l4proto tcp reject with tcp reset',
     );
@@ -96,6 +123,7 @@ describe('editableTable', () => {
       ['c', 18],
       ['nat', 2],
       ['post', 2],
+      ['lists', 6],
     ]);
   });
 

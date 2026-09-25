@@ -33,4 +33,12 @@ table inet t {
 		oifname "eth0" masquerade
 		ip saddr 10.0.0.0/24 snat ip to 1.2.3.4
 	}
+	chain lists {
+		iifname { "eth0", "wg0" } accept
+		oifname != { "eth1", "eth2" } drop
+		tcp dport != { 80, 443 } drop
+		ip saddr { 10.0.0.0/24, 192.168.1.10 } accept
+		icmp type { echo-reply, echo-request } accept
+		tcp dport { 80, 443, 8000-8080 } counter accept
+	}
 }
