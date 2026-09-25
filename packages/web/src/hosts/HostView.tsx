@@ -1,5 +1,5 @@
 import type { Family, HostFacts, HostKind, HostStatus, HostSummary, Privilege, TableChange } from '@nftm/core';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import { ErrorBody, ErrorCallout, errorTitle, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
 import { AlertIcon, CheckIcon, HostKindIcon, LockIcon, RefreshIcon, SandboxIcon, TrashIcon } from '../components/icons.tsx';
@@ -11,6 +11,8 @@ import { PacketPathView } from '../ruleset/PacketPathView.tsx';
 import { RulesetView } from '../ruleset/RulesetView.tsx';
 import { useRuleset, type RulesetState } from '../ruleset/useRuleset.ts';
 import { DeploymentDialog, type DeploymentResult } from '../deploy/DeploymentDialog.tsx';
+import { NewTableDialog } from '../edit/NewTableDialog.tsx';
+import { liveSource, newTableSource, type NewTableSpec } from '../edit/table-model.ts';
 import { TableEditor, type EditorDraft, type EditorMode, type EditorProblem } from '../edit/TableEditor.tsx';
 import { PersistencePanel } from '../deploy/PersistencePanel.tsx';
 import { HostKeyPanel } from './HostKeyPanel.tsx';
@@ -31,6 +33,8 @@ interface Editing {
   family: Family;
   table: string;
   mode: EditorMode;
+  /** Set for a table that does not exist yet. */
+  create?: NewTableSpec;
   draft?: EditorDraft;
   /** The definition sent for review last. */
   sent?: string;
@@ -77,10 +81,15 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   const [changes, setChanges] = useState<TableChange[]>();
   // The table open in the editor, which takes the place of the rules view.
   const [editing, setEditing] = useState<Editing>();
+  const [creating, setCreating] = useState(false);
   const editedNode =
-    editing === undefined
+    editing === undefined || editing.create !== undefined
       ? undefined
       : ruleset.model?.ruleset.tables.find((node) => node.table.family === editing.family && node.table.name === editing.table);
+  const source = useMemo(() => {
+    if (editing?.create !== undefined) return newTableSource(editing.family, editing.table, editing.create);
+    return ruleset.model !== undefined && editedNode !== undefined ? liveSource(ruleset.model, editedNode) : undefined;
+  }, [ruleset.model, editedNode, editing?.family, editing?.table, editing?.create]);
 
   useEffect(() => {
     if (tab !== 'rules' || scrollTarget === undefined) return;
@@ -178,11 +187,12 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
               label: t('tabs.rules'),
               content:
                 editing !== undefined && ruleset.model !== undefined ? (
-                  editedNode !== undefined ? (
+                  editedNode !== undefined || editing.create !== undefined ? (
                     <TableEditor
                       key={`${editing.family} ${editing.table}`}
-                      model={ruleset.model}
-                      node={editedNode}
+                      family={editing.family}
+                      name={editing.table}
+                      source={source}
                       initialMode={editing.mode}
                       draft={editing.draft}
                       onDraft={(draft) => setEditing((current) => current && { ...current, draft })}
@@ -209,6 +219,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                         manualOverride: host.manualOverride,
                         onChange: setChanges,
                         onEdit: (family, table, mode) => setEditing({ family, table, mode }),
+                        onCreate: () => setCreating(true),
                       }}
                     />
                   </div>
@@ -235,6 +246,16 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
           ]}
         />
       )}
+      <NewTableDialog
+        open={creating}
+        existing={ruleset.model?.ruleset.tables.map((node) => ({ family: node.table.family, name: node.table.name })) ?? []}
+        remote={host.kind === 'ssh'}
+        onCreate={(family, table, create) => {
+          setCreating(false);
+          setEditing({ family, table, mode: 'visual', create });
+        }}
+        onClose={() => setCreating(false)}
+      />
       <DeploymentDialog
         hostId={host.id}
         hostName={host.name}

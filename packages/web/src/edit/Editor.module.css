@@ -73,6 +73,16 @@
   font-size: var(--text-xs);
 }
 
+.newBadge {
+  padding: 1px 7px;
+  border: 1px solid var(--ok-border);
+  border-radius: var(--radius-sm);
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
 .regular {
   color: var(--text-subtle);
   font-size: var(--text-sm);
@@ -218,6 +228,18 @@
   font-size: var(--text-xs);
 }
 
+/* Long lists wrap after their commas instead of pushing columns out of view. */
+.grid .value {
+  min-width: 6ch;
+  max-width: 32ch;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.item {
+  white-space: nowrap;
+}
+
 .comment {
   max-width: 24ch;
   overflow: hidden;
@@ -348,6 +370,13 @@
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   white-space: nowrap;
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm);
 }
 
 .preview {

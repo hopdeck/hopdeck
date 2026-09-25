@@ -1,10 +1,11 @@
 import { emptyRule, renderRule, type Family, type InterfaceMatch, type Match, type RuleAction, type RuleForm } from '@nftm/core';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Tabs } from '../components/Tabs.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import type { MessageKey } from '../i18n/locales.ts';
 import { NftCode } from '../ruleset/NftCode.tsx';
 import styles from './Editor.module.css';
+import { Choice, Field } from './fields.tsx';
 
 export type RuleEdit = { form: RuleForm; text: string } | { text: string };
 
@@ -341,25 +342,6 @@ export function RuleDialog({ rule, family, chain, chains, counters, onSave, onCl
   );
 }
 
-/** A labelled row; `group` for several controls, which cannot share one <label>. */
-function Field({ label, group = false, children }: { label: string; group?: boolean; children: ReactNode }) {
-  const id = useId();
-  if (group) {
-    return (
-      <div className={styles.field} role="group" aria-labelledby={id}>
-        <span id={id} className={styles.fieldLabel}>{label}</span>
-        <span className={styles.fieldControl}>{children}</span>
-      </div>
-    );
-  }
-  return (
-    <label className={styles.field}>
-      <span className={styles.fieldLabel}>{label}</span>
-      <span className={styles.fieldControl}>{children}</span>
-    </label>
-  );
-}
-
 function MatchField({ label, match, placeholder, onChange }: { label: string; match: Match | undefined; placeholder: string; onChange(match: Match | undefined): void }) {
   const { t } = useI18n();
   return (
@@ -396,40 +378,5 @@ function InterfaceField({ label, match, onChange }: { label: string; match: Inte
         </label>
       </span>
     </Field>
-  );
-}
-
-const CUSTOM = '\u0000custom';
-
-/** A list of common values, plus "other" to type any value nft accepts. */
-function Choice({ label, value, options, empty, onChange }: { label: string; value: string | undefined; options: readonly string[]; empty: string; onChange(value: string | undefined): void }) {
-  const { t } = useI18n();
-  const [typing, setTyping] = useState(value !== undefined && !options.includes(value));
-  const custom = typing || (value !== undefined && !options.includes(value));
-  return (
-    <span className={styles.inline}>
-      <select
-        className="select"
-        aria-label={label}
-        value={custom ? CUSTOM : (value ?? '')}
-        onChange={(event) => {
-          const next = event.target.value;
-          setTyping(next === CUSTOM);
-          if (next !== CUSTOM) onChange(next === '' ? undefined : next);
-        }}
-      >
-        <option value="">{empty}</option>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-        <option value={CUSTOM}>{t('rule.other')}</option>
-      </select>
-      {custom && (
-        <input className="input mono" aria-label={label} value={value ?? ''} autoFocus spellCheck={false}
-          onChange={(event) => onChange(event.target.value === '' ? undefined : event.target.value)} />
-      )}
-    </span>
   );
 }

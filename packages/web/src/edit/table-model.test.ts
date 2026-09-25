@@ -5,7 +5,7 @@ import basicListing from '../../../core/test/fixtures/basic.listing?raw';
 import rulesJson from '../../../core/test/fixtures/rules.json' with { type: 'json' };
 import rulesListing from '../../../core/test/fixtures/rules.listing?raw';
 import { buildModel } from '../ruleset/model.ts';
-import { definitionOf, initialChains, type ChainState } from './table-model.ts';
+import { addedChain, definitionOf, initialChains, liveSource, newTableSource, type ChainState } from './table-model.ts';
 
 const model = buildModel({ json: rulesJson, listing: rulesListing, readAt: '2026-09-25T12:00:00Z' });
 const node = findTable(model.ruleset, 'inet', 't')!;
@@ -25,7 +25,7 @@ function expectLinesMatch(chains: ChainState[]) {
 describe('initialChains', () => {
   it('reads every chain with its rules, policy and priority', () => {
     const chains = chainsOf();
-    expect(chains.map((state) => [state.chain.name, state.rows.length, state.policy, state.priority])).toEqual([
+    expect(chains.map((state) => [state.chain.name, state.rows.length, state.policy, state.base?.priority])).toEqual([
       ['other', 0, undefined, undefined],
       ['c', 18, 'drop', 'filter'],
       ['nat', 2, 'accept', 'dstnat'],
@@ -71,5 +71,70 @@ describe('definitionOf', () => {
     expect(text).not.toContain('ct state invalid drop');
     expect(text.indexOf('ct state new tcp dport 22 accept')).toBeLessThan(text.indexOf('ct state established,related accept'));
     expectLinesMatch(chains);
+  });
+});
+
+describe('chains added and deleted in the editor', () => {
+  it('writes new chains last and drops deleted ones with their empty line', () => {
+    const chains = chainsOf().filter((state) => state.chain.name !== 'post');
+    const guard = addedChain('guard', { type: 'filter', hook: 'forward', priority: 'filter - 5', policy: 'drop' });
+    guard.rows.push({ key: 'new-guard', handle: undefined, text: 'ct state established accept', form: undefined, status: 'new' });
+    chains.push(guard, addedChain('helpers', undefined));
+
+    const { text } = definitionOf(table, chains);
+    expect(text).not.toContain('chain post');
+    expect(text).not.toContain('\n\n\n');
+    expect(text.endsWith(
+      [
+        '\t}',
+        '',
+        '\tchain guard {',
+        '\t\ttype filter hook forward priority filter - 5; policy drop;',
+        '\t\tct state established accept',
+        '\t}',
+        '',
+        '\tchain helpers {',
+        '\t}',
+        '}',
+        '',
+      ].join('\n'),
+    )).toBe(true);
+    expectLinesMatch(chains);
+  });
+});
+
+describe('editor sources', () => {
+  it('start a live table from what the host has', () => {
+    const source = liveSource(model, node)!;
+    expect(source.original).toBe(renderTable(table));
+    expect(source.creating).toBe(false);
+    expect(source.counters).toEqual(['hits']);
+  });
+
+  it('start a new table from the host template', () => {
+    const source = newTableSource('inet', 'fw', { template: 'host', ssh: true });
+    expect(definitionOf(source.table, source.chains).text).toBe(
+      [
+        'table inet fw {',
+        '\tcomment "managed by nftm"',
+        '\tchain input {',
+        '\t\ttype filter hook input priority filter; policy drop;',
+        '\t\tct state established,related accept',
+        '\t\tct state invalid drop',
+        '\t\tiif "lo" accept',
+        '\t\ticmp type echo-request accept',
+        '\t\ticmpv6 type { echo-request, nd-router-solicit, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept',
+        '\t\ttcp dport 22 accept comment "SSH"',
+        '\t}',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    const ip = newTableSource('ip', 'fw', { template: 'host', ssh: false });
+    expect(ip.chains[0]!.rows.map((row) => row.text)).not.toContainEqual(expect.stringContaining('icmpv6'));
+    expect(ip.chains[0]!.rows.map((row) => row.text)).not.toContainEqual(expect.stringContaining('dport 22'));
+    expect(definitionOf(newTableSource('netdev', 'x', { template: 'empty', ssh: true }).table, []).text).toBe(
+      'table netdev x {\n\tcomment "managed by nftm"\n}\n',
+    );
   });
 });

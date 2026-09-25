@@ -1,13 +1,14 @@
 import type { Family } from '@nftm/core';
-import { useState, type ReactNode } from 'react';
-import { ArrowDownIcon, ArrowUpIcon, CopyIcon, EditIcon, TrashIcon } from '../components/icons.tsx';
+import { Fragment, useState, type ReactNode } from 'react';
+import { ArrowDownIcon, ArrowUpIcon, CopyIcon, EditIcon, PlusIcon, TrashIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import type { MessageKey } from '../i18n/locales.ts';
 import { NftCode } from '../ruleset/NftCode.tsx';
 import styles from './Editor.module.css';
+import { ChainDialog } from './ChainDialog.tsx';
 import { RuleDialog, type RuleEdit } from './RuleDialog.tsx';
 import { ruleColumns, type RuleColumns } from './rule-summary.ts';
-import type { ChainState, RuleRow } from './table-model.ts';
+import { addedChain, newRowKey, type ChainState, type RuleRow } from './table-model.ts';
 
 interface VisualEditorProps {
   family: Family;
@@ -38,14 +39,14 @@ const COLUMNS: readonly { id: Column; label: MessageKey; mono: boolean }[] = [
 
 type Cells = RuleColumns & { comment: string };
 
-let nextKey = 0;
-const newKey = () => `new-${(nextKey += 1)}`;
-
 /** The rules of each chain as a grid, MikroTik style. */
 export function VisualEditor({ family, chains, counters, counterOf, errorRows, onChange }: VisualEditorProps) {
   const { t } = useI18n();
   const [editing, setEditing] = useState<{ chain: number; row: number | 'new' } | undefined>();
+  const [addingChain, setAddingChain] = useState(false);
   const names = chains.map((state) => state.chain.name);
+  // jump and goto lead to regular chains only.
+  const targets = chains.filter((state) => state.base === undefined).map((state) => state.chain.name);
 
   const setRows = (index: number, rows: RuleRow[]) => onChange(chains.map((state, at) => (at === index ? { ...state, rows } : state)));
   const move = (index: number, from: number, to: number) => {
@@ -60,7 +61,7 @@ export function VisualEditor({ family, chains, counters, counterOf, errorRows, o
     const rows = [...chains[editing.chain]!.rows];
     const form = 'form' in rule ? rule.form : undefined;
     if (editing.row === 'new') {
-      rows.push({ key: newKey(), handle: undefined, text: rule.text, form, status: 'new' });
+      rows.push({ key: newRowKey(), handle: undefined, text: rule.text, form, status: 'new' });
     } else {
       const row = rows[editing.row]!;
       if (row.text !== rule.text || row.form === undefined !== (form === undefined)) {
@@ -79,15 +80,16 @@ export function VisualEditor({ family, chains, counters, counterOf, errorRows, o
         <section key={state.chain.name} className={`card ${styles.chain}`}>
           <header className={styles.chainHeader}>
             <h3 className={`${styles.chainName} mono`}>{state.chain.name}</h3>
-            {state.json?.hook !== undefined ? (
+            {state.base !== undefined ? (
               <span className={styles.tags}>
-                {state.json.type && <span className={styles.tag}>{state.json.type}</span>}
-                <span className={styles.tag}>hook {state.json.hook}</span>
-                {state.priority !== undefined && <span className={styles.tag}>priority {state.priority}</span>}
+                {state.base.type !== undefined && <span className={styles.tag}>{state.base.type}</span>}
+                <span className={styles.tag}>hook {state.base.hook}</span>
+                {state.base.priority !== undefined && <span className={styles.tag}>priority {state.base.priority}</span>}
               </span>
             ) : (
               <span className={styles.regular}>{t('chain.regular')}</span>
             )}
+            {state.isNew && <span className={styles.newBadge}>{t('editor.newChain')}</span>}
             <span className={styles.spacer} />
             {state.policy !== undefined && (
               <label className={styles.policy}>
@@ -102,6 +104,10 @@ export function VisualEditor({ family, chains, counters, counterOf, errorRows, o
             <button type="button" className="btn btn-sm btn-primary" onClick={() => setEditing({ chain: chainIndex, row: 'new' })}>
               {t('editor.addRule')}
             </button>
+            <button type="button" className="btn btn-ghost btn-sm btn-icon btn-danger" title={t('editor.deleteChain')} aria-label={t('editor.deleteChain')}
+              onClick={() => onChange(chains.filter((_, at) => at !== chainIndex))}>
+              <TrashIcon />
+            </button>
           </header>
 
           {state.rows.length === 0 ? (
@@ -115,7 +121,7 @@ export function VisualEditor({ family, chains, counters, counterOf, errorRows, o
               onMove={(from, to) => move(chainIndex, from, to)}
               onCopy={(row) => {
                 const rows = [...state.rows];
-                rows.splice(row + 1, 0, { ...rows[row]!, key: newKey(), handle: undefined, status: 'new' });
+                rows.splice(row + 1, 0, { ...rows[row]!, key: newRowKey(), handle: undefined, status: 'new' });
                 setRows(chainIndex, rows);
               }}
               onDelete={(row) => setRows(chainIndex, state.rows.filter((_, at) => at !== row))}
@@ -124,11 +130,30 @@ export function VisualEditor({ family, chains, counters, counterOf, errorRows, o
         </section>
       ))}
 
+      {chains.length === 0 && <p className={`card ${styles.empty}`}>{t('editor.noChains')}</p>}
+      <div>
+        <button type="button" className="btn" onClick={() => setAddingChain(true)}>
+          <PlusIcon />
+          {t('chain.add')}
+        </button>
+      </div>
+
+      <ChainDialog
+        open={addingChain}
+        family={family}
+        existing={names}
+        onAdd={(name, base) => {
+          onChange([...chains, addedChain(name, base)]);
+          setAddingChain(false);
+        }}
+        onClose={() => setAddingChain(false)}
+      />
+
       <RuleDialog
         rule={editingRow === undefined ? undefined : editingRow === 'new' ? 'new' : editingRow.form !== undefined ? { form: editingRow.form, text: editingRow.text } : { text: editingRow.text }}
         family={family}
         chain={editing === undefined ? '' : names[editing.chain]!}
-        chains={names.filter((_, index) => index !== editing?.chain)}
+        chains={targets.filter((name) => editing === undefined || name !== names[editing.chain])}
         counters={counters}
         onSave={save}
         onClose={() => setEditing(undefined)}
@@ -190,8 +215,8 @@ function Grid({ rows, counterOf, errorRows, onEdit, onMove, onCopy, onDelete }: 
                       <span className={`${styles.action} ${styles[`action-${cell.actionTone}`]}`}>{cell.action}</span>
                     </td>
                     {columns.map((column) => (
-                      <td key={column.id} className={column.mono ? 'mono' : column.id === 'comment' ? styles.comment : undefined}>
-                        {cell[column.id]}
+                      <td key={column.id} className={column.id === 'comment' ? styles.comment : `${styles.value}${column.mono ? ' mono' : ''}`}>
+                        {column.id === 'comment' ? cell.comment : <Items text={cell[column.id]} />}
                       </td>
                     ))}
                   </>
@@ -231,4 +256,15 @@ function IconButton({ label, danger = false, disabled, onClick, children }: { la
       {children}
     </button>
   );
+}
+
+/** A comma-separated list that wraps only between its items, never inside one. */
+function Items({ text }: { text: string }) {
+  const items = text.split(', ');
+  return items.map((item, index) => (
+    <Fragment key={index}>
+      {index > 0 && ' '}
+      <span className={styles.item}>{index < items.length - 1 ? `${item},` : item}</span>
+    </Fragment>
+  ));
 }

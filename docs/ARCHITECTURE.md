@@ -299,6 +299,9 @@ The npm supply chain is a real risk for a tool with this access.
     to lines of the text and rows of the grid.
   - Text edits cannot be turned back into the grid, so after editing text by
     hand the visual mode stays off until the change is applied or discarded.
+  - A new table starts in the same editor and reaches the host through the
+    same review; it is created with the nftm marker, so nftm manages it from
+    the start.
 - **Diff view** before every apply.
 - **Set and map editor** that adds and removes elements live, without
   reloading the ruleset.
@@ -318,8 +321,9 @@ The npm supply chain is a real risk for a tool with this access.
    deleting tables, Manual override, persistence across reboots, the text
    editor.
 3. **Structured rule forms** and live set/map element editing. This is where
-   "easier" starts. Done so far: the visual rules grid and the rule dialog.
-   Next: creating tables and chains, sets and maps, targeted changes.
+   "easier" starts. Done so far: the visual rules grid and the rule dialog,
+   creating tables (empty, or from a host firewall template) and adding or
+   deleting chains. Next: sets and maps, targeted changes.
 4. **Monitoring:** tracing, `nft monitor`, live counters.
 5. **Model B** (project layer).
 

@@ -6,7 +6,7 @@ import { parseListing, stripHandles } from './listing.ts';
 import { ruleKey } from './keys.ts';
 import { emptyRule, renderRule, ruleForm, type RuleForm } from './rule-form.ts';
 import { parseRuleset } from './ruleset.ts';
-import { chainPolicy, chains, editableTable, renderTable, withPolicy } from './table-edit.ts';
+import { chainPolicy, chains, editableTable, newChain, newTable, renderTable, withPolicy } from './table-edit.ts';
 
 const ruleset = parseRuleset(rulesJson);
 const listing = parseListing(rulesListing);
@@ -138,5 +138,33 @@ describe('editableTable', () => {
     expect(text).toContain('\t\ttype filter hook input priority filter; policy accept;\n\t\ttcp dport 22 accept\n\t\tiif "lo" accept');
     expect(text).not.toContain('ct state established,related accept');
     expect(text).toContain('\tset admins {');
+  });
+});
+
+describe('newTable and newChain', () => {
+  it('write a new table and its chains the way nft lists them', () => {
+    const table = newTable('inet', 'my fw');
+    const input = newChain('input', { type: 'filter', hook: 'input', priority: 'filter', policy: 'drop' });
+    input.rules.push({ handle: undefined, text: 'iif "lo" accept' });
+    const ingress = newChain('in-eth0', { type: 'filter', hook: 'ingress', device: 'eth0', priority: '-150', policy: 'accept' });
+    table.parts.splice(2, 0, { kind: 'chain', chain: input }, { kind: 'chain', chain: ingress }, { kind: 'chain', chain: newChain('ssh') });
+    expect(renderTable(table)).toBe(
+      [
+        'table inet "my fw" {',
+        '\tcomment "managed by nftm"',
+        '\tchain input {',
+        '\t\ttype filter hook input priority filter; policy drop;',
+        '\t\tiif "lo" accept',
+        '\t}',
+        '\tchain in-eth0 {',
+        '\t\ttype filter hook ingress device "eth0" priority -150; policy accept;',
+        '\t}',
+        '\tchain ssh {',
+        '\t}',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    expect(chainPolicy(input)).toBe('drop');
   });
 });

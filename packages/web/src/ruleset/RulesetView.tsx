@@ -16,7 +16,7 @@ import type { ReactNode } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import type { EditorMode } from '../edit/TableEditor.tsx';
 import { ErrorCallout } from '../components/ErrorCallout.tsx';
-import { AlertIcon, CheckIcon, RefreshIcon } from '../components/icons.tsx';
+import { AlertIcon, CheckIcon, PlusIcon, RefreshIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import { chainAnchor, formatBytes, priorityText, ruleCounter, tableCounts, type RulesetModel } from './model.ts';
 import { NftCode } from './NftCode.tsx';
@@ -32,6 +32,7 @@ export interface RulesetActions {
   manualOverride: boolean;
   onChange(changes: TableChange[]): void;
   onEdit(family: Family, table: string, mode: EditorMode): void;
+  onCreate(): void;
 }
 
 export function RulesetView({ state, actions }: { state: RulesetState; actions?: RulesetActions | undefined }) {
@@ -55,6 +56,12 @@ export function RulesetView({ state, actions }: { state: RulesetState; actions?:
             </>
           )}
         </p>
+        {actions !== undefined && model !== undefined && (
+          <button type="button" className="btn btn-sm btn-primary" onClick={actions.onCreate}>
+            <PlusIcon />
+            {t('newTable.button')}
+          </button>
+        )}
         <button type="button" className="btn btn-sm" onClick={reload} disabled={loading}>
           {loading ? <span className="spinner" aria-hidden="true" /> : <RefreshIcon />}
           {t('ruleset.refresh')}
@@ -87,7 +94,15 @@ function Tables({ model, actions }: { model: RulesetModel; actions: RulesetActio
       )}
       {ruleset.tables.length === 0 && (
         <Callout tone="info" icon={<CheckIcon />} title={t('ruleset.empty.title')}>
-          {t('ruleset.empty')}
+          <p>{t('ruleset.empty')}</p>
+          {actions !== undefined && (
+            <p>
+              <button type="button" className="btn btn-sm btn-primary" onClick={actions.onCreate}>
+                <PlusIcon />
+                {t('newTable.button')}
+              </button>
+            </p>
+          )}
         </Callout>
       )}
       {ruleset.tables.map((node) => (

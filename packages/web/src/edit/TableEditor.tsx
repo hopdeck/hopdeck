@@ -1,14 +1,14 @@
-import { editableTable, renderTable, type TableNode } from '@nftm/core';
-import { useEffect, useMemo, useState } from 'react';
+import type { Family } from '@nftm/core';
+import { useEffect, useState } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import { AlertIcon } from '../components/icons.tsx';
 import { Segmented } from '../components/Segmented.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
-import { formatBytes, ruleCounter, type RulesetModel } from '../ruleset/model.ts';
+import { formatBytes } from '../ruleset/model.ts';
 import { CodeEditor } from './CodeEditor.tsx';
 import styles from './Editor.module.css';
 import { definitionErrorLines } from './nft-errors.ts';
-import { definitionOf, initialChains, type ChainState } from './table-model.ts';
+import { definitionOf, type ChainState, type EditorSource } from './table-model.ts';
 import { VisualEditor } from './VisualEditor.tsx';
 
 export type EditorMode = 'visual' | 'text';
@@ -27,8 +27,10 @@ export interface EditorDraft {
 }
 
 interface TableEditorProps {
-  model: RulesetModel;
-  node: TableNode;
+  family: Family;
+  name: string;
+  /** undefined: nft's listing has no such table. */
+  source: EditorSource | undefined;
   initialMode: EditorMode;
   draft: EditorDraft | undefined;
   onDraft(draft: EditorDraft): void;
@@ -39,15 +41,12 @@ interface TableEditorProps {
 }
 
 /** Edits one table visually or as text; both produce a definition for review. */
-export function TableEditor({ model, node, initialMode, draft, onDraft, problem, onReview, onClose }: TableEditorProps) {
+export function TableEditor({ family, name, source, initialMode, draft, onDraft, problem, onReview, onClose }: TableEditorProps) {
   const { t, locale } = useI18n();
-  const { family, name } = node.table;
-  const table = useMemo(() => editableTable(model.text, family, name), [model, family, name]);
-  const original = useMemo(() => (table === undefined ? '' : renderTable(table)), [table]);
-  const [chains, setChains] = useState<ChainState[]>(() => draft?.chains ?? (table === undefined ? [] : initialChains(table, node, model)));
+  const [chains, setChains] = useState<ChainState[]>(() => draft?.chains ?? source?.chains ?? []);
   const [mode, setMode] = useState<EditorMode>(draft?.mode ?? initialMode);
-  const [text, setText] = useState(draft?.text ?? original);
-  const changed = table !== undefined && (mode === 'visual' ? definitionOf(table, chains).text : text) !== original;
+  const [text, setText] = useState(() => draft?.text ?? (source === undefined ? '' : definitionOf(source.table, source.chains).text));
+  const changed = source !== undefined && (source.creating || (mode === 'visual' ? definitionOf(source.table, chains).text : text) !== source.original);
 
   useEffect(() => onDraft({ mode, chains, text }), [mode, chains, text]);
 
@@ -59,28 +58,27 @@ export function TableEditor({ model, node, initialMode, draft, onDraft, problem,
     return () => window.removeEventListener('beforeunload', warn);
   }, [changed]);
 
-  if (table === undefined) {
+  if (source === undefined) {
     return <Callout tone="danger" icon={<AlertIcon />} title={t('editor.notFound', { table: `${family} ${name}` })} />;
   }
 
-  const visual = definitionOf(table, chains);
+  const visual = definitionOf(source.table, chains);
   const definition = mode === 'visual' ? visual.text : text;
   // Text edits cannot be turned back into the visual model, which follows the live table.
   const textDiverged = mode === 'text' && text !== visual.text;
   const errorLines = problem === undefined ? [] : definitionErrorLines(problem.message, problem.preamble);
   const errorRows = new Set([...visual.lines].filter(([, line]) => errorLines.includes(line)).map(([key]) => key));
-  const counters = node.objects.filter((object) => object.kind === 'counter').map((object) => object.object.name);
+  const title = t(source.creating ? 'editor.titleNew' : 'editor.title', { table: `${family} ${name}` });
 
   const counterOf = (handle: number) => {
-    const rule = node.chains.flatMap((chain) => chain.rules).find((candidate) => candidate.handle === handle);
-    const counter = rule && ruleCounter(rule, node);
+    const counter = source.counterOf(handle);
     return counter && `${new Intl.NumberFormat(locale).format(counter.packets)} / ${formatBytes(counter.bytes, locale)}`;
   };
 
   return (
-    <section className={styles.editor} aria-label={t('editor.title', { table: `${family} ${name}` })}>
+    <section className={styles.editor} aria-label={title}>
       <div className={styles.toolbar}>
-        <h2 className={styles.title}>{t('editor.title', { table: `${family} ${name}` })}</h2>
+        <h2 className={styles.title}>{title}</h2>
         <Segmented<EditorMode>
           label={t('editor.mode')}
           value={mode}
@@ -110,7 +108,7 @@ export function TableEditor({ model, node, initialMode, draft, onDraft, problem,
       )}
 
       {mode === 'visual' ? (
-        <VisualEditor family={family} chains={chains} counters={counters} counterOf={counterOf} errorRows={errorRows} onChange={setChains} />
+        <VisualEditor family={family} chains={chains} counters={source.counters} counterOf={counterOf} errorRows={errorRows} onChange={setChains} />
       ) : (
         <>
           <p className={styles.note}>{t('editor.textNote')}</p>
