@@ -33,8 +33,12 @@ export class Sandbox {
       keeper.once('error', reject);
       keeper.once('exit', () => reject(new Error(`cannot create sandbox: ${stderr.trim() || 'unshare exited'}`)));
     });
-    return new Sandbox(keeper, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    const sandbox = new Sandbox(keeper, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    // Loopback lets the demo carry traffic to trace; the namespace has no other interface.
+    await sandbox.executor.exec(['sh', '-c', 'PATH="$PATH:/usr/sbin:/sbin"; ip link set lo up']).catch(() => undefined);
+    return sandbox;
   }
+
 
   /** PID of the keep-alive process that holds the namespaces. */
   get pid(): number {

@@ -11,6 +11,7 @@ const TOOL_NAMES: Record<KnownTool, string> = {
   libvirt: 'libvirt',
   lxd: 'LXD',
   nixos: 'NixOS',
+  'nftm-trace': 'nftm (nftrace)',
   openwrt: 'OpenWrt firewall4',
   podman: 'Podman',
   tailscale: 'Tailscale',

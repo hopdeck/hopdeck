@@ -2,6 +2,7 @@
 
 import type { DiffLine } from './diff.ts';
 import type { Family } from './nft-json.ts';
+import type { TraceFilter } from './trace.ts';
 
 export type HostKind = 'local' | 'ssh' | 'sandbox';
 
@@ -31,7 +32,9 @@ export type HostErrorCode =
   | 'rollback-unavailable'
   | 'deployment-state'
   | 'persistence-unavailable'
-  | 'include-rejected';
+  | 'include-rejected'
+  | 'invalid-filter'
+  | 'trace-unavailable';
 
 export interface HostFacts {
   uid: number;
@@ -206,4 +209,29 @@ export interface PersistenceStatus {
   tables: PersistedTable[];
   /** Why nftm cannot save anything on this host. */
   problem?: { code: HostErrorCode; detail: string };
+}
+
+/** A packet trace on a host: nftm marks packets matching the filter and records what nft reports about them. */
+export interface TraceView {
+  id: string;
+  hostId: string;
+  state: 'running' | 'finished' | 'failed';
+  filter: TraceFilter;
+  /** At most this many packets a second are marked. */
+  perSecond: number;
+  /** The temporary table on the host that marks packets. */
+  table: string;
+  /** Its definition, as loaded. */
+  definition: string;
+  startedAt: string;
+  /** When the host removes the table on its own at the latest. */
+  endsAt: string;
+  /** What nft printed, trace lines and anything else, in order. */
+  lines: string[];
+  /** Lines left out after the limit, oldest first. */
+  dropped: number;
+  /** Why the trace failed or stopped early, with the raw message. */
+  problem?: { code: string; detail: string };
+  /** nft's output when removing the table failed. */
+  cleanup?: string;
 }

@@ -11,3 +11,4 @@ export * from './diff.ts';
 export * from './rule-form.ts';
 export * from './table-edit.ts';
 export * from './set-elements.ts';
+export * from './trace.ts';

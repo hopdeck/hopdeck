@@ -1,4 +1,4 @@
-import type { Family, TableChange } from '@nftm/core';
+import type { Family, TableChange, TraceFilter } from '@nftm/core';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HostError } from './hosts/errors.ts';
 import { HostStateError, InvalidHostError, type HostManager } from './hosts/manager.ts';
@@ -103,6 +103,43 @@ const ROUTES: Route[] = [
     },
   },
   {
+    method: 'POST',
+    pattern: /^\/api\/hosts\/([^/]+)\/traces$/,
+    async handle(req, [id], ctx) {
+      const body = asObject(await readJson(req));
+      const filter = toTraceFilter(body['filter']);
+      const seconds = typeof body['seconds'] === 'number' ? body['seconds'] : 60;
+      const perSecond = typeof body['perSecond'] === 'number' ? body['perSecond'] : 10;
+      return { status: 201, body: { trace: found(await ctx.hosts.startTrace(id!, filter, { seconds, perSecond })) } };
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/hosts\/([^/]+)\/test-traffic$/,
+    async handle(req, [id], ctx) {
+      const body = asObject(await readJson(req));
+      const port = body['port'];
+      if (port !== undefined && !(typeof port === 'number' && Number.isInteger(port) && port > 0 && port < 65536)) {
+        throw new ApiError(400, 'invalid-body', 'port must be a number from 1 to 65535');
+      }
+      return { body: { output: found(await ctx.hosts.testTraffic(id!, port)) } };
+    },
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/traces\/([^/]+)$/,
+    async handle(_req, [id], ctx) {
+      return { body: { trace: foundTrace(await ctx.hosts.trace(id!, 'get')) } };
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/traces\/([^/]+)\/(stop|discard)$/,
+    async handle(_req, [id, action], ctx) {
+      return { body: { trace: foundTrace(await ctx.hosts.trace(id!, action as 'stop' | 'discard')) } };
+    },
+  },
+  {
     method: 'GET',
     pattern: /^\/api\/deployments\/([^/]+)$/,
     async handle(_req, [id], ctx) {
@@ -194,7 +231,10 @@ function hostErrorStatus(error: HostError): number {
     case 'table-not-editable':
       return 403;
     case 'invalid-definition':
+    case 'invalid-filter':
       return 400;
+    case 'trace-unavailable':
+      return 409;
     default:
       return 502;
   }
@@ -208,6 +248,22 @@ function found<T>(value: T | undefined): T {
 function foundDeployment<T>(value: T | undefined): T {
   if (value === undefined) throw new ApiError(404, 'deployment-not-found');
   return value;
+}
+
+function foundTrace<T>(value: T | undefined): T {
+  if (value === undefined) throw new ApiError(404, 'trace-not-found');
+  return value;
+}
+
+/** Only the known fields, each a string; traceFilterProblem() checks the values. */
+function toTraceFilter(value: unknown): TraceFilter {
+  const body = asObject(value ?? {});
+  const filter: TraceFilter = {};
+  for (const key of ['protocol', 'saddr', 'daddr', 'sport', 'dport', 'iif'] as const) {
+    const field = optionalString(body, key, 1024)?.trim();
+    if (field) filter[key] = field;
+  }
+  return filter;
 }
 
 const FAMILIES: readonly Family[] = ['ip', 'ip6', 'inet', 'arp', 'bridge', 'netdev'];

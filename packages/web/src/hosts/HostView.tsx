@@ -8,6 +8,7 @@ import { useI18n } from '../i18n/I18nProvider.tsx';
 import type { MessageKey } from '../i18n/locales.ts';
 import { ListingView } from '../ruleset/ListingView.tsx';
 import { PacketPathView } from '../ruleset/PacketPathView.tsx';
+import { NEW_TRACE_SESSION, TracePanel, type TraceSession } from '../trace/TracePanel.tsx';
 import { RulesetView } from '../ruleset/RulesetView.tsx';
 import { useRuleset, type RulesetState } from '../ruleset/useRuleset.ts';
 import { DeploymentDialog, type DeploymentResult } from '../deploy/DeploymentDialog.tsx';
@@ -82,6 +83,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   // The table open in the editor, which takes the place of the rules view.
   const [editing, setEditing] = useState<Editing>();
   const [creating, setCreating] = useState(false);
+  const [traceSession, setTraceSession] = useState<TraceSession>(NEW_TRACE_SESSION);
   const editedNode =
     editing === undefined || editing.create !== undefined
       ? undefined
@@ -241,6 +243,22 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                 ) : (
                   <Listing state={ruleset} />
                 ),
+            },
+            {
+              id: 'trace',
+              label: t('tabs.trace'),
+              content: (
+                <TracePanel
+                  hostId={host.id}
+                  hostKind={host.kind}
+                  session={traceSession}
+                  onSession={setTraceSession}
+                  onShowChain={(anchor) => {
+                    setScrollTarget(anchor);
+                    setTab('rules');
+                  }}
+                />
+              ),
             },
             { id: 'text', label: t('tabs.text'), content: <Listing state={ruleset} /> },
             { id: 'system', label: t('tabs.system'), content: <Facts facts={status.facts} /> },

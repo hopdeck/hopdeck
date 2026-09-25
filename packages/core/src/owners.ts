@@ -2,6 +2,7 @@ import { tableKey } from './keys.ts';
 import type { Listing } from './listing.ts';
 import type { Json } from './nft-json.ts';
 import type { TableNode } from './ruleset.ts';
+import { TRACE_TABLE_PREFIX } from './trace.ts';
 
 export type KnownTool =
   | 'crowdsec'
@@ -13,6 +14,7 @@ export type KnownTool =
   | 'libvirt'
   | 'lxd'
   | 'nixos'
+  | 'nftm-trace'
   | 'openwrt'
   | 'podman'
   | 'tailscale'
@@ -75,6 +77,8 @@ export function tableOwner(node: TableNode, listing?: Listing): TableOwner {
   if (family !== 'inet' && family !== 'netdev' && IPTABLES_TABLES.has(name) && chainNames.some((chain) => IPTABLES_CHAINS.has(chain))) {
     return { kind: 'iptables-nft', evidence: 'chains', users };
   }
+  // nftm's own temporary table while it traces packets.
+  if (family === 'inet' && name.startsWith(TRACE_TABLE_PREFIX)) return { kind: 'tool', tool: 'nftm-trace', evidence: 'table-name' };
   const tool = TABLE_NAMES.get(name);
   if (tool !== undefined) return { kind: 'tool', tool, evidence: 'table-name' };
   return { kind: 'unknown' };

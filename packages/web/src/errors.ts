@@ -38,6 +38,9 @@ const TEXTS = new Map<string, ErrorText>([
   ['deployment-not-found', { title: 'error.deployment-not-found.title', hint: 'error.deployment-not-found.hint' }],
   ['persistence-unavailable', { title: 'error.persistence-unavailable.title' }],
   ['include-rejected', { title: 'error.include-rejected.title', hint: 'error.include-rejected.hint' }],
+  ['invalid-filter', { title: 'error.invalid-filter.title', hint: 'error.invalid-filter.hint' }],
+  ['trace-unavailable', { title: 'error.trace-unavailable.title', hint: 'error.trace-unavailable.hint' }],
+  ['trace-not-found', { title: 'error.trace-not-found.title', hint: 'error.trace-not-found.hint' }],
   ['ui-error', { title: 'error.ui-error.title', hint: 'error.ui-error.hint' }],
 ]);
 

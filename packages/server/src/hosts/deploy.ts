@@ -484,7 +484,7 @@ export function tableText(ruleset: string, family: Family, name: string): string
  * detached with setsid. As a last resort it runs as the login user with sudo,
  * which works when sudo allows nft without a password.
  */
-async function watchdogCommand(
+export async function watchdogCommand(
   target: DeployTarget,
   dir: string,
   seconds: number,
@@ -511,13 +511,13 @@ async function watchdogCommand(
   return undefined;
 }
 
-function rollbackUnavailableReason(target: DeployTarget): string {
+export function rollbackUnavailableReason(target: DeployTarget): string {
   return target.access.privilege.kind === 'sudo-password'
     ? 'sudo needs a password here and does not allow systemd-run, so nothing could roll the change back while nftm is away'
     : 'nothing on this host could roll the change back while nftm is away';
 }
 
-async function startWatchdog(target: DeployTarget, argv: readonly string[], dir: string): Promise<void> {
+export async function startWatchdog(target: DeployTarget, argv: readonly string[], dir: string): Promise<void> {
   const viaSystemd = argv[0] === 'systemd-run';
   const started = viaSystemd ? await runAsRoot(target.access, argv) : await target.executor.exec(argv);
   if (started.exitCode !== 0) {
@@ -537,7 +537,7 @@ async function startWatchdog(target: DeployTarget, argv: readonly string[], dir:
  * a day are removed first: they are left when nftm stopped before a rolled
  * back change was reported, and are kept that long for a look at the logs.
  */
-async function makeDirectory(executor: Executor): Promise<string> {
+export async function makeDirectory(executor: Executor): Promise<string> {
   const made = await executor.exec([
     'sh',
     '-c',
@@ -547,12 +547,12 @@ async function makeDirectory(executor: Executor): Promise<string> {
   return made.stdout.trim();
 }
 
-async function writeRemote(executor: Executor, path: string, content: string): Promise<void> {
+export async function writeRemote(executor: Executor, path: string, content: string): Promise<void> {
   const written = await executor.exec(['sh', '-c', 'umask 077; cat > "$1"', 'sh', path], { stdin: content });
   if (written.exitCode !== 0) throw new HostError('command-failed', written.stderr.trim());
 }
 
-async function removeDirectory(executor: Executor, dir: string): Promise<void> {
+export async function removeDirectory(executor: Executor, dir: string): Promise<void> {
   await executor.exec(['rm', '-rf', '--', dir]);
 }
 

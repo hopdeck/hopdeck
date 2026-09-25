@@ -322,8 +322,22 @@ The npm supply chain is a real risk for a tool with this access.
 - **Diff view** before every apply.
 - **Set and map editor** that adds and removes elements live, without
   reloading the ruleset.
-- **Packet tracing:** `meta nftrace set 1` plus `nft monitor trace`, drawn as
-  the path through the rules.
+- **Packet tracing** (done): the Trace tab marks packets that match a
+  filter (protocol, addresses, ports, input interface) and shows each one's
+  way through the chains and rules and what decided, with links to the rules.
+  - A temporary table `inet nftm_trace_<random>` does the marking: chains at
+    prerouting and output with priority -350 (before all others), policy
+    accept, one rule `<filter> limit rate N/second meta nftrace set 1`. It
+    never changes what happens to a packet. Filter fields take values only,
+    so they cannot smuggle in a statement.
+  - A watchdog on the host, started the way the deployment watchdog is and
+    before the table exists, runs `nft -a monitor trace` into a file, and
+    when time is up, the panel asks it to stop or the monitor ends, removes
+    the table. The panel reads new lines every second.
+  - nft 1.1 prints traces as text even with `-j`, so `core/trace.ts` parses
+    the lines; `-a` gives rule handles.
+  - The sandbox brings up `lo` and can send test traffic, so tracing can be
+    tried there.
 - **Live data:** counters and events from `nft monitor`.
 
 ## Milestones
@@ -342,7 +356,7 @@ The npm supply chain is a real risk for a tool with this access.
    creating tables (empty, or from a host firewall template), adding or
    deleting chains, sets and maps, and editing set and map elements in place.
    Next: targeted rule changes.
-4. **Monitoring:** tracing, `nft monitor`, live counters.
+4. **Monitoring:** tracing (done, 2026-09-26), `nft monitor`, live counters.
 5. **Model B** (project layer).
 
 Text mode comes before forms on purpose: it gives full power immediately, and

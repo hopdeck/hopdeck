@@ -27,6 +27,8 @@ const HOST_ERROR_CODES = {
   'deployment-state': true,
   'persistence-unavailable': true,
   'include-rejected': true,
+  'invalid-filter': true,
+  'trace-unavailable': true,
 } satisfies Record<HostErrorCode, true>;
 
 describe('errorText', () => {

@@ -13,9 +13,12 @@ import type {
   PersistResult,
   RulesetSnapshot,
   TableChange,
+  TraceFilter,
+  TraceView,
 } from '@nftm/core';
 import { HostError } from './errors.ts';
 import { Deployments, type DeployLogEntry, type DeployTarget } from './deploy.ts';
+import { Traces, type TraceOptions } from './trace.ts';
 import { collectFacts } from './facts.ts';
 import { HostKeys } from './host-keys.ts';
 import { addInclude, enableService, persistenceStatus, persistTables, saveAll, type PersistTarget } from './persist.ts';
@@ -74,6 +77,7 @@ export class HostManager {
   readonly #entries = new Map<string, Entry>();
   readonly #hostKeys: HostKeys;
   readonly #deployments: Deployments;
+  readonly #traces = new Traces();
 
   private constructor(options: HostManagerOptions) {
     this.#options = options;
@@ -212,6 +216,35 @@ export class HostManager {
         return view;
       }
     }
+  }
+
+  /** Starts tracing packets that match the filter; the host removes the tracing table on its own at the end. */
+  async startTrace(id: string, filter: TraceFilter, options: TraceOptions): Promise<TraceView | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    return this.#traces.start(this.#target(entry), filter, options);
+  }
+
+  async trace(id: string, action: 'get' | 'stop' | 'discard'): Promise<TraceView | undefined> {
+    const hostId = this.#traces.hostOf(id);
+    const entry = hostId === undefined ? undefined : this.#entries.get(hostId);
+    if (entry === undefined) return undefined;
+    const target = this.#target(entry);
+    if (action === 'stop') return this.#traces.stop(id, target);
+    const view = await this.#traces.get(id, target);
+    if (action === 'discard') this.#traces.discard(id);
+    return view;
+  }
+
+  /** Sends a ping, and with a port a TCP connection attempt, over loopback in the sandbox: traffic to trace. */
+  async testTraffic(id: string, port: number | undefined): Promise<string | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    if (entry.kind !== 'sandbox') throw new HostStateError('test traffic is only sent inside the sandbox');
+    const commands = ['ping -c 1 -W 1 127.0.0.1', ...(port === undefined ? [] : [`nc -z -w 1 127.0.0.1 ${port}`])];
+    const script = commands.map((command) => `echo "$ ${command}"; ${command} 2>&1; echo "exit code $?"`).join('; ');
+    const result = await entry.executor.exec(['sh', '-c', `PATH="$PATH:/usr/sbin:/sbin"; ${script}`]);
+    return result.stdout.trim();
   }
 
   async persistence(id: string): Promise<PersistenceStatus | undefined> {
