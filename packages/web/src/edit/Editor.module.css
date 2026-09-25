@@ -275,6 +275,42 @@
   gap: 2px;
 }
 
+/* Elements of a set or map */
+
+.wideDialog {
+  width: min(900px, calc(100vw - 32px));
+}
+
+.addRow {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+}
+
+.addActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.problemText {
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+.rowRemoved td:not(.rowActions) {
+  color: var(--text-subtle);
+  text-decoration: line-through;
+}
+
+.rowRemoved {
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+
 /* Rule dialog */
 
 .dialog {

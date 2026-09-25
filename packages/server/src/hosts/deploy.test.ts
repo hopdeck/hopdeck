@@ -29,6 +29,26 @@ describe('planTable', () => {
     expect(planTable(replace, undefined, false)).toMatchObject({ action: 'create', before: undefined });
   });
 
+  it('changes elements of a set in place, and can put them back', () => {
+    const text = 'table inet mine {\n\tset allow {\n\t\ttype ipv4_addr\n\t\telements = { 10.0.0.1, 10.0.0.2 comment "b" }\n\t}\n}\n';
+    const change = { kind: 'elements' as const, family: 'inet' as const, table: 'mine', set: 'allow', setKind: 'set' as const, add: ['10.0.0.3'], remove: ['10.0.0.1'] };
+    expect(() => planTable(change, current(text), false)).toThrow(/adopt it first/);
+    const plan = planTable(change, current(text, 'managed by nftm'), false);
+    expect(plan).toMatchObject({
+      action: 'elements',
+      set: { kind: 'set', name: 'allow' },
+      after: undefined,
+      script: 'delete element inet mine allow { 10.0.0.1 }\ncreate element inet mine allow { 10.0.0.3 }\n',
+      rollback: 'flush set inet mine allow\nadd element inet mine allow { 10.0.0.1, 10.0.0.2 comment "b" }\n',
+    });
+    expect(plan.diff.filter((line) => line.kind !== 'same')).toEqual([
+      { kind: 'remove', text: '10.0.0.1' },
+      { kind: 'add', text: '10.0.0.3' },
+    ]);
+    expect(() => planTable({ ...change, set: 'nope' }, current(text, 'managed by nftm'), false)).toThrow(/has no set nope/);
+    expect(() => planTable({ ...change, add: ['1.2.3.4 }\nflush ruleset'] }, current(text, 'managed by nftm'), false)).toThrow(/newline/);
+  });
+
   it('never adopts tables of other tools', () => {
     const firewalld = current('table inet firewalld {\n}\n');
     firewalld.node.table.name = 'firewalld';
@@ -131,6 +151,36 @@ describe.skipIf(NFT === undefined || !USERNS)('Deployments in a sandbox', { time
     expect(plan.state).toBe('invalid');
     expect(plan.validation.message).toMatch(/syntax error/);
     await expect(deployments.apply(plan.id, target)).rejects.toMatchObject({ code: 'deployment-state' });
+  });
+
+  it('adds and removes set elements, and a rollback restores them with their timeouts and comments', async () => {
+    const sets = async () => (await readTable(target.access, 'inet', 'sets'))?.text ?? '';
+    const created = await deployments.prepare(target, [
+      {
+        kind: 'replace',
+        family: 'inet',
+        table: 'sets',
+        definition: 'table inet sets {\n\tset block {\n\t\ttype ipv4_addr\n\t\tflags timeout\n\t\telements = { 1.1.1.1 timeout 1h comment "bot", 2.2.2.2 }\n\t}\n}\n',
+      },
+    ]);
+    await deployments.apply(created.id, target);
+    await deployments.confirm(created.id, target);
+    const before = await sets();
+
+    const change = { kind: 'elements' as const, family: 'inet' as const, table: 'sets', set: 'block', setKind: 'set' as const };
+    const plan = await deployments.prepare(target, [{ ...change, add: ['3.3.3.3 timeout 10m'], remove: ['2.2.2.2'] }]);
+    expect(plan.validation).toEqual({ ok: true, message: '' });
+    await deployments.apply(plan.id, target);
+    expect(await sets()).toContain('3.3.3.3 timeout 10m');
+    expect(await sets()).not.toContain('2.2.2.2');
+    await deployments.rollback(plan.id, target);
+    expect(comparable(await sets())).toBe(comparable(before));
+
+    const missing = await deployments.prepare(target, [{ ...change, add: [], remove: ['9.9.9.9'] }]);
+    expect(missing.state).toBe('invalid');
+    expect(missing.validation.message).toMatch(/No such file or directory/);
+    const duplicate = await deployments.prepare(target, [{ ...change, add: ['1.1.1.1'], remove: [] }]);
+    expect(duplicate.validation.message).toMatch(/File exists/);
   });
 
   it('refuses tables it does not manage, and stops when the table changed meanwhile', async () => {

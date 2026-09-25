@@ -225,9 +225,31 @@ function toChange(value: unknown): TableChange {
       return { kind: change['kind'], family: family as Family, table };
     case 'replace':
       return { kind: 'replace', family: family as Family, table, definition: requiredString(change, 'definition', 8 * 1024 * 1024) };
+    case 'elements': {
+      const setKind = change['setKind'];
+      if (setKind !== 'set' && setKind !== 'map') throw new ApiError(400, 'invalid-body', 'setKind must be set or map');
+      return {
+        kind: 'elements',
+        family: family as Family,
+        table,
+        set: requiredString(change, 'set', 256),
+        setKind,
+        add: stringList(change, 'add'),
+        remove: stringList(change, 'remove'),
+      };
+    }
     default:
-      throw new ApiError(400, 'invalid-body', 'kind must be adopt, replace or delete');
+      throw new ApiError(400, 'invalid-body', 'kind must be adopt, replace, delete or elements');
   }
+}
+
+/** Elements: nft syntax each, checked in full when the change is planned. */
+function stringList(body: Record<string, unknown>, key: string): string[] {
+  const value = body[key];
+  if (!Array.isArray(value) || value.length > 100_000 || value.some((item) => typeof item !== 'string' || item.length > 4096)) {
+    throw new ApiError(400, 'invalid-body', `${key} must be a list of strings`);
+  }
+  return value as string[];
 }
 
 function asObject(value: unknown): Record<string, unknown> {

@@ -143,14 +143,14 @@ describe('editableTable', () => {
 
 describe('newTable and newChain', () => {
   it('write a new table and its chains the way nft lists them', () => {
-    const table = newTable('inet', 'my fw');
+    const table = newTable('inet', 'my_fw');
     const input = newChain('input', { type: 'filter', hook: 'input', priority: 'filter', policy: 'drop' });
     input.rules.push({ handle: undefined, text: 'iif "lo" accept' });
     const ingress = newChain('in-eth0', { type: 'filter', hook: 'ingress', device: 'eth0', priority: '-150', policy: 'accept' });
     table.parts.splice(2, 0, { kind: 'chain', chain: input }, { kind: 'chain', chain: ingress }, { kind: 'chain', chain: newChain('ssh') });
     expect(renderTable(table)).toBe(
       [
-        'table inet "my fw" {',
+        'table inet my_fw {',
         '\tcomment "managed by nftm"',
         '\tchain input {',
         '\t\ttype filter hook input priority filter; policy drop;',

@@ -106,7 +106,9 @@ export interface HostSummary {
 export type TableChange =
   | { kind: 'adopt'; family: Family; table: string }
   | { kind: 'replace'; family: Family; table: string; definition: string }
-  | { kind: 'delete'; family: Family; table: string };
+  | { kind: 'delete'; family: Family; table: string }
+  /** Elements of one named set or map, changed in place; the rest of the table stays as it is. */
+  | { kind: 'elements'; family: Family; table: string; set: string; setKind: 'set' | 'map'; add: string[]; remove: string[] };
 
 export type DeploymentState =
   /** Validated and waiting for the user to apply it. */
@@ -123,12 +125,18 @@ export type DeploymentState =
 export interface DeploymentTable {
   family: Family;
   name: string;
-  action: 'adopt' | 'create' | 'replace' | 'delete';
+  action: 'adopt' | 'create' | 'replace' | 'delete' | 'elements';
+  /** The set or map whose elements change; for the elements action. */
+  set?: { kind: 'set' | 'map'; name: string };
   /** nft's listing of the table before, without handles; undefined for a new table. */
   before: string | undefined;
-  /** The definition to load; undefined when the table is deleted. */
+  /** The definition to load; undefined when the table is deleted or only elements change. */
   after: string | undefined;
+  /** What changes: lines of the table, or the elements of the set. */
   diff: DiffLine[];
+  /** The nft input that makes the change, and the one that undoes it. */
+  script: string;
+  rollback: string;
 }
 
 export interface DeploymentView {

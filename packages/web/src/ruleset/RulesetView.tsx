@@ -2,6 +2,7 @@ import {
   blockKey,
   chainKey,
   isManaged,
+  parseSetBlock,
   ruleKey,
   userComment,
   type TableChange,
@@ -12,8 +13,9 @@ import {
   type TableNode,
   type TableOwner,
 } from '@nftm/core';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Callout } from '../components/Callout.tsx';
+import { ElementsDialog } from '../edit/ElementsDialog.tsx';
 import type { EditorMode } from '../edit/TableEditor.tsx';
 import { ErrorCallout } from '../components/ErrorCallout.tsx';
 import { AlertIcon, CheckIcon, PlusIcon, RefreshIcon } from '../components/icons.tsx';
@@ -135,6 +137,8 @@ function TableCard({ node, owner, model, actions }: TableCardProps) {
   const canDelete = actions !== undefined && !frozen && (managed || actions.manualOverride);
   // Editing follows the same rules as deleting: what nftm manages, or anything under Manual override.
   const canEdit = canDelete;
+  const [elements, setElements] = useState<{ kind: 'set' | 'map'; name: string }>();
+  const elementsBlock = elements && model.listing.blocks.get(blockKey(family, name, elements.kind, elements.name));
   const counts = tableCounts(node);
   const summary = [
     t('counts.chains', { count: counts.chains }),
@@ -200,10 +204,12 @@ function TableCard({ node, owner, model, actions }: TableCardProps) {
         <section className={styles.group}>
           <h3 className={styles.groupTitle}>{t('ruleset.setsAndMaps')}</h3>
           {node.sets.map((set) => (
-            <SetItem key={`set ${set.name}`} kind="set" set={set} node={node} model={model} />
+            <SetItem key={`set ${set.name}`} kind="set" set={set} node={node} model={model}
+              onElements={canEdit ? () => setElements({ kind: 'set', name: set.name }) : undefined} />
           ))}
           {node.maps.map((map) => (
-            <SetItem key={`map ${map.name}`} kind="map" set={map} node={node} model={model} />
+            <SetItem key={`map ${map.name}`} kind="map" set={map} node={node} model={model}
+              onElements={canEdit ? () => setElements({ kind: 'map', name: map.name }) : undefined} />
           ))}
         </section>
       )}
@@ -218,6 +224,19 @@ function TableCard({ node, owner, model, actions }: TableCardProps) {
             <BlockItem key={`${kind} ${object.name}`} kind={kind} name={object.name} node={node} model={model} fallback={object} />
           ))}
         </section>
+      )}
+      {actions !== undefined && (
+        <ElementsDialog
+          family={family}
+          table={name}
+          set={elementsBlock === undefined ? undefined : parseSetBlock(elementsBlock)}
+          chains={node.chains.filter((chain) => chain.chain.hook === undefined).map((chain) => chain.chain.name)}
+          onReview={(change) => {
+            setElements(undefined);
+            actions.onChange([change]);
+          }}
+          onClose={() => setElements(undefined)}
+        />
       )}
     </details>
   );
@@ -302,13 +321,35 @@ function Chain({ chain, node, model }: { chain: ChainNode; node: TableNode; mode
   );
 }
 
-function SetItem({ kind, set, node, model }: { kind: 'set' | 'map'; set: NftSet; node: TableNode; model: RulesetModel }) {
+interface SetItemProps {
+  kind: 'set' | 'map';
+  set: NftSet;
+  node: TableNode;
+  model: RulesetModel;
+  /** Opens the element editor; absent when the table cannot be changed. */
+  onElements: (() => void) | undefined;
+}
+
+function SetItem({ kind, set, node, model, onElements }: SetItemProps) {
   const { t } = useI18n();
   const type = typeText(set.type) + (kind === 'map' && set.map !== undefined ? ` : ${typeText(set.map)}` : '');
   const details = [type, ...(set.flags ?? []), t('counts.elements', { count: set.elem?.length ?? 0 })].filter(Boolean);
   return (
     <BlockItem kind={kind} name={set.name} node={node} model={model} fallback={set}>
       <span className={styles.itemMeta}>{details.join(' · ')}</span>
+      {onElements !== undefined && (
+        <button
+          type="button"
+          className={`btn btn-sm ${styles.itemAction}`}
+          onClick={(event) => {
+            // The button sits in the summary; it must not fold the block.
+            event.preventDefault();
+            onElements();
+          }}
+        >
+          {t('elements.button')}
+        </button>
+      )}
     </BlockItem>
   );
 }

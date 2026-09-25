@@ -200,3 +200,18 @@
   border-top: 1px solid var(--border);
   background: var(--surface-muted);
 }
+
+.commands {
+  display: grid;
+  gap: 8px;
+  font-size: var(--text-sm);
+}
+
+.commands summary {
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.commandsNote {
+  color: var(--text-muted);
+}

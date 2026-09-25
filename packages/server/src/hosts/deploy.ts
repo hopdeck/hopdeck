@@ -1,10 +1,16 @@
 import {
+  blockKey,
   diffLines,
+  elementChangeScript,
+  elementParts,
+  elementProblem,
   isManaged,
   nftName,
   parseListing,
   parseRuleset,
+  parseSetBlock,
   replaceTableScript,
+  restoreElementsScript,
   tableOwner,
   withManagedComment,
   type DeploymentTable,
@@ -125,8 +131,8 @@ export class Deployments {
     }
 
     const directory = await makeDirectory(target.executor);
-    const change = tables.map((table) => replaceTableScript(table.family, table.name, table.after)).join('');
-    const rollback = tables.map((table) => replaceTableScript(table.family, table.name, table.before)).join('');
+    const change = tables.map((table) => table.script).join('');
+    const rollback = tables.map((table) => table.rollback).join('');
     await writeRemote(target.executor, `${directory}/change.nft`, change);
     await writeRemote(target.executor, `${directory}/rollback.nft`, rollback);
     await writeRemote(target.executor, `${directory}/watchdog.sh`, WATCHDOG);
@@ -174,7 +180,13 @@ export class Deployments {
     }
     for (const table of view.tables) {
       const now = await readTable(target.access, table.family, table.name);
-      if (comparable(now?.text) !== comparable(table.before)) {
+      // Elements change in place and may come and go on their own (timeouts,
+      // rules that add them); only the set's declaration has to stay the same.
+      const unchanged =
+        table.set === undefined
+          ? comparable(now?.text) === comparable(table.before)
+          : declaration(now?.text, table) === declaration(table.before, table) && declaration(table.before, table) !== undefined;
+      if (!unchanged) {
         throw new HostError('ruleset-changed', `${table.family} ${table.name} changed after this plan was made; prepare it again`);
       }
     }
@@ -291,7 +303,7 @@ export class Deployments {
       host: view.hostId,
       deployment: view.id,
       event,
-      tables: view.tables.map((table) => `${table.action} ${table.family} ${table.name}`),
+      tables: view.tables.map((table) => `${table.action} ${table.family} ${table.name}${table.set ? ` ${table.set.kind} ${table.set.name}` : ''}`),
       manualOverride: view.manualOverride,
       ...(detail !== undefined && { detail }),
     });
@@ -321,7 +333,7 @@ export function planTable(change: TableChange, current: CurrentTable | undefined
         throw new HostError('table-not-editable', `${label} belongs to ${ownerName(owner)}; tables of other tools cannot be adopted`);
       }
       const after = withManagedComment(current.text);
-      return { family, name, action: 'adopt', before: current.text, after, diff: diffLines(current.text, after) };
+      return { family, name, action: 'adopt', before: current.text, after, diff: diffLines(current.text, after), ...scripts(family, name, current.text, after) };
     }
     case 'replace': {
       checkDefinition(change.definition, family, name);
@@ -329,14 +341,76 @@ export function planTable(change: TableChange, current: CurrentTable | undefined
       // Tables nftm creates or manages keep the marker, so it cannot be lost by accident.
       const after = current === undefined || managed ? withManagedComment(change.definition) : change.definition;
       const before = current?.text;
-      return { family, name, action: current === undefined ? 'create' : 'replace', before, after, diff: diffLines(before ?? '', after) };
+      return {
+        family,
+        name,
+        action: current === undefined ? 'create' : 'replace',
+        before,
+        after,
+        diff: diffLines(before ?? '', after),
+        ...scripts(family, name, before, after),
+      };
     }
     case 'delete': {
       if (current === undefined) throw new HostError('table-not-editable', `${label} does not exist`);
       if (!managed && !manualOverride) throw new HostError('table-not-editable', unmanaged);
-      return { family, name, action: 'delete', before: current.text, after: undefined, diff: diffLines(current.text, '') };
+      return { family, name, action: 'delete', before: current.text, after: undefined, diff: diffLines(current.text, ''), ...scripts(family, name, current.text, undefined) };
     }
+    case 'elements':
+      return planElements(change, current, managed || manualOverride, unmanaged);
   }
+}
+
+/** Replacing the whole table, and putting it back as it was. */
+function scripts(family: Family, name: string, before: string | undefined, after: string | undefined): { script: string; rollback: string } {
+  return { script: replaceTableScript(family, name, after), rollback: replaceTableScript(family, name, before) };
+}
+
+/**
+ * Elements removed and added in place. The rollback flushes the set and puts
+ * back the elements as they were, with their timeouts, counters and comments.
+ */
+function planElements(
+  change: Extract<TableChange, { kind: 'elements' }>,
+  current: CurrentTable | undefined,
+  editable: boolean,
+  unmanaged: string,
+): DeploymentTable {
+  const { family, table: name, set, setKind } = change;
+  const label = `${family} ${name}`;
+  if (current === undefined) throw new HostError('table-not-editable', `${label} does not exist`);
+  if (!editable) throw new HostError('table-not-editable', unmanaged);
+  const block = current.listing.blocks.get(blockKey(family, name, setKind, set));
+  const parsed = block === undefined ? undefined : parseSetBlock(block);
+  if (parsed === undefined) throw new HostError('invalid-definition', `${label} has no ${setKind} ${set}`);
+  if (change.add.length === 0 && change.remove.length === 0) throw new HostError('invalid-definition', 'no elements to add or remove');
+  for (const element of [...change.add, ...change.remove]) {
+    const problem = elementProblem(element);
+    if (problem !== undefined) throw new HostError('invalid-definition', problem);
+  }
+
+  const map = setKind === 'map';
+  const removed = new Set(change.remove);
+  const kept = parsed.elements.filter((element) => !removed.has(elementParts(element, map).key));
+  return {
+    family,
+    name,
+    action: 'elements',
+    set: { kind: setKind, name: set },
+    before: current.text,
+    after: undefined,
+    diff: diffLines(parsed.elements.join('\n'), [...kept, ...change.add].join('\n')),
+    script: elementChangeScript(family, name, set, change.add, change.remove),
+    rollback: restoreElementsScript(family, name, setKind, set, parsed.elements),
+  };
+}
+
+/** A set's declaration in a table listing, without its elements; undefined if the set is gone. */
+function declaration(text: string | undefined, table: DeploymentTable): string | undefined {
+  if (text === undefined || table.set === undefined) return undefined;
+  const block = parseListing(text).blocks.get(blockKey(table.family, table.name, table.set.kind, table.set.name));
+  const parsed = block === undefined ? undefined : parseSetBlock(block);
+  return parsed?.declaration.join('\n');
 }
 
 /**
@@ -372,18 +446,30 @@ function ownerName(owner: Exclude<TableOwner, { kind: 'unknown' }>): string {
   return owner.kind === 'tool' ? owner.tool : 'iptables-nft';
 }
 
-/** The table as nft lists it now, or undefined when it does not exist. */
+/**
+ * The table as nft lists it now, or undefined when it does not exist. It is cut
+ * out of the whole ruleset: `nft list table` fails for tables named like one of
+ * its list keywords, e.g. "sets".
+ */
 export async function readTable(access: NftAccess, family: Family, name: string): Promise<CurrentTable | undefined> {
-  const json = await runNft(access, ['-j', 'list', 'table', family, nftName(name)]);
-  if (json.exitCode !== 0) {
-    if (/No such file or directory/.test(json.stderr)) return undefined;
-    throw new HostError('command-failed', json.stderr.trim() || `nft exited with code ${json.exitCode}`);
-  }
-  const text = await runNft(access, ['list', 'table', family, nftName(name)]);
-  if (text.exitCode !== 0) throw new HostError('command-failed', text.stderr.trim());
-  const node = parseRuleset(JSON.parse(json.stdout)).tables[0];
-  if (node === undefined) throw new HostError('command-failed', `nft listed no table for ${family} ${name}`);
-  return { node, listing: parseListing(text.stdout), text: text.stdout };
+  const json = await runNft(access, ['-j', 'list', 'ruleset']);
+  if (json.exitCode !== 0) throw new HostError('command-failed', json.stderr.trim() || `nft exited with code ${json.exitCode}`);
+  const node = parseRuleset(JSON.parse(json.stdout)).tables.find((table) => table.table.family === family && table.table.name === name);
+  if (node === undefined) return undefined;
+  const listing = await runNft(access, ['list', 'ruleset']);
+  if (listing.exitCode !== 0) throw new HostError('command-failed', listing.stderr.trim() || `nft exited with code ${listing.exitCode}`);
+  const text = tableText(listing.stdout, family, name);
+  if (text === undefined) throw new HostError('command-failed', `nft printed no table ${family} ${name}, though its JSON has one`);
+  return { node, listing: parseListing(text), text };
+}
+
+/** One table's block out of `nft list ruleset`, as `nft list table` would print it. */
+export function tableText(ruleset: string, family: Family, name: string): string | undefined {
+  const lines = ruleset.split('\n');
+  const start = lines.indexOf(`table ${family} ${nftName(name)} {`);
+  if (start === -1) return undefined;
+  const end = lines.indexOf('}', start);
+  return end === -1 ? undefined : `${lines.slice(start, end + 1).join('\n')}\n`;
 }
 
 /**

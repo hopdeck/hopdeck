@@ -8,6 +8,7 @@ import { useI18n } from '../i18n/I18nProvider.tsx';
 import type { MessageKey } from '../i18n/locales.ts';
 import styles from './Deploy.module.css';
 import { DiffView } from './DiffView.tsx';
+import { NftCode } from '../ruleset/NftCode.tsx';
 
 export interface DeploymentResult {
   /** Whether the ruleset may differ now. */
@@ -31,6 +32,7 @@ const ACTIONS: Record<DeploymentView['tables'][number]['action'], MessageKey> = 
   create: 'deploy.action.create',
   replace: 'deploy.action.replace',
   delete: 'deploy.action.delete',
+  elements: 'deploy.action.elements',
 };
 
 /** Plan, review, apply, then keep or roll back one change. */
@@ -132,9 +134,18 @@ export function DeploymentDialog({ hostId, hostName, changes, onClose }: Deploym
                   <span className={styles.action}>{t(ACTIONS[table.action])}</span>
                   <span className="mono">
                     {table.family} {table.name}
+                    {table.set !== undefined && ` · ${table.set.kind} ${table.set.name}`}
                   </span>
                 </h3>
                 <DiffView diff={table.diff} />
+                {table.action === 'elements' && (
+                  <details className={styles.commands}>
+                    <summary>{t('deploy.commands')}</summary>
+                    <NftCode text={table.script.trimEnd()} block />
+                    <p className={styles.commandsNote}>{t('deploy.commandsRollback')}</p>
+                    <NftCode text={table.rollback.trimEnd()} block />
+                  </details>
+                )}
               </section>
             ))}
 

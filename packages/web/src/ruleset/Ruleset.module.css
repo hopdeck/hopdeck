@@ -306,6 +306,11 @@
   font-size: var(--text-xs);
 }
 
+.itemAction {
+  align-self: center;
+  margin-left: auto;
+}
+
 .itemMeta {
   color: var(--text-muted);
   font-size: var(--text-xs);
