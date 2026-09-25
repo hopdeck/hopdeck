@@ -39,7 +39,8 @@ interface Trace {
   offset: number;
   /** An unfinished last line, completed by the next read. */
   partial: string;
-  packets: Set<string>;
+  /** Packets seen so far: passes nftm's chain reported. */
+  packets: number;
 }
 
 export interface TraceOptions {
@@ -89,7 +90,7 @@ export class Traces {
       lines: [],
       dropped: 0,
     };
-    const trace: Trace = { view, directory, offset: 0, partial: '', packets: new Set() };
+    const trace: Trace = { view, directory, offset: 0, partial: '', packets: 0 };
     this.#traces.set(view.id, trace);
 
     const loaded = await runNft(target.access, ['-f', `${directory}/trace.nft`]);
@@ -148,7 +149,7 @@ export class Traces {
     if (finished !== '') {
       this.#append(trace, '\n');
       await this.#collect(trace, target, finished);
-    } else if (trace.packets.size >= MAX_PACKETS) {
+    } else if (trace.packets >= MAX_PACKETS) {
       trace.view.problem = { code: 'trace-unavailable', detail: `stopped after ${MAX_PACKETS} packets` };
       await this.#finish(trace, target);
     }
@@ -159,9 +160,10 @@ export class Traces {
     const lines = text.split('\n');
     trace.partial = lines.pop() ?? '';
     const { view } = trace;
+    // The kernel reuses trace ids, so packets are counted where nftm's chain first reports them.
+    const begins = new RegExp(`^trace id \\S+ inet ${view.table} \\S+ packet: `);
     for (const line of lines) {
-      const id = /^trace id (\S+) /.exec(line)?.[1];
-      if (id !== undefined) trace.packets.add(id);
+      if (begins.test(line)) trace.packets += 1;
       view.lines.push(line);
     }
     if (view.lines.length > MAX_LINES) {
@@ -196,7 +198,7 @@ export class Traces {
     }
     // A monitor that could not start leaves its complaint instead of trace lines.
     const complaints = view.lines.filter((line) => line.trim() !== '' && !line.startsWith('trace id '));
-    if (complaints.length > 0 && trace.packets.size === 0 && view.problem === undefined) {
+    if (complaints.length > 0 && trace.packets === 0 && view.problem === undefined) {
       view.problem = { code: 'command-failed', detail: complaints.join('\n') };
     }
     view.state = view.problem?.code === 'command-failed' || view.problem?.code === 'invalid-filter' ? 'failed' : 'finished';

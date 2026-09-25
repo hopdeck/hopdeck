@@ -300,7 +300,7 @@
   "trace.noVerdict": "bez decyzji",
   "trace.incoming": "przychodzący lub przekazywany",
   "trace.outgoing": "wysłany przez host",
-  "trace.noChains": "Żaden łańcuch zapory nie widział go w tym miejscu, więc nic go nie zatrzymało.",
+  "trace.noChains": "Żaden łańcuch zapory nie sprawdza pakietów w tym miejscu, więc przeszedł: domyślnie nic go nie zatrzymuje.",
   "trace.passed": "Przeszedł bez pasującej reguły.",
   "trace.policy": "polityka łańcucha:",
   "error.invalid-filter.title": "Filtr śledzenia jest nieprawidłowy",

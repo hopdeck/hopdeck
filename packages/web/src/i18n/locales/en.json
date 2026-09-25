@@ -282,7 +282,7 @@
   "trace.noVerdict": "no decision",
   "trace.incoming": "arriving or forwarded",
   "trace.outgoing": "sent by the host",
-  "trace.noChains": "No chain of the firewall saw it at this hook, so nothing stopped it.",
+  "trace.noChains": "No chain of the firewall sees packets here, so it went through: nothing stops a packet by default.",
   "trace.passed": "Passed through without a matching rule.",
   "trace.policy": "chain policy:",
   "error.invalid-filter.title": "The trace filter is not valid",

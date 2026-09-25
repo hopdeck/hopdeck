@@ -183,7 +183,7 @@ export function TracePanel({ hostId, hostKind, session, onSession, onShowChain }
       {packets.length > shown.length && <p className={styles.note}>{t('trace.more', { shown: shown.length, total: packets.length })}</p>}
       <ol className={styles.packets}>
         {shown.map((packet) => (
-          <PacketCard key={packet.id} packet={packet} onShowChain={onShowChain} />
+          <PacketCard key={packet.key} packet={packet} onShowChain={onShowChain} />
         ))}
       </ol>
 
@@ -219,6 +219,7 @@ function PacketCard({ packet, onShowChain }: { packet: TracedPacket; onShowChain
     summary.iif && `iif ${summary.iif}`,
     summary.oif && `oif ${summary.oif}`,
     summary.length && `${summary.length} B`,
+    summary.ipId && `IP ID ${summary.ipId}`,
   ].filter(Boolean);
   // One block per chain: nft prints the packet when it enters a chain, then what happened there.
   const chains: { key: string; step: TraceEvent; events: TraceEvent[] }[] = [];

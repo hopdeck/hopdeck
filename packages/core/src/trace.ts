@@ -87,6 +87,8 @@ export interface TraceEvent {
 }
 
 export interface PacketSummary {
+  /** The IP header's identification; the halves of one packet sent over lo share it. */
+  ipId?: string;
   iif?: string;
   oif?: string;
   saddr?: string;
@@ -100,15 +102,21 @@ export interface PacketSummary {
 }
 
 export interface TracedPacket {
+  /** Unique within the trace. */
+  key: string;
+  /** nft's trace id; the kernel may give it to a later packet again. */
   id: string;
   /** How nftm caught it: arriving (prerouting) or sent by the host itself (output). */
   direction: 'in' | 'out' | undefined;
   summary: PacketSummary;
   /** The chains and rules it passed, nftm's own tracing table left out. */
   steps: TraceEvent[];
-  /** drop as soon as any chain dropped it; accept when every chain that decided let it through. */
+  /**
+   * drop as soon as any chain dropped it; accept when every chain that decided
+   * let it through, or when no chain saw it at all (nothing stops a packet by default).
+   */
   verdict: 'accept' | 'drop' | undefined;
-  /** The step that dropped it, or the last one that accepted it. */
+  /** The step that dropped it, or the last one that accepted it; undefined when no chain decided. */
   decidedBy: TraceEvent | undefined;
 }
 
@@ -130,29 +138,45 @@ export function parseTraceLine(line: string): TraceEvent | undefined {
   return { ...base, kind: 'other' };
 }
 
-/** The lines of a trace, grouped per packet in the order they first appeared. */
+/**
+ * The lines of a trace, one entry per pass of a packet through the hooks, in
+ * the order they began. The kernel derives trace ids from the packet buffer's
+ * address, so a later packet can get the id of an earlier one (on lo, a ping
+ * and its reply often do). A pass begins where nftm's tracing chain, which runs
+ * before all others, first reports the packet; that starts a new entry even
+ * for an id seen before.
+ */
 export function groupTrace(lines: readonly string[]): TracedPacket[] {
-  const packets = new Map<string, { events: TraceEvent[] }>();
+  const passes: { id: string; events: TraceEvent[] }[] = [];
+  const open = new Map<string, { id: string; events: TraceEvent[] }>();
   for (const line of lines) {
     const event = parseTraceLine(line);
     if (event === undefined) continue;
-    const packet = packets.get(event.id) ?? { events: [] };
-    packet.events.push(event);
-    packets.set(event.id, packet);
+    let pass = open.get(event.id);
+    const begins = event.kind === 'packet' && event.table.startsWith(TRACE_TABLE_PREFIX);
+    if (pass === undefined || begins) {
+      pass = { id: event.id, events: [] };
+      passes.push(pass);
+      open.set(event.id, pass);
+    }
+    pass.events.push(event);
   }
-  return [...packets].map(([id, { events }]) => {
+  return passes.map(({ id, events }, index) => {
     const own = events.find((event) => event.table.startsWith(TRACE_TABLE_PREFIX));
     const steps = events.filter((event) => !event.table.startsWith(TRACE_TABLE_PREFIX));
     const first = events.find((event) => event.kind === 'packet');
     const deciding = steps.filter((event) => event.verdict !== undefined && ['accept', 'drop'].includes(event.verdict));
     const drop = deciding.find((event) => event.verdict === 'drop');
     const decidedBy = drop ?? deciding.at(-1);
+    // Seen by nftm's chain but by no chain of the firewall: nothing held it back.
+    const passed = own !== undefined && steps.length === 0;
     return {
+      key: `${id}#${index}`,
       id,
       direction: own === undefined ? undefined : own.chain === 'out' ? 'out' : 'in',
       summary: first?.packet === undefined ? {} : summarize(first.packet),
       steps,
-      verdict: decidedBy?.verdict as 'accept' | 'drop' | undefined,
+      verdict: (decidedBy?.verdict as 'accept' | 'drop' | undefined) ?? (passed ? 'accept' : undefined),
       decidedBy,
     };
   });
@@ -164,6 +188,7 @@ export function summarize(packet: string): PacketSummary {
   const protocol = field(/\bip protocol (\S+)/) ?? field(/\bip6 nexthdr (\S+)/) ?? field(/\b(tcp|udp|icmpv6|icmp|sctp) /);
   const l4 = protocol === 'tcp' || protocol === 'udp' || protocol === 'sctp' ? protocol : undefined;
   const summary: PacketSummary = {
+    ipId: field(/\bip id (\d+)/),
     iif: field(/\biif "([^"]*)"/),
     oif: field(/\boif "([^"]*)"/),
     saddr: field(/\bip6? saddr (\S+)/),

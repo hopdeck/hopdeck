@@ -40,7 +40,8 @@ describe('groupTrace', () => {
   it('groups lines per packet and finds what decided', () => {
     const packets = groupTrace(LINES);
     expect(packets.map((packet) => [packet.id, packet.direction, packet.verdict, packet.decidedBy?.kind])).toEqual([
-      ['52924af7', 'out', undefined, undefined],
+      // No chain of the firewall at output: nothing held it back.
+      ['52924af7', 'out', 'accept', undefined],
       ['26dee5ea', 'in', 'drop', 'rule'],
       ['c22930c8', undefined, 'drop', 'policy'],
       ['8e8ff03d', undefined, 'accept', 'rule'],
@@ -49,8 +50,28 @@ describe('groupTrace', () => {
     expect(packets[1]!.steps.map((step) => `${step.chain} ${step.kind}`)).toEqual(['input packet', 'input rule', 'input rule']);
   });
 
+  it('starts a new packet where nftm\'s chain reports one, even when the kernel reuses the trace id', () => {
+    // A ping to lo and its reply, both given the id 3c0118c9 (nftables 1.1.3, kernel 6.12).
+    const reused = `trace id 3c0118c9 inet nftm_trace_t9 pre packet: iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 ip id 13597 ip protocol icmp icmp type echo-request
+trace id 3c0118c9 inet nftm_trace_t9 pre rule meta l4proto icmp limit rate 10/second burst 5 packets meta nftrace set 1 # handle 3 (verdict continue)
+trace id 3c0118c9 inet nftm_trace_t9 pre policy accept
+trace id 3c0118c9 inet filter input packet: iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 ip id 13597 ip protocol icmp icmp type echo-request
+trace id 3c0118c9 inet filter input rule iif "lo" accept # handle 11 (verdict accept)
+trace id 3c0118c9 inet nftm_trace_t9 pre packet: iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 ip id 13598 ip protocol icmp icmp type echo-reply
+trace id 3c0118c9 inet nftm_trace_t9 pre rule meta l4proto icmp limit rate 10/second burst 5 packets meta nftrace set 1 # handle 3 (verdict continue)
+trace id 3c0118c9 inet nftm_trace_t9 pre policy accept
+trace id 3c0118c9 inet filter input packet: iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 ip id 13598 ip protocol icmp icmp type echo-reply
+trace id 3c0118c9 inet filter input rule ct state established,related accept # handle 9 (verdict accept)`.split('\n');
+    const packets = groupTrace(reused);
+    expect(packets.map((packet) => [packet.key, packet.summary.icmpType, packet.summary.ipId, packet.steps.length, packet.decidedBy?.rule])).toEqual([
+      ['3c0118c9#0', 'echo-request', '13597', 2, 'iif "lo" accept'],
+      ['3c0118c9#1', 'echo-reply', '13598', 2, 'ct state established,related accept'],
+    ]);
+  });
+
   it('sums up a packet', () => {
     expect(summarize(parseTraceLine(LINES[3]!)!.packet!)).toEqual({
+      ipId: '23602',
       iif: 'lo',
       saddr: '127.0.0.1',
       daddr: '127.0.0.1',
