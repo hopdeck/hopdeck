@@ -298,11 +298,24 @@ forms add convenience without ever limiting what can be done.
 ## Future: beyond nftables on servers
 
 The project is meant to grow into managing OpenWrt routers and other parts of
-Linux networking. Designs should not assume systemd, sudo, an OpenSSH server
-or GNU tools on hosts (OpenWrt has procd, root login, dropbear and BusyBox),
-and persistence must be pluggable per platform: OpenWrt's firewall4 owns
-`inet fw4` (recognised already) and includes `/etc/nftables.d/*.nft` inside
-it.
+Linux networking. That makes the platform layer pluggable: the same UI over
+different ways of reading and changing a host.
+
+- **OpenWrt goes through UCI, never straight to nftables.** UCI
+  (`/etc/config/firewall`) is OpenWrt's source of truth: firewall4 generates
+  `inet fw4` from it (recognised already as another tool's table), and LuCI
+  reads and writes only UCI. Direct nft changes would be invisible to LuCI
+  and lost on the next firewall reload. nftm will edit UCI with `uci` or
+  ubus, so everything it does shows up in LuCI and the other way round.
+- **Full nftables power there** comes from fw4's nftables includes (UCI
+  `config include` entries of type `nftables`, and `/etc/nftables.d/*.nft`),
+  which LuCI also shows.
+- **Safe apply there** should use OpenWrt's own apply with rollback (rpcd
+  `uci apply` with a rollback timeout, then `confirm`), the mechanism LuCI
+  uses, rather than nftm's systemd timer.
+- **No server assumptions on hosts:** OpenWrt has procd instead of systemd,
+  root login instead of sudo, dropbear instead of an OpenSSH server, and
+  BusyBox instead of GNU tools.
 
 ## Open questions
 
