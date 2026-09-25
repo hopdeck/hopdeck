@@ -192,7 +192,7 @@ function renderInterface(direction: 'i' | 'o', match: InterfaceMatch): string {
 }
 
 function renderMatch(match: Match): string {
-  return `${match.negate ? '!= ' : ''}${match.value}`;
+  return `${match.negate ? '!= ' : ''}${match.value.trim()}`;
 }
 
 function renderAction(action: RuleAction, family: Family): string | undefined {

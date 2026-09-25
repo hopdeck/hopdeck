@@ -9,13 +9,21 @@ import type { MessageKey } from '../i18n/locales.ts';
 import styles from './Deploy.module.css';
 import { DiffView } from './DiffView.tsx';
 
+export interface DeploymentResult {
+  /** Whether the ruleset may differ now. */
+  changed: boolean;
+  /** The last state of the deployment, if planning got that far. */
+  view: DeploymentView | undefined;
+  /** What went wrong on the way, if anything. */
+  error: ErrorInfo | undefined;
+}
+
 interface DeploymentDialogProps {
   hostId: string;
   hostName: string;
   /** Opens the dialog and plans these changes; undefined keeps it closed. */
   changes: TableChange[] | undefined;
-  /** Closed; `changed` tells whether the ruleset may differ now. */
-  onClose(changed: boolean): void;
+  onClose(result: DeploymentResult): void;
 }
 
 const ACTIONS: Record<DeploymentView['tables'][number]['action'], MessageKey> = {
@@ -85,7 +93,7 @@ export function DeploymentDialog({ hostId, hostName, changes, onClose }: Deploym
   async function close() {
     if (awaiting) return;
     if (view?.state === 'planned') await api.post(`/deployments/${view.id}/discard`).catch(() => undefined);
-    onClose(finished && view?.state !== 'invalid');
+    onClose({ changed: finished && view?.state !== 'invalid', view, error });
   }
 
   const act = (action: 'apply' | 'confirm' | 'rollback') => run(() => api.post(`/deployments/${view!.id}/${action}`));

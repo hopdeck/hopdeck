@@ -187,10 +187,12 @@ disappears with it.
 - Tables written by iptables-nft contain `xt` expressions that nft cannot
   recreate. They are always read-only.
 - There are two ways to change a managed table:
-  - **Replace the whole table** in one transaction. Simple, but it resets
-    counters and dynamic set elements. This is the default for text mode.
-  - **Targeted changes by rule handle.** Keeps counters and set contents. Used
-    by the structured editors.
+  - **Replace the whole table** in one transaction. Both editors do this
+    today. Lines the editor did not touch go back exactly as nft printed them,
+    so unchanged rules keep their counter values (`counter packets N bytes M`)
+    and sets keep their elements; edited rules start counting from zero.
+  - **Targeted changes by rule handle** (later). Needed where a replacement
+    would disturb live state, e.g. sets filled by the data path.
 
 ## Applying changes
 
@@ -283,9 +285,20 @@ The npm supply chain is a real risk for a tool with this access.
 - **Packet path view:** base chains from all tables, ordered by hook and
   priority. This is the most confusing part of nftables, and nothing else
   shows it well.
-- **Rule editor:** structured forms for known expressions and raw editing for
-  the rest. The text mode uses CodeMirror 6 with an nft grammar, and errors
-  from `nft -c` are mapped to lines.
+- **Table editor** with two modes over the same table:
+  - **Visual**, MikroTik style: a grid per chain (action, protocol, addresses,
+    ports, interfaces, connection state, other statements, comment, counter),
+    reordering, copying and deleting rules, the base chain policy, and a
+    dialog with tabs to edit one rule with a live preview of its nft text.
+    A rule gets the form only when the form renders back exactly what nft
+    printed (`ruleForm` in core); any other rule stays in the grid as nft
+    text and is edited as text, so the form never drops part of a rule.
+  - **Text**: the whole table in nft syntax. A textarea over highlighted text
+    keeps selection, clipboard and undo native without an editor dependency.
+  - Errors from `nft -c` name lines of the change file; the panel maps them
+    to lines of the text and rows of the grid.
+  - Text edits cannot be turned back into the grid, so after editing text by
+    hand the visual mode stays off until the change is applied or discarded.
 - **Diff view** before every apply.
 - **Set and map editor** that adds and removes elements live, without
   reloading the ruleset.
@@ -300,11 +313,13 @@ The npm supply chain is a real risk for a tool with this access.
    Tested against a real Debian 13 host over SSH (`dev/test-host`), including
    confirming unknown and changed host keys in the panel.
 2. **Text-mode editing** of managed tables, with diff, safe apply with
-   rollback, and persistence. From here nftm can do everything nftables can.
-   Done so far: safe apply with the watchdog, adopting and deleting tables,
-   Manual override, persistence across reboots.
+   rollback, and persistence (done, 2026-09-25). From here nftm can do
+   everything nftables can: safe apply with the watchdog, adopting and
+   deleting tables, Manual override, persistence across reboots, the text
+   editor.
 3. **Structured rule forms** and live set/map element editing. This is where
-   "easier" starts.
+   "easier" starts. Done so far: the visual rules grid and the rule dialog.
+   Next: creating tables and chains, sets and maps, targeted changes.
 4. **Monitoring:** tracing, `nft monitor`, live counters.
 5. **Model B** (project layer).
 

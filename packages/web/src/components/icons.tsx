@@ -91,6 +91,32 @@ export const TrashIcon = (props: IconProps) => (
   </Svg>
 );
 
+export const EditIcon = (props: IconProps) => (
+  <Svg {...props}>
+    <path d="M4.5 19.5l.9-3.9L15.8 5.2a1.8 1.8 0 0 1 2.6 0l.4.4a1.8 1.8 0 0 1 0 2.6L8.4 18.6z" />
+    <path d="M13.8 7.2l3 3" />
+  </Svg>
+);
+
+export const CopyIcon = (props: IconProps) => (
+  <Svg {...props}>
+    <rect x="8.5" y="8.5" width="11" height="11" rx="2" />
+    <path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" />
+  </Svg>
+);
+
+export const ArrowUpIcon = (props: IconProps) => (
+  <Svg {...props}>
+    <path d="M12 19V5M6.5 10.5L12 5l5.5 5.5" />
+  </Svg>
+);
+
+export const ArrowDownIcon = (props: IconProps) => (
+  <Svg {...props}>
+    <path d="M12 5v14M6.5 13.5L12 19l5.5-5.5" />
+  </Svg>
+);
+
 export const LockIcon = (props: IconProps) => (
   <Svg {...props}>
     <rect x="5" y="10.5" width="14" height="10" rx="2" />

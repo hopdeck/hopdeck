@@ -1,4 +1,4 @@
-import type { HostFacts, HostKind, HostStatus, HostSummary, Privilege, TableChange } from '@nftm/core';
+import type { Family, HostFacts, HostKind, HostStatus, HostSummary, Privilege, TableChange } from '@nftm/core';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import { ErrorBody, ErrorCallout, errorTitle, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
@@ -10,7 +10,8 @@ import { ListingView } from '../ruleset/ListingView.tsx';
 import { PacketPathView } from '../ruleset/PacketPathView.tsx';
 import { RulesetView } from '../ruleset/RulesetView.tsx';
 import { useRuleset, type RulesetState } from '../ruleset/useRuleset.ts';
-import { DeploymentDialog } from '../deploy/DeploymentDialog.tsx';
+import { DeploymentDialog, type DeploymentResult } from '../deploy/DeploymentDialog.tsx';
+import { TableEditor, type EditorDraft, type EditorMode, type EditorProblem } from '../edit/TableEditor.tsx';
 import { PersistencePanel } from '../deploy/PersistencePanel.tsx';
 import { HostKeyPanel } from './HostKeyPanel.tsx';
 import { ManualOverrideBanner, ManualOverrideButton } from './ManualOverride.tsx';
@@ -24,6 +25,26 @@ function fullAccess(status: HostStatus): boolean {
   if (status.state !== 'connected' || status.facts.nft === undefined) return false;
   const { privilege } = status;
   return privilege.kind === 'root' || privilege.kind === 'sudo' || (privilege.kind === 'sudo-password' && status.passwordStored);
+}
+
+interface Editing {
+  family: Family;
+  table: string;
+  mode: EditorMode;
+  draft?: EditorDraft;
+  /** The definition sent for review last. */
+  sent?: string;
+  problem?: EditorProblem;
+}
+
+/** Lines nft names in its messages start with two of nftm's own; a restored managed marker adds one more. */
+function rejection(result: DeploymentResult, sent: string): EditorProblem | undefined {
+  const lines = (text: string) => text.trimEnd().split('\n').length;
+  const after = result.view?.tables[0]?.after;
+  const preamble = 2 + (after === undefined ? 0 : Math.max(0, lines(after) - lines(sent)));
+  if (result.view?.state === 'invalid') return { message: result.view.validation.message, preamble };
+  if (result.error?.code === 'invalid-definition') return { message: result.error.message, preamble };
+  return undefined;
 }
 
 const ACCESS_BADGES: Record<'root' | 'sudo' | 'sudo-password', { label: MessageKey; title: MessageKey }> = {
@@ -54,6 +75,12 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   const [scrollTarget, setScrollTarget] = useState<string>();
   // Changes being planned and applied in the deployment dialog.
   const [changes, setChanges] = useState<TableChange[]>();
+  // The table open in the editor, which takes the place of the rules view.
+  const [editing, setEditing] = useState<Editing>();
+  const editedNode =
+    editing === undefined
+      ? undefined
+      : ruleset.model?.ruleset.tables.find((node) => node.table.family === editing.family && node.table.name === editing.table);
 
   useEffect(() => {
     if (tab !== 'rules' || scrollTarget === undefined) return;
@@ -149,12 +176,43 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
             {
               id: 'rules',
               label: t('tabs.rules'),
-              content: (
-                <div className={styles.rules}>
-                  <PersistencePanel hostId={host.id} version={ruleset.model?.readAt} />
-                  <RulesetView state={ruleset} actions={{ manualOverride: host.manualOverride, onChange: setChanges }} />
-                </div>
-              ),
+              content:
+                editing !== undefined && ruleset.model !== undefined ? (
+                  editedNode !== undefined ? (
+                    <TableEditor
+                      key={`${editing.family} ${editing.table}`}
+                      model={ruleset.model}
+                      node={editedNode}
+                      initialMode={editing.mode}
+                      draft={editing.draft}
+                      onDraft={(draft) => setEditing((current) => current && { ...current, draft })}
+                      problem={editing.problem}
+                      onReview={(definition) => {
+                        setEditing((current) => current && { ...current, sent: definition });
+                        setChanges([{ kind: 'replace', family: editing.family, table: editing.table, definition }]);
+                      }}
+                      onClose={() => setEditing(undefined)}
+                    />
+                  ) : (
+                    <Callout tone="warn" icon={<AlertIcon />} title={t('editor.gone', { table: `${editing.family} ${editing.table}` })}>
+                      <button type="button" className="btn btn-sm" onClick={() => setEditing(undefined)}>
+                        {t('common.close')}
+                      </button>
+                    </Callout>
+                  )
+                ) : (
+                  <div className={styles.rules}>
+                    <PersistencePanel hostId={host.id} version={ruleset.model?.readAt} />
+                    <RulesetView
+                      state={ruleset}
+                      actions={{
+                        manualOverride: host.manualOverride,
+                        onChange: setChanges,
+                        onEdit: (family, table, mode) => setEditing({ family, table, mode }),
+                      }}
+                    />
+                  </div>
+                ),
             },
             {
               id: 'path',
@@ -181,9 +239,13 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
         hostId={host.id}
         hostName={host.name}
         changes={changes}
-        onClose={(changed) => {
+        onClose={(result) => {
           setChanges(undefined);
-          if (changed) ruleset.reload();
+          if (result.changed) ruleset.reload();
+          if (editing?.sent === undefined) return;
+          const sent = editing.sent;
+          if (result.view?.state === 'confirmed') setEditing(undefined);
+          else setEditing((current) => current && { ...current, problem: rejection(result, sent) });
         }}
       />
     </section>

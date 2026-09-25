@@ -6,6 +6,7 @@ import {
   userComment,
   type TableChange,
   type ChainNode,
+  type Family,
   type Json,
   type NftSet,
   type TableNode,
@@ -13,6 +14,7 @@ import {
 } from '@nftm/core';
 import type { ReactNode } from 'react';
 import { Callout } from '../components/Callout.tsx';
+import type { EditorMode } from '../edit/TableEditor.tsx';
 import { ErrorCallout } from '../components/ErrorCallout.tsx';
 import { AlertIcon, CheckIcon, RefreshIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
@@ -29,6 +31,7 @@ const MAX_BLOCK_LINES = 200;
 export interface RulesetActions {
   manualOverride: boolean;
   onChange(changes: TableChange[]): void;
+  onEdit(family: Family, table: string, mode: EditorMode): void;
 }
 
 export function RulesetView({ state, actions }: { state: RulesetState; actions?: RulesetActions | undefined }) {
@@ -115,6 +118,8 @@ function TableCard({ node, owner, model, actions }: TableCardProps) {
   const frozen = owner.kind === 'iptables-nft' && owner.evidence === 'xt';
   const canAdopt = actions !== undefined && !managed && owner.kind === 'unknown';
   const canDelete = actions !== undefined && !frozen && (managed || actions.manualOverride);
+  // Editing follows the same rules as deleting: what nftm manages, or anything under Manual override.
+  const canEdit = canDelete;
   const counts = tableCounts(node);
   const summary = [
     t('counts.chains', { count: counts.chains }),
@@ -139,6 +144,16 @@ function TableCard({ node, owner, model, actions }: TableCardProps) {
 
       {(canAdopt || canDelete) && (
         <div className={styles.tableActions}>
+          {canEdit && (
+            <>
+              <button type="button" className="btn btn-sm btn-primary" onClick={() => actions.onEdit(family, name, 'visual')}>
+                {t('table.edit')}
+              </button>
+              <button type="button" className="btn btn-sm" onClick={() => actions.onEdit(family, name, 'text')}>
+                {t('table.editText')}
+              </button>
+            </>
+          )}
           {canAdopt && (
             <button type="button" className="btn btn-sm btn-primary" onClick={() => actions.onChange([{ kind: 'adopt', family, table: name }])}>
               {t('table.adopt')}
