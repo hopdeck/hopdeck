@@ -1,7 +1,9 @@
 import {
   blockKey,
   chainKey,
+  isManaged,
   ruleKey,
+  type TableChange,
   type ChainNode,
   type Json,
   type NftSet,
@@ -22,7 +24,13 @@ import type { RulesetState } from './useRuleset.ts';
 /** Longer blocks (e.g. sets with thousands of elements) are cut; the Text tab has everything. */
 const MAX_BLOCK_LINES = 200;
 
-export function RulesetView({ state }: { state: RulesetState }) {
+/** Changes the rules view may start; present only when nft can run as root on the host. */
+export interface RulesetActions {
+  manualOverride: boolean;
+  onChange(changes: TableChange[]): void;
+}
+
+export function RulesetView({ state, actions }: { state: RulesetState; actions?: RulesetActions | undefined }) {
   const { t, locale } = useI18n();
   const { model, loading, error, reload } = state;
 
@@ -58,12 +66,12 @@ export function RulesetView({ state }: { state: RulesetState }) {
         </p>
       )}
 
-      {model !== undefined && <Tables model={model} />}
+      {model !== undefined && <Tables model={model} actions={actions} />}
     </div>
   );
 }
 
-function Tables({ model }: { model: RulesetModel }) {
+function Tables({ model, actions }: { model: RulesetModel; actions: RulesetActions | undefined }) {
   const { t } = useI18n();
   const { ruleset } = model;
   return (
@@ -79,15 +87,33 @@ function Tables({ model }: { model: RulesetModel }) {
         </Callout>
       )}
       {ruleset.tables.map((node) => (
-        <TableCard key={`${node.table.family} ${node.table.name}`} node={node} owner={model.owners.get(node)!} model={model} />
+        <TableCard
+          key={`${node.table.family} ${node.table.name}`}
+          node={node}
+          owner={model.owners.get(node)!}
+          model={model}
+          actions={actions}
+        />
       ))}
     </>
   );
 }
 
-function TableCard({ node, owner, model }: { node: TableNode; owner: TableOwner; model: RulesetModel }) {
+interface TableCardProps {
+  node: TableNode;
+  owner: TableOwner;
+  model: RulesetModel;
+  actions: RulesetActions | undefined;
+}
+
+function TableCard({ node, owner, model, actions }: TableCardProps) {
   const { t } = useI18n();
   const { family, name } = node.table;
+  const managed = isManaged(node.table);
+  // xt expressions cannot be recreated by nft, whatever the mode.
+  const frozen = owner.kind === 'iptables-nft' && owner.evidence === 'xt';
+  const canAdopt = actions !== undefined && !managed && owner.kind === 'unknown';
+  const canDelete = actions !== undefined && !frozen && (managed || actions.manualOverride);
   const counts = tableCounts(node);
   const summary = [
     t('counts.chains', { count: counts.chains }),
@@ -101,9 +127,34 @@ function TableCard({ node, owner, model }: { node: TableNode; owner: TableOwner;
       <summary className={styles.tableHeader}>
         <span className={styles.family}>{family}</span>
         <span className={`${styles.tableName} mono`}>{name}</span>
+        {managed && (
+          <span className={`${styles.badge} ${styles.badgeManaged}`} title={t('table.managedTitle')}>
+            nftm
+          </span>
+        )}
         <OwnerBadge owner={owner} />
         <span className={styles.tableCounts}>{summary.join(' · ')}</span>
       </summary>
+
+      {(canAdopt || canDelete) && (
+        <div className={styles.tableActions}>
+          {canAdopt && (
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => actions.onChange([{ kind: 'adopt', family, table: name }])}>
+              {t('table.adopt')}
+            </button>
+          )}
+          {canAdopt && <span className={styles.actionHint}>{t('table.adoptHint')}</span>}
+          {canDelete && (
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost btn-danger"
+              onClick={() => actions.onChange([{ kind: 'delete', family, table: name }])}
+            >
+              {t('table.delete')}
+            </button>
+          )}
+        </div>
+      )}
 
       {owner.kind !== 'unknown' && <OwnerNote owner={owner} />}
       {node.table.comment && <p className={styles.comment}>{node.table.comment}</p>}

@@ -194,27 +194,45 @@ disappears with it.
 
 ## Applying changes
 
-1. **Snapshot.** Run `nft -j list ruleset` and keep the result locally as
-   history.
-2. **Build** a transaction that touches managed tables only.
-3. **Validate** it with `nft -c` on the host.
-4. **Show the normalized diff**; the user approves.
-5. **Arm the rollback.** Upload a rollback file to `/var/lib/nftm/`. It restores
-   *only the managed tables*, so changes that other tools made in the meantime
-   survive. Then start a timer on the host:
-   `systemd-run --on-active=60s --unit=nftm-rollback-<id> nft -f <file>`.
-   Without systemd, fall back to `setsid sh -c 'sleep 60; nft -f <file>'`.
-6. **Apply** atomically with `nft -f`, as one transaction.
-7. **Verify with a fresh SSH connection** that bypasses ControlMaster
-   (`-o ControlPath=none`). An existing connection usually survives thanks to
-   `ct state established` even when new connections are blocked, so it would
-   report a false "works".
-8. **Confirm.** The user confirms and nftm stops the timer. If the tab closes
-   or the connection drops, the host rolls back by itself.
-9. **Persist.** Write the managed tables to `/etc/nftm/*.nft`. The first time,
-   and only with the user's consent, add `include "/etc/nftm/*.nft"` to the
+Implemented in [`packages/server/src/hosts/deploy.ts`](../packages/server/src/hosts/deploy.ts).
+A change is a list of table operations: adopt, replace (or create), delete.
+
+1. **Plan.** Ownership rules decide what may change (see above). Each table
+   is read with `nft list table` (the rollback is built from that, so
+   counter values and set elements come back too). A replacement must be a
+   single, indented block for the named table, without `include`. The change
+   and the way back are written as `table X {}; delete table X; ...` scripts
+   into a private directory on the host (`mktemp -d`, mode 0700), and **both**
+   are checked with `nft -c`: nftm applies nothing it could not undo. The UI
+   shows the diff, nft's verdict and how the change is protected.
+2. **Apply.** First, the tables are compared with the plan, ignoring counter
+   values, quota usage and expiry countdowns; if someone changed them
+   meanwhile, nftm stops. Then the **watchdog** is armed: a small POSIX script
+   that, unless a `confirmed` file appears within the deadline (60 s by
+   default), restores the tables from the rollback script. It runs as a
+   transient systemd unit when root may start one, otherwise as a process
+   detached with `setsid` (hosts without systemd, the sandbox), or as the
+   login user calling `sudo -n nft` when sudo allows only nft. If none is
+   possible, nftm refuses to apply. The change is applied with `nft -f` in one
+   transaction.
+3. **Check.** For SSH hosts, a new connection that shares nothing with the
+   existing one runs `true`. An existing connection usually survives a rule
+   that blocks every new one (thanks to `ct state established`), so it would
+   report a false "works". If the new connection fails, nftm undoes the change
+   at once through the existing connection. Afterwards nftm checks whether the
+   watchdog already fired (a check can outlast a short deadline) and reports
+   what really happened.
+4. **Confirm or roll back.** Keeping the change creates `confirmed`; the
+   watchdog then removes the directory. "Roll back now" restores the tables
+   through nft. Without a decision the host rolls back by itself, and nftm
+   reads the watchdog's record to report it. Directories older than a day are
+   cleaned up by the next deployment.
+5. **Persist** (not yet): write the managed tables to `/etc/nftm/*.nft` and,
+   once and with the user's consent, add `include "/etc/nftm/*.nft"` to the
    distribution's main config (`/etc/nftables.conf` on Debian,
    `/etc/sysconfig/nftables.conf` on RHEL).
+
+Every step is logged as a JSON line in `changes.log` next to `hosts.json`.
 
 ## Local panel security
 
@@ -272,6 +290,8 @@ The npm supply chain is a real risk for a tool with this access.
    confirming unknown and changed host keys in the panel.
 2. **Text-mode editing** of managed tables, with diff, safe apply with
    rollback, and persistence. From here nftm can do everything nftables can.
+   Done so far: safe apply with the watchdog, adopting and deleting tables,
+   Manual override.
 3. **Structured rule forms** and live set/map element editing. This is where
    "easier" starts.
 4. **Monitoring:** tracing, `nft monitor`, live counters.

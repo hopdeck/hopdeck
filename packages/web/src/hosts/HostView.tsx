@@ -1,4 +1,4 @@
-import type { HostFacts, HostKind, HostStatus, HostSummary, Privilege } from '@nftm/core';
+import type { HostFacts, HostKind, HostStatus, HostSummary, Privilege, TableChange } from '@nftm/core';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import { ErrorBody, ErrorCallout, errorTitle, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
@@ -10,7 +10,9 @@ import { ListingView } from '../ruleset/ListingView.tsx';
 import { PacketPathView } from '../ruleset/PacketPathView.tsx';
 import { RulesetView } from '../ruleset/RulesetView.tsx';
 import { useRuleset, type RulesetState } from '../ruleset/useRuleset.ts';
+import { DeploymentDialog } from '../deploy/DeploymentDialog.tsx';
 import { HostKeyPanel } from './HostKeyPanel.tsx';
+import { ManualOverrideBanner, ManualOverrideButton } from './ManualOverride.tsx';
 import styles from './HostView.module.css';
 import { hostSubtitle } from './status.ts';
 
@@ -49,6 +51,8 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   const [tab, setTab] = useState('rules');
   // A chain to scroll to once the rules tab is shown, e.g. picked in the packet path.
   const [scrollTarget, setScrollTarget] = useState<string>();
+  // Changes being planned and applied in the deployment dialog.
+  const [changes, setChanges] = useState<TableChange[]>();
 
   useEffect(() => {
     if (tab !== 'rules' || scrollTarget === undefined) return;
@@ -92,6 +96,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
             {connecting ? <span className="spinner" aria-hidden="true" /> : <RefreshIcon />}
             {t(status.state === 'new' ? 'host.connect' : 'host.reconnect')}
           </button>
+          {readable && <ManualOverrideButton host={host} onUpdate={onUpdate} />}
           {host.kind === 'ssh' && (
             <button type="button" className="btn btn-ghost btn-danger" onClick={onRemove}>
               <TrashIcon />
@@ -100,6 +105,8 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
           )}
         </div>
       </header>
+
+      <ManualOverrideBanner host={host} onUpdate={onUpdate} />
 
       {host.kind === 'sandbox' && (
         <Callout tone="info" icon={<SandboxIcon />} title={t('host.sandboxTitle')}>
@@ -138,7 +145,11 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
           active={tab}
           onChange={setTab}
           tabs={[
-            { id: 'rules', label: t('tabs.rules'), content: <RulesetView state={ruleset} /> },
+            {
+              id: 'rules',
+              label: t('tabs.rules'),
+              content: <RulesetView state={ruleset} actions={{ manualOverride: host.manualOverride, onChange: setChanges }} />,
+            },
             {
               id: 'path',
               label: t('tabs.path'),
@@ -160,6 +171,15 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
           ]}
         />
       )}
+      <DeploymentDialog
+        hostId={host.id}
+        hostName={host.name}
+        changes={changes}
+        onClose={(changed) => {
+          setChanges(undefined);
+          if (changed) ruleset.reload();
+        }}
+      />
     </section>
   );
 }

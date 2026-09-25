@@ -97,6 +97,24 @@
   font-size: var(--text-xs);
 }
 
+.marks {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.override {
+  padding: 0 5px;
+  border: 1px solid var(--warn-border);
+  border-radius: 4px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .add {
   display: flex;
   align-items: center;

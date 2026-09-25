@@ -98,6 +98,13 @@ export const LockIcon = (props: IconProps) => (
   </Svg>
 );
 
+export const UnlockIcon = (props: IconProps) => (
+  <Svg {...props}>
+    <rect x="5" y="10.5" width="14" height="10" rx="2" />
+    <path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 6.8-1.2" />
+  </Svg>
+);
+
 export const AlertIcon = (props: IconProps) => (
   <Svg {...props}>
     <path d="M10.3 4.2L2.8 17.5A2 2 0 0 0 4.5 20.5h15a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z" />

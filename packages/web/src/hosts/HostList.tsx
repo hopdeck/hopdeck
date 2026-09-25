@@ -38,7 +38,14 @@ export function HostList({ hosts, selectedId, connecting, onSelect, onAdd }: Hos
                     {'text' in subtitle ? subtitle.text : t(subtitle.key)}
                   </span>
                 </span>
-                <span className={`dot dot-${status.tone}`} role="img" aria-label={t(status.label)} title={t(status.label)} />
+                <span className={styles.marks}>
+                  {host.manualOverride && (
+                    <span className={styles.override} title={t('override.on')}>
+                      {t('override.short')}
+                    </span>
+                  )}
+                  <span className={`dot dot-${status.tone}`} role="img" aria-label={t(status.label)} title={t(status.label)} />
+                </span>
               </button>
             </li>
           );
