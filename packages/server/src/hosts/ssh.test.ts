@@ -48,6 +48,13 @@ describe('SshExecutor', () => {
     expect((await ssh.exec(['sh', '-c', 'exit 7'])).exitCode).toBe(7);
   });
 
+  it('uses another ssh config file when asked', async () => {
+    const custom = new SshExecutor({ destination: 'fw1', controlDir: dir, sshPath, configFile: '/etc/nftm/ssh config' });
+    await custom.exec(['true']);
+    const args = (await readFile(`${sshPath}.args`, 'utf8')).trimEnd().split('\n');
+    expect(args.slice(0, 2)).toEqual(['-F', '/etc/nftm/ssh config']);
+  });
+
   it('refuses destinations that ssh would read as options', () => {
     for (const destination of ['-oProxyCommand=touch /tmp/pwned', '', 'a b']) {
       expect(() => new SshExecutor({ destination, controlDir: dir, sshPath })).toThrow(/invalid SSH destination/);

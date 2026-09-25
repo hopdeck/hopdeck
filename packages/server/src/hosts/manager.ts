@@ -30,6 +30,8 @@ export interface HostManagerOptions {
   configDir: string;
   /** Directory for SSH ControlMaster sockets. */
   controlDir: string;
+  /** An ssh config file used instead of ~/.ssh/config. */
+  sshConfigFile?: string | undefined;
   /** Executor of the sandbox host, when one runs. */
   sandbox?: Executor;
   /** Replaces the SSH executor, for tests. */
@@ -180,7 +182,11 @@ export class HostManager {
   #sshEntry(host: StoredHost): Entry {
     const executor =
       this.#options.createSshExecutor?.(host.destination) ??
-      new SshExecutor({ destination: host.destination, controlDir: this.#options.controlDir });
+      new SshExecutor({
+        destination: host.destination,
+        controlDir: this.#options.controlDir,
+        configFile: this.#options.sshConfigFile,
+      });
     return {
       id: host.id,
       kind: 'ssh',

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { demoRuleset, ensureControlDir, generateToken, HostManager, Sandbox, startServer } from '@nftm/server';
@@ -19,6 +19,7 @@ Options:
 
 Environment:
   NFTM_CONFIG_DIR    where hosts.json is kept (default: ~/.config/nftm)
+  NFTM_SSH_CONFIG    an ssh config file to use instead of ~/.ssh/config
 `;
 
 const DEV_UI_ORIGINS = ['http://127.0.0.1:5173', 'http://localhost:5173'];
@@ -55,9 +56,12 @@ if (values.sandbox) {
   }
 }
 
+const sshConfig = process.env['NFTM_SSH_CONFIG'];
+
 const hosts = await HostManager.open({
   configDir,
   controlDir: await ensureControlDir(),
+  sshConfigFile: sshConfig ? resolve(sshConfig) : undefined,
   ...(sandbox && { sandbox: sandbox.executor }),
 });
 

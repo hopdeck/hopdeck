@@ -11,6 +11,8 @@ export interface SshExecutorOptions {
   destination: string;
   /** Private directory for ControlMaster sockets, see ensureControlDir(). */
   controlDir: string;
+  /** Replaces ~/.ssh/config (ssh -F), e.g. to reach a test host without touching the user's setup. */
+  configFile?: string | undefined;
   /** Defaults to "ssh" from PATH. */
   sshPath?: string;
   timeoutMs?: number;
@@ -39,6 +41,7 @@ export class SshExecutor implements Executor {
     this.#sshPath = options.sshPath ?? 'ssh';
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.#sshArgs = [
+      ...(options.configFile !== undefined ? ['-F', options.configFile] : []),
       '-T',
       ...['-o', 'BatchMode=yes'],
       ...['-o', 'ConnectTimeout=10'],
