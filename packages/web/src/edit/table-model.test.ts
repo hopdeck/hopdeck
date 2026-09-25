@@ -1,4 +1,4 @@
-import { editableTable, emptyRule, findTable, renderRule, renderTable } from '@nftm/core';
+import { editableTable, emptyRule, findTable, newSetBlock, renderRule, renderTable } from '@nftm/core';
 import { describe, expect, it } from 'vitest';
 import basicJson from '../../../core/test/fixtures/basic.json' with { type: 'json' };
 import basicListing from '../../../core/test/fixtures/basic.listing?raw';
@@ -11,11 +11,12 @@ const model = buildModel({ json: rulesJson, listing: rulesListing, readAt: '2026
 const node = findTable(model.ruleset, 'inet', 't')!;
 const table = editableTable(model.text, 'inet', 't')!;
 const chainsOf = () => initialChains(table, node, model);
+const setsOf = () => liveSource(model, node)!.sets;
 const byName = (chains: ChainState[], name: string) => chains.find((state) => state.chain.name === name)!;
 
 /** Every rule row sits on the line the map says, with the text the row has. */
 function expectLinesMatch(chains: ChainState[]) {
-  const { text, lines } = definitionOf(table, chains);
+  const { text, lines } = definitionOf(table, chains, setsOf());
   const all = text.split('\n');
   const rows = chains.flatMap((state) => state.rows);
   expect(lines.size).toBe(rows.length);
@@ -52,7 +53,7 @@ describe('initialChains', () => {
 describe('definitionOf', () => {
   it('gives back the table unchanged when nothing was edited', () => {
     const chains = chainsOf();
-    expect(definitionOf(table, chains).text).toBe(renderTable(table));
+    expect(definitionOf(table, chains, setsOf()).text).toBe(renderTable(table));
     expectLinesMatch(chains);
   });
 
@@ -65,7 +66,7 @@ describe('definitionOf', () => {
     const form = { ...emptyRule(), protocol: 'udp', dstPort: { value: '123', negate: false } };
     byName(chains, 'other').rows.push({ key: 'new-1', handle: undefined, text: renderRule(form, 'inet'), form, status: 'new' });
 
-    const { text } = definitionOf(table, chains);
+    const { text } = definitionOf(table, chains, setsOf());
     expect(text).toContain('\tchain other {\n\t\tudp dport 123 accept\n\t}');
     expect(text).toContain('policy accept;');
     expect(text).not.toContain('ct state invalid drop');
@@ -81,7 +82,7 @@ describe('chains added and deleted in the editor', () => {
     guard.rows.push({ key: 'new-guard', handle: undefined, text: 'ct state established accept', form: undefined, status: 'new' });
     chains.push(guard, addedChain('helpers', undefined));
 
-    const { text } = definitionOf(table, chains);
+    const { text } = definitionOf(table, chains, setsOf());
     expect(text).not.toContain('chain post');
     expect(text).not.toContain('\n\n\n');
     expect(text.endsWith(
@@ -103,6 +104,20 @@ describe('chains added and deleted in the editor', () => {
   });
 });
 
+describe('sets added and deleted in the editor', () => {
+  it('writes new sets before the first chain and drops deleted ones', () => {
+    const sets = setsOf();
+    expect(sets.map((state) => `${state.block.kind} ${state.block.name}`)).toEqual(['set admins']);
+    const ban = newSetBlock({ kind: 'set', name: 'ban', type: 'ipv4_addr', flags: ['timeout'], counter: false, elements: [] });
+    const { text } = definitionOf(table, chainsOf(), [{ block: ban, isNew: true }]);
+    expect(text).not.toContain('set admins');
+    expect(text).toContain('\tcounter hits {');
+    expect(text).not.toContain('\n\n\n');
+    expect(text).toContain('\tset ban {\n\t\ttype ipv4_addr\n\t\tflags timeout\n\t}\n\n\tchain other {');
+    expectLinesMatch(chainsOf());
+  });
+});
+
 describe('editor sources', () => {
   it('start a live table from what the host has', () => {
     const source = liveSource(model, node)!;
@@ -113,7 +128,7 @@ describe('editor sources', () => {
 
   it('start a new table from the host template', () => {
     const source = newTableSource('inet', 'fw', { template: 'host', ssh: true });
-    expect(definitionOf(source.table, source.chains).text).toBe(
+    expect(definitionOf(source.table, source.chains, source.sets).text).toBe(
       [
         'table inet fw {',
         '\tcomment "managed by nftm"',
@@ -133,7 +148,7 @@ describe('editor sources', () => {
     const ip = newTableSource('ip', 'fw', { template: 'host', ssh: false });
     expect(ip.chains[0]!.rows.map((row) => row.text)).not.toContainEqual(expect.stringContaining('icmpv6'));
     expect(ip.chains[0]!.rows.map((row) => row.text)).not.toContainEqual(expect.stringContaining('dport 22'));
-    expect(definitionOf(newTableSource('netdev', 'x', { template: 'empty', ssh: true }).table, []).text).toBe(
+    expect(definitionOf(newTableSource('netdev', 'x', { template: 'empty', ssh: true }).table, [], []).text).toBe(
       'table netdev x {\n\tcomment "managed by nftm"\n}\n',
     );
   });

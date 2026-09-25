@@ -187,12 +187,21 @@ disappears with it.
 - Tables written by iptables-nft contain `xt` expressions that nft cannot
   recreate. They are always read-only.
 - There are two ways to change a managed table:
-  - **Replace the whole table** in one transaction. Both editors do this
-    today. Lines the editor did not touch go back exactly as nft printed them,
-    so unchanged rules keep their counter values (`counter packets N bytes M`)
-    and sets keep their elements; edited rules start counting from zero.
-  - **Targeted changes by rule handle** (later). Needed where a replacement
-    would disturb live state, e.g. sets filled by the data path.
+  - **Replace the whole table** in one transaction. Both editors do this.
+    Lines the editor did not touch go back exactly as nft printed them, so
+    unchanged rules keep their counter values (`counter packets N bytes M`);
+    edited rules start counting from zero. The editor also sends the table as
+    it first showed it (`base`), and the server takes every set, map or other
+    object the user left alone from the host as it is at planning time, so
+    elements that expired while the editor was open stay gone.
+  - **Elements in place**: `delete element` and `create element` for one set
+    or map, from its Elements dialog, like a MikroTik address list. The rest
+    of the table is not touched. The rollback flushes the set and adds back
+    the elements as nft listed them, with timeouts, expiry, counters and
+    comments. Between review and apply only the set's declaration must stay
+    the same, since elements come and go on their own.
+  - **Targeted rule changes by handle** (later), for rules whose counters
+    must survive an edit of the table.
 
 ## Applying changes
 
@@ -322,8 +331,9 @@ The npm supply chain is a real risk for a tool with this access.
    editor.
 3. **Structured rule forms** and live set/map element editing. This is where
    "easier" starts. Done so far: the visual rules grid and the rule dialog,
-   creating tables (empty, or from a host firewall template) and adding or
-   deleting chains. Next: sets and maps, targeted changes.
+   creating tables (empty, or from a host firewall template), adding or
+   deleting chains, sets and maps, and editing set and map elements in place.
+   Next: targeted rule changes.
 4. **Monitoring:** tracing, `nft monitor`, live counters.
 5. **Model B** (project layer).
 

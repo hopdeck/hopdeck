@@ -105,7 +105,11 @@ export interface HostSummary {
 /** One table change asked of the server. */
 export type TableChange =
   | { kind: 'adopt'; family: Family; table: string }
-  | { kind: 'replace'; family: Family; table: string; definition: string }
+  /**
+   * `base` is the table as the editor first showed it; objects left as they
+   * were there follow the host's current state (see refreshUntouched).
+   */
+  | { kind: 'replace'; family: Family; table: string; definition: string; base?: string }
   | { kind: 'delete'; family: Family; table: string }
   /** Elements of one named set or map, changed in place; the rest of the table stays as it is. */
   | { kind: 'elements'; family: Family; table: string; set: string; setKind: 'set' | 'map'; add: string[]; remove: string[] };

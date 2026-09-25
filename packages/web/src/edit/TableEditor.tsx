@@ -8,7 +8,7 @@ import { formatBytes } from '../ruleset/model.ts';
 import { CodeEditor } from './CodeEditor.tsx';
 import styles from './Editor.module.css';
 import { definitionErrorLines } from './nft-errors.ts';
-import { definitionOf, type ChainState, type EditorSource } from './table-model.ts';
+import { definitionOf, type ChainState, type EditorSource, type SetState } from './table-model.ts';
 import { VisualEditor } from './VisualEditor.tsx';
 
 export type EditorMode = 'visual' | 'text';
@@ -23,6 +23,7 @@ export interface EditorProblem {
 export interface EditorDraft {
   mode: EditorMode;
   chains: ChainState[];
+  sets: SetState[];
   text: string;
 }
 
@@ -44,11 +45,12 @@ interface TableEditorProps {
 export function TableEditor({ family, name, source, initialMode, draft, onDraft, problem, onReview, onClose }: TableEditorProps) {
   const { t, locale } = useI18n();
   const [chains, setChains] = useState<ChainState[]>(() => draft?.chains ?? source?.chains ?? []);
+  const [sets, setSets] = useState<SetState[]>(() => draft?.sets ?? source?.sets ?? []);
   const [mode, setMode] = useState<EditorMode>(draft?.mode ?? initialMode);
-  const [text, setText] = useState(() => draft?.text ?? (source === undefined ? '' : definitionOf(source.table, source.chains).text));
-  const changed = source !== undefined && (source.creating || (mode === 'visual' ? definitionOf(source.table, chains).text : text) !== source.original);
+  const [text, setText] = useState(() => draft?.text ?? (source === undefined ? '' : definitionOf(source.table, source.chains, source.sets).text));
+  const changed = source !== undefined && (source.creating || (mode === 'visual' ? definitionOf(source.table, chains, sets).text : text) !== source.original);
 
-  useEffect(() => onDraft({ mode, chains, text }), [mode, chains, text]);
+  useEffect(() => onDraft({ mode, chains, sets, text }), [mode, chains, sets, text]);
 
   // Closing or reloading the page would lose the edits.
   useEffect(() => {
@@ -62,7 +64,7 @@ export function TableEditor({ family, name, source, initialMode, draft, onDraft,
     return <Callout tone="danger" icon={<AlertIcon />} title={t('editor.notFound', { table: `${family} ${name}` })} />;
   }
 
-  const visual = definitionOf(source.table, chains);
+  const visual = definitionOf(source.table, chains, sets);
   const definition = mode === 'visual' ? visual.text : text;
   // Text edits cannot be turned back into the visual model, which follows the live table.
   const textDiverged = mode === 'text' && text !== visual.text;
@@ -108,7 +110,16 @@ export function TableEditor({ family, name, source, initialMode, draft, onDraft,
       )}
 
       {mode === 'visual' ? (
-        <VisualEditor family={family} chains={chains} counters={source.counters} counterOf={counterOf} errorRows={errorRows} onChange={setChains} />
+        <VisualEditor
+          family={family}
+          chains={chains}
+          sets={sets}
+          counters={source.counters}
+          counterOf={counterOf}
+          errorRows={errorRows}
+          onChange={setChains}
+          onSetsChange={setSets}
+        />
       ) : (
         <>
           <p className={styles.note}>{t('editor.textNote')}</p>

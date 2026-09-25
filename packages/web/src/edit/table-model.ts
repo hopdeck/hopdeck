@@ -10,6 +10,7 @@ import {
   ruleForm,
   withPolicy,
   type BaseChainSpec,
+  type EditableBlock,
   type EditableChain,
   type EditableTable,
   type Family,
@@ -39,10 +40,18 @@ export interface ChainState {
   rows: RuleRow[];
 }
 
+/** A named set or map of the table. */
+export interface SetState {
+  block: EditableBlock;
+  /** Added in the editor; not on the host yet. */
+  isNew: boolean;
+}
+
 /** What the editor starts from: the table on the host, or a new one. */
 export interface EditorSource {
   table: EditableTable;
   chains: ChainState[];
+  sets: SetState[];
   /** The definition the host has now; empty for a table being created. */
   original: string;
   creating: boolean;
@@ -69,6 +78,9 @@ export function liveSource(model: RulesetModel, node: TableNode): EditorSource |
   return {
     table,
     chains: initialChains(table, node, model),
+    sets: table.parts.flatMap((part) =>
+      part.kind === 'block' && (part.block.kind === 'set' || part.block.kind === 'map') ? [{ block: part.block, isNew: false }] : [],
+    ),
     original: renderTable(table),
     creating: false,
     counters: node.objects.filter((object) => object.kind === 'counter').map((object) => object.object.name),
@@ -84,6 +96,7 @@ export function newTableSource(family: Family, name: string, spec: NewTableSpec)
   return {
     table: newTable(family, name),
     chains: spec.template === 'host' ? [hostInput(family, spec.ssh)] : [],
+    sets: [],
     original: '',
     creating: true,
     counters: [],
@@ -157,13 +170,16 @@ export function initialChains(table: EditableTable, node: TableNode, model: Rule
 }
 
 /**
- * The definition the chains describe, and the line of each rule in it
- * (1-based). Chains missing from `chains` were deleted; new chains go last.
+ * The definition the chains and sets describe, and the line of each rule in it
+ * (1-based). Chains and sets missing from the lists were deleted; new sets go
+ * before the first chain, new chains last.
  */
-export function definitionOf(table: EditableTable, chains: ChainState[]): { text: string; lines: Map<string, number> } {
+export function definitionOf(table: EditableTable, chains: ChainState[], sets: SetState[]): { text: string; lines: Map<string, number> } {
   const byName = new Map(chains.map((state) => [state.chain.name, state]));
+  const keptSets = new Set(sets.filter((state) => !state.isNew).map((state) => `${state.block.kind} ${state.block.name}`));
   const output: string[] = [];
   const lines = new Map<string, number>();
+  let setsPlaced = false;
 
   const write = (state: ChainState) => {
     const chain = state.policy === undefined ? state.chain : withPolicy(state.chain, state.policy);
@@ -174,26 +190,46 @@ export function definitionOf(table: EditableTable, chains: ChainState[]): { text
     }
     output.push('\t}');
   };
+  // nft separates blocks with an empty line.
+  const separate = () => {
+    if (output.at(-1) === '\t}') output.push('');
+  };
+  const placeNewSets = (chainFollows: boolean) => {
+    if (setsPlaced) return;
+    setsPlaced = true;
+    const added = sets.filter((state) => state.isNew);
+    for (const state of added) {
+      separate();
+      output.push(...state.block.lines);
+    }
+    if (added.length > 0 && chainFollows) output.push('');
+  };
+  const skip = () => {
+    // A deleted block takes the empty line before it along.
+    if (output.at(-1) === '') output.pop();
+  };
 
   const closing = table.parts.length - 1;
   table.parts.forEach((part, index) => {
+    if (part.kind === 'chain') placeNewSets(true);
     if (index === closing) {
-      for (const state of chains.filter((candidate) => candidate.isNew)) {
-        // nft separates blocks with an empty line.
-        if (output.at(-1) === '\t}') output.push('');
+      const added = chains.filter((candidate) => candidate.isNew);
+      placeNewSets(added.length > 0);
+      for (const state of added) {
+        separate();
         write(state);
       }
     }
     if (part.kind === 'line') {
       output.push(part.text);
-      return;
-    }
-    const state = byName.get(part.chain.name);
-    if (state !== undefined && !state.isNew) {
-      write(state);
-    } else if (output.at(-1) === '') {
-      // A deleted chain takes the empty line before it along.
-      output.pop();
+    } else if (part.kind === 'block') {
+      const { kind, name, lines: blockLines } = part.block;
+      if ((kind !== 'set' && kind !== 'map') || keptSets.has(`${kind} ${name}`)) output.push(...blockLines);
+      else skip();
+    } else {
+      const state = byName.get(part.chain.name);
+      if (state !== undefined && !state.isNew) write(state);
+      else skip();
     }
   });
   return { text: `${output.join('\n')}\n`, lines };

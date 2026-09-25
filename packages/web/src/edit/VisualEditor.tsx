@@ -1,4 +1,4 @@
-import type { Family } from '@nftm/core';
+import { parseSetBlock, type Family } from '@nftm/core';
 import { Fragment, useState, type ReactNode } from 'react';
 import { ArrowDownIcon, ArrowUpIcon, CopyIcon, EditIcon, PlusIcon, TrashIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
@@ -6,19 +6,22 @@ import type { MessageKey } from '../i18n/locales.ts';
 import { NftCode } from '../ruleset/NftCode.tsx';
 import styles from './Editor.module.css';
 import { ChainDialog } from './ChainDialog.tsx';
+import { SetDialog } from './SetDialog.tsx';
 import { RuleDialog, type RuleEdit } from './RuleDialog.tsx';
 import { ruleColumns, type RuleColumns } from './rule-summary.ts';
-import { addedChain, newRowKey, type ChainState, type RuleRow } from './table-model.ts';
+import { addedChain, newRowKey, type ChainState, type RuleRow, type SetState } from './table-model.ts';
 
 interface VisualEditorProps {
   family: Family;
   chains: ChainState[];
+  sets: SetState[];
   counters: readonly string[];
   /** Live counter values of a rule, by handle. */
   counterOf(handle: number): string | undefined;
   /** Rows nft reported errors for. */
   errorRows: ReadonlySet<string>;
   onChange(chains: ChainState[]): void;
+  onSetsChange(sets: SetState[]): void;
 }
 
 type Column = Exclude<keyof RuleColumns, 'action' | 'actionTone'> | 'comment';
@@ -40,10 +43,11 @@ const COLUMNS: readonly { id: Column; label: MessageKey; mono: boolean }[] = [
 type Cells = RuleColumns & { comment: string };
 
 /** The rules of each chain as a grid, MikroTik style. */
-export function VisualEditor({ family, chains, counters, counterOf, errorRows, onChange }: VisualEditorProps) {
+export function VisualEditor({ family, chains, sets, counters, counterOf, errorRows, onChange, onSetsChange }: VisualEditorProps) {
   const { t } = useI18n();
   const [editing, setEditing] = useState<{ chain: number; row: number | 'new' } | undefined>();
   const [addingChain, setAddingChain] = useState(false);
+  const [addingSet, setAddingSet] = useState(false);
   const names = chains.map((state) => state.chain.name);
   // jump and goto lead to regular chains only.
   const targets = chains.filter((state) => state.base === undefined).map((state) => state.chain.name);
@@ -76,6 +80,43 @@ export function VisualEditor({ family, chains, counters, counterOf, errorRows, o
 
   return (
     <div className={styles.visual}>
+      <section className={`card ${styles.chain}`}>
+        <header className={styles.chainHeader}>
+          <h3 className={styles.chainName}>{t('ruleset.setsAndMaps')}</h3>
+          <span className={styles.spacer} />
+          <button type="button" className="btn btn-sm" onClick={() => setAddingSet(true)}>
+            <PlusIcon />
+            {t('set.add')}
+          </button>
+        </header>
+        {sets.length === 0 ? (
+          <p className={styles.empty}>{t('editor.noSets')}</p>
+        ) : (
+          <ul className={styles.setList}>
+            {sets.map((state) => {
+              const parsed = parseSetBlock(state.block.lines.map((line) => line.replace(/^\t/, '')).join('\n'));
+              const key = `${state.block.kind} ${state.block.name}`;
+              return (
+                <li key={key} className={styles.setRow}>
+                  <span className={styles.tag}>{state.block.kind}</span>
+                  <span className={`${styles.chainName} mono`}>{state.block.name}</span>
+                  <span className={styles.regular}>
+                    {[...(parsed?.declaration ?? []), t('counts.elements', { count: parsed?.elements.length ?? 0 })].join(' · ')}
+                  </span>
+                  {state.isNew && <span className={styles.newBadge}>{t('editor.newChain')}</span>}
+                  <span className={styles.spacer} />
+                  <button type="button" className="btn btn-ghost btn-sm btn-icon btn-danger" title={t('editor.deleteSet')} aria-label={t('editor.deleteSet')}
+                    onClick={() => onSetsChange(sets.filter((other) => other !== state))}>
+                    <TrashIcon />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <p className={`${styles.note} ${styles.setsNote}`}>{t('editor.setsNote')}</p>
+      </section>
+
       {chains.map((state, chainIndex) => (
         <section key={state.chain.name} className={`card ${styles.chain}`}>
           <header className={styles.chainHeader}>
@@ -137,6 +178,16 @@ export function VisualEditor({ family, chains, counters, counterOf, errorRows, o
           {t('chain.add')}
         </button>
       </div>
+
+      <SetDialog
+        open={addingSet}
+        existing={sets.map((state) => state.block.name)}
+        onAdd={(block) => {
+          onSetsChange([...sets, { block, isNew: true }]);
+          setAddingSet(false);
+        }}
+        onClose={() => setAddingSet(false)}
+      />
 
       <ChainDialog
         open={addingChain}

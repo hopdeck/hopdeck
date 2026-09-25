@@ -6,7 +6,7 @@ import { parseListing, stripHandles } from './listing.ts';
 import { ruleKey } from './keys.ts';
 import { emptyRule, renderRule, ruleForm, type RuleForm } from './rule-form.ts';
 import { parseRuleset } from './ruleset.ts';
-import { chainPolicy, chains, editableTable, newChain, newTable, renderTable, withPolicy } from './table-edit.ts';
+import { chainPolicy, chains, editableTable, newChain, newSetBlock, newTable, refreshUntouched, renderTable, withPolicy } from './table-edit.ts';
 
 const ruleset = parseRuleset(rulesJson);
 const listing = parseListing(rulesListing);
@@ -166,5 +166,60 @@ describe('newTable and newChain', () => {
       ].join('\n'),
     );
     expect(chainPolicy(input)).toBe('drop');
+  });
+
+  it('keeps sets and other named objects as whole blocks', () => {
+    const table = editableTable(basicListing, 'inet', 'filter')!;
+    const blocks = table.parts.flatMap((part) => (part.kind === 'block' ? [`${part.block.kind} ${part.block.name} ${part.block.lines.length}`] : []));
+    expect(blocks).toEqual([
+      'counter web 3',
+      'quota monthly 3',
+      'limit slow 3',
+      'ct helper ftp 4',
+      'synproxy syn 4',
+      'set admins 5',
+      'map port_policy 5',
+      'flowtable fast 4',
+    ]);
+    const listed = stripHandles(basicListing);
+    expect(renderTable(table)).toBe(listed.slice(0, listed.indexOf('\n}\n') + 3));
+  });
+
+  it('writes a new set or map as nft lists it', () => {
+    expect(newSetBlock({ kind: 'set', name: 'ban', type: 'ipv4_addr', flags: ['interval', 'timeout'], timeout: '1h', counter: true, elements: ['10.0.0.0/24'] }).lines).toEqual([
+      '\tset ban {',
+      '\t\ttype ipv4_addr',
+      '\t\tflags interval,timeout',
+      '\t\tcounter',
+      '\t\ttimeout 1h',
+      '\t\telements = { 10.0.0.0/24 }',
+      '\t}',
+    ]);
+    expect(newSetBlock({ kind: 'map', name: 'm', type: 'ifname', value: 'verdict', flags: [], counter: false, elements: [] }).lines).toEqual([
+      '\tmap m {',
+      '\t\ttype ifname : verdict',
+      '\t}',
+    ]);
+  });
+});
+
+describe('refreshUntouched', () => {
+  const table = (block: string, rule: string) => `table inet t {\n${block}\n\n\tchain c {\n\t\t${rule}\n\t}\n}\n`;
+  const set = (elements: string) => `\tset s {\n\t\ttype ipv4_addr\n\t\tflags timeout\n\t\telements = { ${elements} }\n\t}`;
+
+  it('takes objects the user did not touch from the host as it is now', () => {
+    const base = table(set('1.1.1.1 expires 50m, 2.2.2.2 expires 1m'), 'accept');
+    const now = table(set('1.1.1.1 expires 40m'), 'accept');
+    const definition = table(set('1.1.1.1 expires 50m, 2.2.2.2 expires 1m'), 'drop');
+    expect(refreshUntouched(definition, base, now, 'inet', 't')).toBe(table(set('1.1.1.1 expires 40m'), 'drop'));
+  });
+
+  it('keeps what the user changed, and anything it cannot take apart', () => {
+    const base = table(set('1.1.1.1'), 'accept');
+    const now = table(set('3.3.3.3'), 'accept');
+    const definition = table(set('1.1.1.1, 9.9.9.9'), 'accept');
+    expect(refreshUntouched(definition, base, now, 'inet', 't')).toBe(definition);
+    const odd = `${definition}# trailing comment\n`;
+    expect(refreshUntouched(odd, base, now, 'inet', 't')).toBe(odd);
   });
 });

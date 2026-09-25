@@ -223,8 +223,16 @@ function toChange(value: unknown): TableChange {
     case 'adopt':
     case 'delete':
       return { kind: change['kind'], family: family as Family, table };
-    case 'replace':
-      return { kind: 'replace', family: family as Family, table, definition: requiredString(change, 'definition', 8 * 1024 * 1024) };
+    case 'replace': {
+      const base = optionalString(change, 'base', 8 * 1024 * 1024);
+      return {
+        kind: 'replace',
+        family: family as Family,
+        table,
+        definition: requiredString(change, 'definition', 8 * 1024 * 1024),
+        ...(base !== undefined && { base }),
+      };
+    }
     case 'elements': {
       const setKind = change['setKind'];
       if (setKind !== 'set' && setKind !== 'map') throw new ApiError(400, 'invalid-body', 'setKind must be set or map');

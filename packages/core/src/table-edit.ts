@@ -17,7 +17,15 @@ export interface EditableChain {
   rules: EditableRule[];
 }
 
-export type TablePart = { kind: 'line'; text: string } | { kind: 'chain'; chain: EditableChain };
+/** A named object of the table (set, map, counter, flowtable, ...), kept as nft listed it. */
+export interface EditableBlock {
+  kind: string;
+  name: string;
+  /** From "\tset NAME {" to "\t}". */
+  lines: string[];
+}
+
+export type TablePart = { kind: 'line'; text: string } | { kind: 'chain'; chain: EditableChain } | { kind: 'block'; block: EditableBlock };
 
 /** A table's text split into what the editor changes (chains and rules) and what it keeps verbatim. */
 export interface EditableTable {
@@ -27,6 +35,7 @@ export interface EditableTable {
 }
 
 const HANDLE = / # handle \d+$/;
+const BLOCK = /^\t(set|map|flowtable|counter|quota|limit|ct helper|ct timeout|ct expectation|synproxy|secmark|tunnel) (.+?) \{(?: # handle \d+)?$/;
 
 /** Reads a table out of `nft -a list ruleset` (or `nft -a list table`); undefined if it is not there. */
 export function editableTable(listing: string, family: Family, name: string): EditableTable | undefined {
@@ -37,11 +46,23 @@ export function editableTable(listing: string, family: Family, name: string): Ed
 
   const parts: TablePart[] = [{ kind: 'line', text: opening }];
   let chain: EditableChain | undefined;
+  let block: EditableBlock | undefined;
   for (let index = start + 1; index < lines.length; index += 1) {
     const line = lines[index]!;
     if (line === '}') {
       parts.push({ kind: 'line', text: '}' });
       return { family, name, parts };
+    }
+    if (block !== undefined) {
+      block.lines.push(line.replace(HANDLE, ''));
+      if (line === '\t}') block = undefined;
+      continue;
+    }
+    const blockStart = BLOCK.exec(line);
+    if (blockStart !== null) {
+      block = { kind: blockStart[1]!, name: blockStart[2]!.replace(/^"(.*)"$/, '$1'), lines: [line.replace(HANDLE, '')] };
+      parts.push({ kind: 'block', block });
+      continue;
     }
     if (chain !== undefined) {
       if (line === '\t}') {
@@ -70,6 +91,10 @@ export function renderTable(table: EditableTable): string {
   for (const part of table.parts) {
     if (part.kind === 'line') {
       lines.push(part.text);
+      continue;
+    }
+    if (part.kind === 'block') {
+      lines.push(...part.block.lines);
       continue;
     }
     const { opening, header, rules } = part.chain;
@@ -124,4 +149,57 @@ export function newTable(family: Family, name: string): EditableTable {
       { kind: 'line', text: '}' },
     ],
   };
+}
+
+/** What a new named set or map is declared with. */
+export interface SetSpec {
+  kind: 'set' | 'map';
+  name: string;
+  /** Key type, e.g. "ipv4_addr" or "ipv4_addr . inet_service". */
+  type: string;
+  /** For a map: the value type, e.g. "verdict". */
+  value?: string;
+  flags: string[];
+  /** Default timeout of elements, e.g. "1h". */
+  timeout?: string;
+  counter: boolean;
+  elements: string[];
+}
+
+/** A new set or map, written the way nft lists them. */
+export function newSetBlock(spec: SetSpec): EditableBlock {
+  const lines = [`\t${spec.kind} ${nftName(spec.name)} {`, `\t\ttype ${spec.type}${spec.kind === 'map' ? ` : ${spec.value}` : ''}`];
+  if (spec.flags.length > 0) lines.push(`\t\tflags ${spec.flags.join(',')}`);
+  if (spec.counter) lines.push('\t\tcounter');
+  if (spec.timeout !== undefined) lines.push(`\t\ttimeout ${spec.timeout}`);
+  if (spec.elements.length > 0) lines.push(`\t\telements = { ${spec.elements.join(', ')} }`);
+  lines.push('\t}');
+  return { kind: spec.kind, name: spec.name, lines };
+}
+
+/**
+ * The definition, with every named object (set, map, counter, ...) that the
+ * user left as it was in `base` taken from `current`, the table as it is now:
+ * elements that expired meanwhile stay gone and counters keep their values.
+ * Objects the user changed stay as written. A definition this cannot take
+ * apart without loss comes back unchanged.
+ */
+export function refreshUntouched(definition: string, base: string, current: string, family: Family, name: string): string {
+  const edited = editableTable(definition, family, name);
+  const before = editableTable(base, family, name);
+  const now = editableTable(current, family, name);
+  if (edited === undefined || before === undefined || now === undefined || renderTable(edited) !== definition) return definition;
+
+  const blocks = (table: EditableTable) =>
+    new Map<string, string[]>(table.parts.flatMap((part) => (part.kind === 'block' ? [[`${part.block.kind} ${part.block.name}`, part.block.lines]] : [])));
+  const original = blocks(before);
+  const live = blocks(now);
+  edited.parts = edited.parts.map((part) => {
+    if (part.kind !== 'block') return part;
+    const key = `${part.block.kind} ${part.block.name}`;
+    const untouched = original.get(key)?.join('\n') === part.block.lines.join('\n');
+    const lines = live.get(key);
+    return untouched && lines !== undefined ? { kind: 'block', block: { ...part.block, lines: [...lines] } } : part;
+  });
+  return renderTable(edited);
 }

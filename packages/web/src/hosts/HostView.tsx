@@ -199,7 +199,8 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                       problem={editing.problem}
                       onReview={(definition) => {
                         setEditing((current) => current && { ...current, sent: definition });
-                        setChanges([{ kind: 'replace', family: editing.family, table: editing.table, definition }]);
+                        const base = source !== undefined && !source.creating ? source.original : undefined;
+                        setChanges([{ kind: 'replace', family: editing.family, table: editing.table, definition, ...(base !== undefined && { base }) }]);
                       }}
                       onClose={() => setEditing(undefined)}
                     />

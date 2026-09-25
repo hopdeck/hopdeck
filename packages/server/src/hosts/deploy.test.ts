@@ -49,6 +49,20 @@ describe('planTable', () => {
     expect(() => planTable({ ...change, add: ['1.2.3.4 }\nflush ruleset'] }, current(text, 'managed by nftm'), false)).toThrow(/newline/);
   });
 
+  it('takes sets the editor left alone from the host as it is now', () => {
+    const table = (elements: string, policy: string) =>
+      `table inet mine {\n\tcomment "managed by nftm"\n\tset s {\n\t\ttype ipv4_addr\n\t\tflags timeout\n\t\telements = { ${elements} }\n\t}\n\n\tchain input {\n\t\ttype filter hook input priority filter; policy ${policy};\n\t}\n}\n`;
+    const base = table('1.1.1.1 expires 50m, 2.2.2.2 expires 10s', 'accept');
+    const now = table('1.1.1.1 expires 49m', 'accept');
+    const change = { kind: 'replace' as const, family: 'inet' as const, table: 'mine', definition: table('1.1.1.1 expires 50m, 2.2.2.2 expires 10s', 'drop'), base };
+    const plan = planTable(change, current(now, 'managed by nftm'), false);
+    expect(plan.after).toBe(table('1.1.1.1 expires 49m', 'drop'));
+    expect(plan.diff.filter((line) => line.kind !== 'same').map((line) => line.text)).toEqual([
+      '\t\ttype filter hook input priority filter; policy drop;',
+      '\t\ttype filter hook input priority filter; policy accept;',
+    ]);
+  });
+
   it('never adopts tables of other tools', () => {
     const firewalld = current('table inet firewalld {\n}\n');
     firewalld.node.table.name = 'firewalld';

@@ -9,6 +9,7 @@ import {
   parseListing,
   parseRuleset,
   parseSetBlock,
+  refreshUntouched,
   replaceTableScript,
   restoreElementsScript,
   tableOwner,
@@ -338,8 +339,13 @@ export function planTable(change: TableChange, current: CurrentTable | undefined
     case 'replace': {
       checkDefinition(change.definition, family, name);
       if (current !== undefined && !managed && !manualOverride) throw new HostError('table-not-editable', unmanaged);
+      // Objects left as the editor showed them follow the host's current state.
+      const definition =
+        current !== undefined && change.base !== undefined
+          ? refreshUntouched(change.definition, change.base, current.text, family, name)
+          : change.definition;
       // Tables nftm creates or manages keep the marker, so it cannot be lost by accident.
-      const after = current === undefined || managed ? withManagedComment(change.definition) : change.definition;
+      const after = current === undefined || managed ? withManagedComment(definition) : definition;
       const before = current?.text;
       return {
         family,
