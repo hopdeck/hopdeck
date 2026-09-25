@@ -29,7 +29,7 @@ const MAX_BODY_BYTES = 64 * 1024;
  * Reads a JSON request body. Requiring application/json also blocks HTML forms
  * on other sites, which cannot send that content type.
  */
-export async function readJson(req: IncomingMessage): Promise<unknown> {
+export async function readJson(req: IncomingMessage, maxBytes = MAX_BODY_BYTES): Promise<unknown> {
   if (!req.headers['content-type']?.startsWith('application/json')) {
     throw new ApiError(415, 'unsupported-media-type', 'expected application/json');
   }
@@ -37,7 +37,7 @@ export async function readJson(req: IncomingMessage): Promise<unknown> {
   let size = 0;
   for await (const chunk of req as AsyncIterable<Buffer>) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) throw new ApiError(413, 'payload-too-large');
+    if (size > maxBytes) throw new ApiError(413, 'payload-too-large');
     chunks.push(chunk);
   }
   try {

@@ -30,6 +30,12 @@ const TEXTS = new Map<string, ErrorText>([
   ['internal-error', { title: 'error.internal-error.title', hint: 'error.internal-error.hint' }],
   ['backend-unreachable', { title: 'error.backend-unreachable.title', hint: 'error.backend-unreachable.hint' }],
   ['invalid-ruleset', { title: 'error.invalid-ruleset.title' }],
+  ['table-not-editable', { title: 'error.table-not-editable.title' }],
+  ['invalid-definition', { title: 'error.invalid-definition.title' }],
+  ['ruleset-changed', { title: 'error.ruleset-changed.title', hint: 'error.ruleset-changed.hint' }],
+  ['rollback-unavailable', { title: 'error.rollback-unavailable.title', hint: 'error.rollback-unavailable.hint' }],
+  ['deployment-state', { title: 'error.deployment-state.title', hint: 'error.deployment-state.hint' }],
+  ['deployment-not-found', { title: 'error.deployment-not-found.title', hint: 'error.deployment-not-found.hint' }],
   ['ui-error', { title: 'error.ui-error.title', hint: 'error.ui-error.hint' }],
 ]);
 

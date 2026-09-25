@@ -1,0 +1,241 @@
+import { parseListing, parseRuleset, type Executor } from '@nftm/core';
+import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { checkDefinition, comparable, Deployments, planTable, readTable, type CurrentTable, type DeployTarget } from './deploy.ts';
+import { HostError } from './errors.ts';
+import { Sandbox } from './sandbox.ts';
+
+const MINE = 'table inet mine {\n\tchain input {\n\t\ttype filter hook input priority filter; policy accept;\n\t}\n}\n';
+
+function current(text: string, comment?: string): CurrentTable {
+  const table = { family: 'inet' as const, name: 'mine', handle: 1, ...(comment !== undefined && { comment }) };
+  const node = parseRuleset({ nftables: [{ table }] }).tables[0]!;
+  return { node, listing: parseListing(text), text };
+}
+
+describe('planTable', () => {
+  it('adopts a plain table by adding the marker', () => {
+    const plan = planTable({ kind: 'adopt', family: 'inet', table: 'mine' }, current(MINE), false);
+    expect(plan.action).toBe('adopt');
+    expect(plan.diff.filter((line) => line.kind !== 'same')).toEqual([{ kind: 'add', text: '\tcomment "managed by nftm"' }]);
+  });
+
+  it('changes unmanaged tables only with Manual override, and keeps the marker on managed ones', () => {
+    const replace = { kind: 'replace' as const, family: 'inet' as const, table: 'mine', definition: MINE };
+    expect(() => planTable(replace, current(MINE), false)).toThrow(/adopt it first, or switch on Manual override/);
+    expect(planTable(replace, current(MINE), true).after).toBe(MINE);
+    expect(planTable(replace, current(MINE, 'managed by nftm'), false).after).toContain('comment "managed by nftm"');
+    expect(planTable(replace, undefined, false)).toMatchObject({ action: 'create', before: undefined });
+  });
+
+  it('never adopts tables of other tools', () => {
+    const firewalld = current('table inet firewalld {\n}\n');
+    firewalld.node.table.name = 'firewalld';
+    expect(() => planTable({ kind: 'adopt', family: 'inet', table: 'firewalld' }, firewalld, true)).toThrow(/cannot be adopted/);
+  });
+});
+
+describe('checkDefinition', () => {
+  const check = (definition: string) => () => checkDefinition(definition, 'inet', 'mine');
+
+  it('accepts one indented block for the named table', () => {
+    expect(check(MINE)).not.toThrow();
+  });
+
+  it('refuses anything that could reach other tables or files', () => {
+    expect(check(MINE.replace('mine', 'other'))).toThrow(/must start with "table inet mine \{"/);
+    expect(check(`${MINE}flush ruleset\n`)).toThrow(/must end with/);
+    expect(check(MINE.replace('\tchain input {', 'flush ruleset\n\tchain input {'))).toThrow(/must be indented/);
+    expect(check(MINE.replace('\tchain input {', '\tinclude "/etc/shadow"\n\tchain input {'))).toThrow(/include is not allowed/);
+  });
+});
+
+describe('comparable', () => {
+  it('ignores what changes on its own', () => {
+    const a = 'counter c {\n\tpackets 1 bytes 60\n}\nelements = { 10.0.0.1 timeout 1h expires 59m1s }\nquota q { over 1 mbytes used 10 bytes }';
+    const b = 'counter c {\n\tpackets 9 bytes 900\n}\nelements = { 10.0.0.1 timeout 1h expires 2m }\nquota q { over 1 mbytes used 90 kbytes }';
+    expect(comparable(a)).toBe(comparable(b));
+    expect(comparable(a)).not.toBe(comparable(a.replace('10.0.0.1', '10.0.0.2')));
+  });
+});
+
+const NFT = ['/usr/sbin/nft', '/sbin/nft', '/usr/bin/nft'].find((path) => existsSync(path));
+const USERNS = spawnSync('unshare', ['--user', '--map-root-user', '--net', 'true']).status === 0;
+
+describe.skipIf(NFT === undefined || !USERNS)('Deployments in a sandbox', { timeout: 20_000 }, () => {
+  const nft = NFT!;
+  let sandbox: Sandbox;
+  let target: DeployTarget;
+  let executor: Executor;
+  const deployments = new Deployments({ seconds: 2 });
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const table = async () => (await readTable(target.access, 'inet', 'mine'))?.text ?? '';
+
+  beforeAll(async () => {
+    sandbox = await Sandbox.start();
+    executor = sandbox.executor;
+    await sandbox.load(`${MINE}table inet firewalld {\n\tchain filter_INPUT {\n\t\ttype filter hook input priority filter + 10; policy accept;\n\t}\n}\n`);
+    target = {
+      hostId: 'sandbox',
+      name: 'sandbox',
+      kind: 'sandbox',
+      executor,
+      access: { executor, nftPath: nft, privilege: { kind: 'root' } },
+      systemd: true,
+      manualOverride: false,
+      freshExecutor: undefined,
+    };
+  });
+  afterAll(() => sandbox.dispose());
+
+  it('adopts a table, and the watchdog stands down once confirmed', async () => {
+    const plan = await deployments.prepare(target, [{ kind: 'adopt', family: 'inet', table: 'mine' }]);
+    expect(plan).toMatchObject({ state: 'planned', validation: { ok: true }, safety: { watchdog: 'detached', seconds: 2 } });
+
+    const applied = await deployments.apply(plan.id, target);
+    expect(applied.state).toBe('awaiting-confirmation');
+    expect(await table()).toContain('comment "managed by nftm"');
+
+    expect((await deployments.confirm(plan.id, target)).state).toBe('confirmed');
+    await sleep(3000);
+    expect(await table()).toContain('comment "managed by nftm"');
+    expect((await executor.exec(['test', '-e', plan.safety.directory])).exitCode).toBe(1);
+  });
+
+  it('rolls back on request', async () => {
+    const before = await table();
+    const plan = await deployments.prepare(target, [
+      { kind: 'replace', family: 'inet', table: 'mine', definition: MINE.replace('policy accept;', 'policy accept;\n\t\ttcp dport 22 accept') },
+    ]);
+    await deployments.apply(plan.id, target);
+    expect(await table()).toContain('tcp dport 22 accept');
+    expect(await deployments.rollback(plan.id, target)).toMatchObject({ state: 'rolled-back', outcome: { reason: 'user' } });
+    expect(await table()).toBe(before);
+  });
+
+  it('rolls back on its own when nobody confirms', async () => {
+    const before = await table();
+    const plan = await deployments.prepare(target, [{ kind: 'replace', family: 'inet', table: 'mine', definition: MINE.replace('accept;', 'drop;') }]);
+    await deployments.apply(plan.id, target);
+    expect(await table()).toContain('policy drop');
+    await sleep(3000);
+    expect(await deployments.refresh(plan.id, target)).toMatchObject({ state: 'rolled-back', outcome: { reason: 'timeout' } });
+    expect(await table()).toBe(before);
+  });
+
+  it("shows nft's own message for an invalid change, and applies nothing", async () => {
+    const plan = await deployments.prepare(target, [
+      { kind: 'replace', family: 'inet', table: 'mine', definition: MINE.replace('policy accept;', 'policy accept;\n\t\ttcp dport 22 acept') },
+    ]);
+    expect(plan.state).toBe('invalid');
+    expect(plan.validation.message).toMatch(/syntax error/);
+    await expect(deployments.apply(plan.id, target)).rejects.toMatchObject({ code: 'deployment-state' });
+  });
+
+  it('refuses tables it does not manage, and stops when the table changed meanwhile', async () => {
+    await expect(deployments.prepare(target, [{ kind: 'adopt', family: 'inet', table: 'firewalld' }])).rejects.toThrow(HostError);
+
+    const plan = await deployments.prepare(target, [{ kind: 'replace', family: 'inet', table: 'mine', definition: MINE }]);
+    await executor.exec([nft, 'add', 'rule', 'inet', 'mine', 'input', 'udp', 'dport', '53', 'accept']);
+    await expect(deployments.apply(plan.id, target)).rejects.toMatchObject({ code: 'ruleset-changed' });
+  });
+});
+
+// Against the podman test host: NFTM_TEST_HOST=1 pnpm test (after dev/test-host/up.sh).
+const repo = new URL('../../../../', import.meta.url).pathname;
+const sshConfig = `${repo}.dev/test-host/ssh_config`;
+
+describe.skipIf(!process.env['NFTM_TEST_HOST'] || !existsSync(sshConfig))('Deployments on the test host', { timeout: 90_000 }, () => {
+  const deployments = new Deployments({ seconds: 5 });
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  let controlDir: string;
+
+  const hostTarget = async (account: 'root' | 'nopass' | 'admin'): Promise<DeployTarget> => {
+    const { SshExecutor } = await import('./ssh.ts');
+    const destination = `nftm-test-${account}`;
+    const executor = new SshExecutor({ destination, controlDir, configFile: sshConfig });
+    const privilege =
+      account === 'root' ? ({ kind: 'root' } as const) : account === 'nopass' ? ({ kind: 'sudo' } as const) : ({ kind: 'sudo-password' } as const);
+    return {
+      hostId: destination,
+      name: destination,
+      kind: 'ssh',
+      executor,
+      access: { executor, nftPath: '/usr/sbin/nft', privilege, ...(account === 'admin' && { password: 'nftm-test' }) },
+      systemd: true,
+      manualOverride: false,
+      freshExecutor: new SshExecutor({ destination, controlDir, configFile: sshConfig, shareConnection: false }),
+    };
+  };
+  const create = (table: string, body: string) => ({
+    kind: 'replace' as const,
+    family: 'inet' as const,
+    table,
+    definition: `table inet ${table} {\n${body}\n}\n`,
+  });
+  const remove = (table: string) => ({ kind: 'delete' as const, family: 'inet' as const, table });
+
+  beforeAll(async () => {
+    const { mkdtemp } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    controlDir = await mkdtemp(`${tmpdir()}/nftm-deploy-`);
+  });
+
+  it('as root, protects the change with a systemd watchdog', async () => {
+    const target = await hostTarget('root');
+    const plan = await deployments.prepare(target, [create('nftm_root', '\tchain c {\n\t\ttype filter hook input priority 100; policy accept;\n\t}')]);
+    expect(plan.safety).toMatchObject({ watchdog: 'systemd', freshConnectionCheck: true });
+    expect((await deployments.apply(plan.id, target)).state).toBe('awaiting-confirmation');
+    expect((await deployments.confirm(plan.id, target)).state).toBe('confirmed');
+    const cleanup = await deployments.prepare(target, [remove('nftm_root')]);
+    await deployments.apply(cleanup.id, target);
+    await deployments.confirm(cleanup.id, target);
+  });
+
+  // The classic mistake: established traffic still flows, new connections (like the next ssh) are dropped.
+  const lockout = create(
+    'nftm_lockout',
+    '\tchain input {\n\t\ttype filter hook input priority filter; policy drop;\n\t\tct state established,related accept\n\t}',
+  );
+
+  it('undoes at once a change that blocks new SSH connections', async () => {
+    const target = await hostTarget('root');
+    const patient = new Deployments({ seconds: 40 });
+    const plan = await patient.prepare(target, [lockout]);
+    const applied = await patient.apply(plan.id, target);
+    expect(applied).toMatchObject({ state: 'rolled-back', outcome: { reason: 'fresh-connection-failed' } });
+    expect((await target.freshExecutor!.exec(['true'])).exitCode).toBe(0);
+    expect(await readTable(target.access, 'inet', 'nftm_lockout')).toBeUndefined();
+  });
+
+  it('reports a watchdog that rolled back during the connection check, instead of awaiting confirmation', async () => {
+    // With 5 s the watchdog restores the tables while the check still waits for
+    // its 10 s connect timeout; the check then gets through.
+    const target = await hostTarget('root');
+    const plan = await deployments.prepare(target, [lockout]);
+    const applied = await deployments.apply(plan.id, target);
+    expect(applied).toMatchObject({ state: 'rolled-back', outcome: { reason: 'timeout' } });
+    expect(await readTable(target.access, 'inet', 'nftm_lockout')).toBeUndefined();
+  });
+
+  it('with sudo for nft only, the watchdog survives the SSH session and rolls back', async () => {
+    const target = await hostTarget('nopass');
+    const plan = await deployments.prepare(target, [create('nftm_nopass', '\tset s {\n\t\ttype ipv4_addr\n\t}')]);
+    expect(plan.safety.watchdog).toBe('detached');
+    await deployments.apply(plan.id, target);
+    expect(await readTable(target.access, 'inet', 'nftm_nopass')).toBeDefined();
+    await sleep(7000);
+    expect(await deployments.refresh(plan.id, target)).toMatchObject({ state: 'rolled-back', outcome: { reason: 'timeout' } });
+    expect(await readTable(target.access, 'inet', 'nftm_nopass')).toBeUndefined();
+  });
+
+  it('with a sudo password, starts the watchdog through sudo and systemd', async () => {
+    const target = await hostTarget('admin');
+    const plan = await deployments.prepare(target, [create('nftm_admin', '\tset s {\n\t\ttype ipv4_addr\n\t}')]);
+    expect(plan.safety.watchdog).toBe('systemd');
+    await deployments.apply(plan.id, target);
+    expect((await deployments.rollback(plan.id, target)).state).toBe('rolled-back');
+    expect(await readTable(target.access, 'inet', 'nftm_admin')).toBeUndefined();
+  });
+});

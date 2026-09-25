@@ -6,3 +6,5 @@ export * from './keys.ts';
 export * from './listing.ts';
 export * from './owners.ts';
 export * from './packet-path.ts';
+export * from './changes.ts';
+export * from './diff.ts';

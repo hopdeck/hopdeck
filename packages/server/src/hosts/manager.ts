@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Executor, HostErrorCode, HostKeyCheck, HostKind, HostStatus, HostSummary, RulesetSnapshot } from '@nftm/core';
+import type { DeploymentView, Executor, HostErrorCode, HostKeyCheck, HostKind, HostStatus, HostSummary, RulesetSnapshot, TableChange } from '@nftm/core';
 import { HostError } from './errors.ts';
+import { Deployments, type DeployLogEntry, type DeployTarget } from './deploy.ts';
 import { collectFacts } from './facts.ts';
 import { HostKeys } from './host-keys.ts';
 import { LocalExecutor } from './local.ts';
@@ -17,6 +18,8 @@ interface Entry {
   executor: Executor;
   status: HostStatus;
   password?: string;
+  /** Lifts the ownership rule; kept in memory only, so it ends with the session. */
+  manualOverride: boolean;
 }
 
 /** What hosts.json stores: SSH hosts only; localhost and the sandbox are built in. */
@@ -35,8 +38,10 @@ export interface HostManagerOptions {
   sshConfigFile?: string | undefined;
   /** Executor of the sandbox host, when one runs. */
   sandbox?: Executor;
-  /** Replaces the SSH executor, for tests. */
-  createSshExecutor?: (destination: string) => Executor;
+  /** Replaces the SSH executor, for tests; `shared: false` asks for a connection that shares nothing. */
+  createSshExecutor?: (destination: string, options?: { shared: boolean }) => Executor;
+  /** Seconds until a host rolls back an unconfirmed change. */
+  rollbackSeconds?: number;
   /** Replaces host key handling, for tests. */
   hostKeys?: HostKeys;
 }
@@ -55,17 +60,22 @@ export class HostManager {
   readonly #options: HostManagerOptions;
   readonly #entries = new Map<string, Entry>();
   readonly #hostKeys: HostKeys;
+  readonly #deployments: Deployments;
 
   private constructor(options: HostManagerOptions) {
     this.#options = options;
     this.#hostKeys = options.hostKeys ?? new HostKeys({ configFile: options.sshConfigFile });
+    this.#deployments = new Deployments({
+      ...(options.rollbackSeconds !== undefined && { seconds: options.rollbackSeconds }),
+      log: (entry) => this.#logChange(entry),
+    });
   }
 
   static async open(options: HostManagerOptions): Promise<HostManager> {
     const manager = new HostManager(options);
-    manager.#put({ id: 'local', kind: 'local', name: 'localhost', executor: new LocalExecutor(), status: { state: 'new' } });
+    manager.#put({ id: 'local', kind: 'local', name: 'localhost', executor: new LocalExecutor(), status: { state: 'new' }, manualOverride: false });
     if (options.sandbox !== undefined) {
-      manager.#put({ id: 'sandbox', kind: 'sandbox', name: 'sandbox', executor: options.sandbox, status: { state: 'new' } });
+      manager.#put({ id: 'sandbox', kind: 'sandbox', name: 'sandbox', executor: options.sandbox, status: { state: 'new' }, manualOverride: false });
     }
     for (const host of await readInventory(options.configDir)) {
       manager.#put(manager.#sshEntry(host));
@@ -149,6 +159,78 @@ export class HostManager {
     return summary(entry);
   }
 
+  /** Switches Manual override for this session: tables may then be changed without adopting them. */
+  setManualOverride(id: string, enabled: boolean): HostSummary | undefined {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    entry.manualOverride = enabled;
+    return summary(entry);
+  }
+
+  /** Checks changes and stages them on the host; nothing changes until apply. */
+  async prepareDeployment(id: string, changes: readonly TableChange[]): Promise<DeploymentView | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    return this.#deployments.prepare(this.#target(entry), changes);
+  }
+
+  async deployment(id: string, action: 'get' | 'apply' | 'confirm' | 'rollback' | 'discard'): Promise<DeploymentView | undefined> {
+    const hostId = this.#deployments.hostOf(id);
+    const entry = hostId === undefined ? undefined : this.#entries.get(hostId);
+    if (entry === undefined) return undefined;
+    const target = this.#target(entry);
+    switch (action) {
+      case 'get':
+        return this.#deployments.refresh(id, target);
+      case 'apply':
+        return this.#deployments.apply(id, target);
+      case 'confirm':
+        return this.#deployments.confirm(id, target);
+      case 'rollback':
+        return this.#deployments.rollback(id, target);
+      case 'discard': {
+        const view = this.#deployments.get(id);
+        await this.#deployments.discard(id, target);
+        return view;
+      }
+    }
+  }
+
+  #target(entry: Entry): DeployTarget {
+    const access = this.#access(entry);
+    const status = entry.status as Extract<HostStatus, { state: 'connected' }>;
+    return {
+      hostId: entry.id,
+      name: entry.name,
+      kind: entry.kind,
+      executor: entry.executor,
+      access,
+      systemd: status.facts.systemd,
+      manualOverride: entry.manualOverride,
+      freshExecutor: entry.kind === 'ssh' ? this.#freshExecutor(entry.destination!) : undefined,
+    };
+  }
+
+  #freshExecutor(destination: string): Executor {
+    return (
+      this.#options.createSshExecutor?.(destination, { shared: false }) ??
+      new SshExecutor({
+        destination,
+        controlDir: this.#options.controlDir,
+        configFile: this.#options.sshConfigFile,
+        shareConnection: false,
+      })
+    );
+  }
+
+  /** One JSON line per event in changes.log next to hosts.json. */
+  async #logChange(entry: DeployLogEntry): Promise<void> {
+    const host = this.#entries.get(entry.host);
+    const line = { time: new Date().toISOString(), ...entry, destination: host?.destination ?? host?.name };
+    await mkdir(this.#options.configDir, { recursive: true, mode: 0o700 });
+    await appendFile(join(this.#options.configDir, 'changes.log'), `${JSON.stringify(line)}\n`, { mode: 0o600 });
+  }
+
   /** Reads the key an SSH host presents and what known_hosts says about it. */
   async checkHostKey(id: string): Promise<HostKeyCheck | undefined> {
     const entry = this.#entries.get(id);
@@ -221,6 +303,7 @@ export class HostManager {
       destination: host.destination,
       executor,
       status: { state: 'new' },
+      manualOverride: false,
     };
   }
 
@@ -237,8 +320,10 @@ export class HostManager {
 }
 
 function summary(entry: Entry): HostSummary {
-  const { id, kind, name, destination, status } = entry;
-  return destination === undefined ? { id, kind, name, status } : { id, kind, name, destination, status };
+  const { id, kind, name, destination, status, manualOverride } = entry;
+  return destination === undefined
+    ? { id, kind, name, status, manualOverride }
+    : { id, kind, name, destination, status, manualOverride };
 }
 
 function toStatusError(error: unknown): { code: HostErrorCode | 'unknown'; detail: string } {

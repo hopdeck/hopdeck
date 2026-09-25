@@ -20,6 +20,11 @@ const HOST_ERROR_CODES = {
   'host-key-mismatch': true,
   'known-hosts-unwritable': true,
   'host-key-in-global-file': true,
+  'table-not-editable': true,
+  'invalid-definition': true,
+  'ruleset-changed': true,
+  'rollback-unavailable': true,
+  'deployment-state': true,
 } satisfies Record<HostErrorCode, true>;
 
 describe('errorText', () => {

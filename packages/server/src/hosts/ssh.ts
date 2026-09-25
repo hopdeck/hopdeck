@@ -17,6 +17,12 @@ export interface SshExecutorOptions {
   /** Defaults to "ssh" from PATH. */
   sshPath?: string;
   timeoutMs?: number;
+  /**
+   * false: a new connection for every command, sharing nothing. After a change,
+   * that proves new connections still get through; a shared connection would
+   * survive a rule that blocks every new one.
+   */
+  shareConnection?: boolean;
 }
 
 /**
@@ -46,9 +52,13 @@ export class SshExecutor implements Executor {
       '-T',
       ...['-o', 'BatchMode=yes'],
       ...['-o', 'ConnectTimeout=10'],
-      ...['-o', 'ControlMaster=auto'],
-      ...['-o', `ControlPath=${join(options.controlDir, controlName(options.destination, options.configFile))}`],
-      ...['-o', 'ControlPersist=60'],
+      ...(options.shareConnection === false
+        ? ['-o', 'ControlMaster=no', '-o', 'ControlPath=none']
+        : [
+            ...['-o', 'ControlMaster=auto'],
+            ...['-o', `ControlPath=${join(options.controlDir, controlName(options.destination, options.configFile))}`],
+            ...['-o', 'ControlPersist=60'],
+          ]),
     ];
   }
 

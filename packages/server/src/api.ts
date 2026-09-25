@@ -1,3 +1,4 @@
+import type { Family, TableChange } from '@nftm/core';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HostError } from './hosts/errors.ts';
 import { HostStateError, InvalidHostError, type HostManager } from './hosts/manager.ts';
@@ -64,6 +65,41 @@ const ROUTES: Route[] = [
     pattern: /^\/api\/hosts\/([^/]+)\/ruleset$/,
     async handle(_req, [id], ctx) {
       return { body: { ruleset: found(await ctx.hosts.readRuleset(id!)) } };
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/hosts\/([^/]+)\/manual-override$/,
+    async handle(req, [id], ctx) {
+      const body = asObject(await readJson(req));
+      if (typeof body['enabled'] !== 'boolean') throw new ApiError(400, 'invalid-body', 'enabled must be true or false');
+      return { body: { host: found(ctx.hosts.setManualOverride(id!, body['enabled'])) } };
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/hosts\/([^/]+)\/deployments$/,
+    async handle(req, [id], ctx) {
+      // Table definitions can hold large sets, hence the bigger limit.
+      const body = asObject(await readJson(req, 8 * 1024 * 1024));
+      if (!Array.isArray(body['changes'])) throw new ApiError(400, 'invalid-body', 'changes must be a list');
+      const changes = body['changes'].map(toChange);
+      return { status: 201, body: { deployment: found(await ctx.hosts.prepareDeployment(id!, changes)) } };
+    },
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/deployments\/([^/]+)$/,
+    async handle(_req, [id], ctx) {
+      return { body: { deployment: foundDeployment(await ctx.hosts.deployment(id!, 'get')) } };
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/deployments\/([^/]+)\/(apply|confirm|rollback|discard)$/,
+    async handle(_req, [id, action], ctx) {
+      const deployment = await ctx.hosts.deployment(id!, action as 'apply' | 'confirm' | 'rollback' | 'discard');
+      return { body: { deployment: foundDeployment(deployment) } };
     },
   },
   {
@@ -134,7 +170,14 @@ function hostErrorStatus(error: HostError): number {
       return 403;
     case 'host-key-mismatch':
     case 'ssh-host-key-changed':
+    case 'ruleset-changed':
+    case 'rollback-unavailable':
+    case 'deployment-state':
       return 409;
+    case 'table-not-editable':
+      return 403;
+    case 'invalid-definition':
+      return 400;
     default:
       return 502;
   }
@@ -143,6 +186,31 @@ function hostErrorStatus(error: HostError): number {
 function found<T>(value: T | undefined): T {
   if (value === undefined) throw new ApiError(404, 'host-not-found');
   return value;
+}
+
+function foundDeployment<T>(value: T | undefined): T {
+  if (value === undefined) throw new ApiError(404, 'deployment-not-found');
+  return value;
+}
+
+const FAMILIES: readonly Family[] = ['ip', 'ip6', 'inet', 'arp', 'bridge', 'netdev'];
+
+function toChange(value: unknown): TableChange {
+  const change = asObject(value);
+  const family = change['family'];
+  if (typeof family !== 'string' || !FAMILIES.includes(family as Family)) {
+    throw new ApiError(400, 'invalid-body', `family must be one of ${FAMILIES.join(', ')}`);
+  }
+  const table = requiredString(change, 'table', 256);
+  switch (change['kind']) {
+    case 'adopt':
+    case 'delete':
+      return { kind: change['kind'], family: family as Family, table };
+    case 'replace':
+      return { kind: 'replace', family: family as Family, table, definition: requiredString(change, 'definition', 8 * 1024 * 1024) };
+    default:
+      throw new ApiError(400, 'invalid-body', 'kind must be adopt, replace or delete');
+  }
 }
 
 function asObject(value: unknown): Record<string, unknown> {

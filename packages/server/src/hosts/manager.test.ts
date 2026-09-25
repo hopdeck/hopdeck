@@ -28,7 +28,7 @@ describe('HostManager', () => {
 
   it('always has localhost', async () => {
     const hosts = await open();
-    expect(hosts.list()).toEqual([{ id: 'local', kind: 'local', name: 'localhost', status: { state: 'new' } }]);
+    expect(hosts.list()).toEqual([{ id: 'local', kind: 'local', name: 'localhost', status: { state: 'new' }, manualOverride: false }]);
   });
 
   it('stores SSH hosts in a private hosts.json', async () => {

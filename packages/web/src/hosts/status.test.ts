@@ -12,7 +12,7 @@ const facts: HostFacts = {
   nft: { path: '/usr/sbin/nft', version: '1.0.6' },
 };
 
-const host = (status: HostStatus): HostSummary => ({ id: 'h', kind: 'ssh', name: 'fw1', destination: 'fw1', status });
+const host = (status: HostStatus): HostSummary => ({ id: 'h', kind: 'ssh', name: 'fw1', destination: 'fw1', status, manualOverride: false });
 const connected = (privilege: Extract<HostStatus, { state: 'connected' }>['privilege'], passwordStored = false) =>
   host({ state: 'connected', facts, privilege, passwordStored });
 

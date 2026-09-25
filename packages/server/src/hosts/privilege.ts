@@ -53,19 +53,27 @@ export interface NftAccess {
  * Runs nft as root on the host, using whatever privilege the host offers.
  * Failures of sudo itself throw a HostError, so a non-zero result is nft's own.
  */
-export async function runNft(access: NftAccess, args: readonly string[], options: ExecOptions = {}): Promise<ExecResult> {
-  const { executor, nftPath, privilege, password } = access;
+export function runNft(access: NftAccess, args: readonly string[], options: ExecOptions = {}): Promise<ExecResult> {
+  return runAsRoot(access, [access.nftPath, ...args], options);
+}
+
+/**
+ * Runs any command as root, the same way as nft. A sudoers rule that allows
+ * only nft makes this throw sudo-not-allowed for anything else.
+ */
+export async function runAsRoot(access: NftAccess, argv: readonly string[], options: ExecOptions = {}): Promise<ExecResult> {
+  const { executor, privilege, password } = access;
   switch (privilege.kind) {
     case 'root':
-      return executor.exec([nftPath, ...args], options);
+      return executor.exec(argv, options);
     case 'sudo':
-      return checkSudo(await executor.exec([...SUDO, '-n', '--', nftPath, ...args], options));
+      return checkSudo(await executor.exec([...SUDO, '-n', '--', ...argv], options));
     case 'sudo-password': {
       if (password === undefined) throw new HostError('password-required');
       // The password is the first line of stdin. Mixed with a ruleset, it could
       // end up in an nft error message, so rulesets go through files instead.
-      if (options.stdin !== undefined) throw new Error('nft input cannot be piped under sudo -S; upload a file');
-      const result = await executor.exec([...SUDO, '-S', '-p', '', '--', nftPath, ...args], { stdin: `${password}\n` });
+      if (options.stdin !== undefined) throw new Error('input cannot be piped under sudo -S; upload a file');
+      const result = await executor.exec([...SUDO, '-S', '-p', '', '--', ...argv], { stdin: `${password}\n` });
       if (result.exitCode !== 0 && WRONG_PASSWORD.test(result.stderr)) {
         throw new HostError('wrong-password', result.stderr.trim());
       }

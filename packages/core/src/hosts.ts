@@ -1,5 +1,8 @@
 /** Shapes of the hosts API, shared by the server and the UI. */
 
+import type { DiffLine } from './diff.ts';
+import type { Family } from './nft-json.ts';
+
 export type HostKind = 'local' | 'ssh' | 'sandbox';
 
 /**
@@ -21,7 +24,12 @@ export type HostErrorCode =
   | 'sudo-not-allowed'
   | 'host-key-mismatch'
   | 'known-hosts-unwritable'
-  | 'host-key-in-global-file';
+  | 'host-key-in-global-file'
+  | 'table-not-editable'
+  | 'invalid-definition'
+  | 'ruleset-changed'
+  | 'rollback-unavailable'
+  | 'deployment-state';
 
 export interface HostFacts {
   uid: number;
@@ -88,4 +96,60 @@ export interface HostSummary {
   name: string;
   destination?: string;
   status: HostStatus;
+  /** Manual override is on: tables may be changed without adopting them. For this session only. */
+  manualOverride: boolean;
+}
+
+/** One table change asked of the server. */
+export type TableChange =
+  | { kind: 'adopt'; family: Family; table: string }
+  | { kind: 'replace'; family: Family; table: string; definition: string }
+  | { kind: 'delete'; family: Family; table: string };
+
+export type DeploymentState =
+  /** Validated and waiting for the user to apply it. */
+  | 'planned'
+  /** nft rejected the change; nothing was applied. */
+  | 'invalid'
+  /** Applied; the host rolls it back unless confirmed before the deadline. */
+  | 'awaiting-confirmation'
+  | 'confirmed'
+  | 'rolled-back'
+  /** Applying failed; nothing changed. */
+  | 'failed';
+
+export interface DeploymentTable {
+  family: Family;
+  name: string;
+  action: 'adopt' | 'create' | 'replace' | 'delete';
+  /** nft's listing of the table before, without handles; undefined for a new table. */
+  before: string | undefined;
+  /** The definition to load; undefined when the table is deleted. */
+  after: string | undefined;
+  diff: DiffLine[];
+}
+
+export interface DeploymentView {
+  id: string;
+  hostId: string;
+  state: DeploymentState;
+  tables: DeploymentTable[];
+  /** nft -c on the host; a failure carries nft's message. */
+  validation: { ok: boolean; message: string };
+  /** How the change is protected, shown before applying. */
+  safety: {
+    /** How the rollback watchdog runs on the host. */
+    watchdog: 'systemd' | 'detached' | 'unavailable';
+    /** Seconds until the host rolls back an unconfirmed change. */
+    seconds: number;
+    /** Whether a new, unshared SSH connection is tried right after applying. */
+    freshConnectionCheck: boolean;
+    /** Where the change, rollback and watchdog files live on the host. */
+    directory: string;
+  };
+  /** When the host rolls back on its own, ISO 8601; while awaiting confirmation. */
+  deadline?: string;
+  /** Why a change failed or was rolled back, with the raw message. */
+  outcome?: { reason: 'nft-error' | 'fresh-connection-failed' | 'timeout' | 'user'; detail: string };
+  manualOverride: boolean;
 }
