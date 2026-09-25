@@ -22,9 +22,9 @@ table inet filter {
 
 	chain input {
 		type filter hook input priority filter; policy drop;
-		ct state established,related accept
+		ct state established,related counter accept
 		ct state invalid drop
-		iif "lo" accept
+		iif "lo" counter accept
 		ip saddr @blocklist drop
 		icmp type echo-request limit rate 5/second accept
 		tcp dport vmap @port_policy

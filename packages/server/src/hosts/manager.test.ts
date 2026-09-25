@@ -152,6 +152,15 @@ describe.skipIf(!USERNS)('HostManager with a sandbox', () => {
       const rules = ruleset.tables.flatMap((node) => node.chains.flatMap((chain) => chain.rules));
       expect(rules.length).toBeGreaterThan(5);
       for (const rule of rules) expect(listing.rules.get(ruleKey(rule.family, rule.table, rule.handle)), JSON.stringify(rule)).toBeTypeOf('string');
+
+      // Live: counters move with traffic, fingerprints stay while only counters change.
+      const before = (await hosts.live('sandbox'))!;
+      expect(Object.keys(before.fingerprints)).toHaveLength(2);
+      await sandbox.executor.exec(['sh', '-c', 'PATH="$PATH:/usr/sbin:/sbin:/bin"; ping -c 2 -i 0.2 -W 1 127.0.0.1']);
+      const after = (await hosts.live('sandbox'))!;
+      expect(after.fingerprints).toEqual(before.fingerprints);
+      const grew = Object.keys(after.rules).filter((key) => after.rules[key]!.packets > (before.rules[key]?.packets ?? 0));
+      expect(grew.length).toBeGreaterThan(0);
     } finally {
       await sandbox.dispose();
       await rm(configDir, { recursive: true, force: true });

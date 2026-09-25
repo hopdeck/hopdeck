@@ -1,7 +1,10 @@
 import {
+  blockKey,
   chainKey,
   parseListing,
   parseRuleset,
+  ruleKey,
+  tableFingerprints,
   tableOwner,
   type Json,
   type Listing,
@@ -21,6 +24,8 @@ export interface RulesetModel {
   owners: Map<TableNode, TableOwner>;
   counts: { tables: number; chains: number; rules: number };
   readAt: Date;
+  /** Per table, by tableKey(): what live polling compares to notice changes on the host. */
+  fingerprints: Record<string, string>;
 }
 
 /** Throws RulesetParseError when nft's JSON is not a ruleset. */
@@ -39,7 +44,20 @@ export function buildModel(snapshot: RulesetSnapshot): RulesetModel {
       rules: chains.reduce((sum, chain) => sum + chain.rules.length, 0),
     },
     readAt: new Date(snapshot.readAt),
+    fingerprints: tableFingerprints(snapshot.json),
   };
+}
+
+/** Where live polling reports a rule's counter: its own (by ruleKey) or a named one (by blockKey). */
+export function counterSource(rule: NftRule, table: TableNode): { kind: 'rule' | 'counter'; key: string } | undefined {
+  const { family, name } = table.table;
+  for (const statement of rule.expr) {
+    if (!isObject(statement) || !('counter' in statement)) continue;
+    const counter = statement['counter'];
+    if (isObject(counter)) return { kind: 'rule', key: ruleKey(family, name, rule.handle) };
+    if (typeof counter === 'string') return { kind: 'counter', key: blockKey(family, name, 'counter', counter) };
+  }
+  return undefined;
 }
 
 /** DOM id of a chain in the rules tab, so other views can scroll to it. */
@@ -97,4 +115,13 @@ function packetsAndBytes(value: Json): { packets: number; bytes: number } | unde
 
 function isObject(value: Json | undefined): value is { [key: string]: Json } {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Tables that differ between what the view shows and the host now, as "family name". */
+export function changedTables(shown: Record<string, string>, live: Record<string, string>): string[] {
+  const keys = new Set([...Object.keys(shown), ...Object.keys(live)]);
+  return [...keys]
+    .filter((key) => shown[key] !== live[key])
+    .map((key) => (JSON.parse(key) as [string, string]).join(' '))
+    .sort();
 }

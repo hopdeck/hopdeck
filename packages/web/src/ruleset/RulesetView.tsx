@@ -17,10 +17,11 @@ import { useState, type ReactNode } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import { ElementsDialog } from '../edit/ElementsDialog.tsx';
 import type { EditorMode } from '../edit/TableEditor.tsx';
-import { ErrorCallout } from '../components/ErrorCallout.tsx';
+import { ErrorCallout, type ErrorInfo } from '../components/ErrorCallout.tsx';
 import { AlertIcon, CheckIcon, PlusIcon, RefreshIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
-import { chainAnchor, formatBytes, priorityText, ruleCounter, tableCounts, type RulesetModel } from './model.ts';
+import { chainAnchor, counterSource, formatBytes, priorityText, ruleCounter, tableCounts, type RulesetModel } from './model.ts';
+import type { LiveInfo } from './useLive.ts';
 import { NftCode } from './NftCode.tsx';
 import { OwnerBadge, toolName } from './owner.tsx';
 import styles from './Ruleset.module.css';
@@ -37,7 +38,20 @@ export interface RulesetActions {
   onCreate(): void;
 }
 
-export function RulesetView({ state, actions }: { state: RulesetState; actions?: RulesetActions | undefined }) {
+/** Live counters and change detection; present when nft can run as root on the host. */
+export interface LiveControls {
+  info: LiveInfo | undefined;
+  error: ErrorInfo | undefined;
+  /** Seconds between looks; 0 is off. */
+  seconds: number;
+  onSeconds(seconds: number): void;
+  /** Tables that differ on the host from what the view shows, as "family name"; empty while nftm itself changes them. */
+  changed: readonly string[];
+}
+
+const LIVE_INTERVALS = [0, 2, 5, 15];
+
+export function RulesetView({ state, actions, live }: { state: RulesetState; actions?: RulesetActions | undefined; live?: LiveControls | undefined }) {
   const { t, locale } = useI18n();
   const { model, loading, error, reload } = state;
 
@@ -64,6 +78,19 @@ export function RulesetView({ state, actions }: { state: RulesetState; actions?:
             {t('newTable.button')}
           </button>
         )}
+        {live !== undefined && (
+          <label className={styles.live} title={live.error?.message ?? t('live.hint')}>
+            <span className={`dot ${live.error !== undefined ? 'dot-danger' : live.seconds > 0 && live.info !== undefined ? 'dot-ok' : ''}`} aria-hidden="true" />
+            {t('live.label')}
+            <select className="select select-compact" value={live.seconds} onChange={(event) => live.onSeconds(Number(event.target.value))}>
+              {LIVE_INTERVALS.map((seconds) => (
+                <option key={seconds} value={seconds}>
+                  {seconds === 0 ? t('live.off') : t('live.every', { count: seconds })}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <button type="button" className="btn btn-sm" onClick={reload} disabled={loading}>
           {loading ? <span className="spinner" aria-hidden="true" /> : <RefreshIcon />}
           {t('ruleset.refresh')}
@@ -79,12 +106,30 @@ export function RulesetView({ state, actions }: { state: RulesetState; actions?:
         </p>
       )}
 
-      {model !== undefined && <Tables model={model} actions={actions} />}
+      {live?.error !== undefined && live.seconds > 0 && (
+        <Callout tone="warn" icon={<AlertIcon />} title={t('live.failed')}>
+          <pre className="details">{live.error.message}</pre>
+        </Callout>
+      )}
+
+      {live !== undefined && live.changed.length > 0 && (
+        <Callout tone="warn" icon={<AlertIcon />} title={t('live.changed')} role="status">
+          <p>{t('live.changedTables', { tables: live.changed.join(', ') })}</p>
+          <p>
+            <button type="button" className="btn btn-sm" onClick={reload} disabled={loading}>
+              <RefreshIcon />
+              {t('ruleset.refresh')}
+            </button>
+          </p>
+        </Callout>
+      )}
+
+      {model !== undefined && <Tables model={model} actions={actions} live={live?.seconds ? live.info : undefined} />}
     </div>
   );
 }
 
-function Tables({ model, actions }: { model: RulesetModel; actions: RulesetActions | undefined }) {
+function Tables({ model, actions, live }: { model: RulesetModel; actions: RulesetActions | undefined; live: LiveInfo | undefined }) {
   const { t } = useI18n();
   const { ruleset } = model;
   return (
@@ -114,6 +159,7 @@ function Tables({ model, actions }: { model: RulesetModel; actions: RulesetActio
           owner={model.owners.get(node)!}
           model={model}
           actions={actions}
+          live={live}
         />
       ))}
     </>
@@ -124,10 +170,11 @@ interface TableCardProps {
   node: TableNode;
   owner: TableOwner;
   model: RulesetModel;
+  live: LiveInfo | undefined;
   actions: RulesetActions | undefined;
 }
 
-function TableCard({ node, owner, model, actions }: TableCardProps) {
+function TableCard({ node, owner, model, actions, live }: TableCardProps) {
   const { t } = useI18n();
   const { family, name } = node.table;
   const managed = isManaged(node.table);
@@ -196,7 +243,7 @@ function TableCard({ node, owner, model, actions }: TableCardProps) {
 
       <div className={styles.chains}>
         {node.chains.map((chain) => (
-          <Chain key={chain.chain.name} chain={chain} node={node} model={model} />
+          <Chain key={chain.chain.name} chain={chain} node={node} model={model} live={live} />
         ))}
       </div>
 
@@ -258,7 +305,7 @@ function OwnerNote({ owner }: { owner: Exclude<TableOwner, { kind: 'unknown' }> 
   );
 }
 
-function Chain({ chain, node, model }: { chain: ChainNode; node: TableNode; model: RulesetModel }) {
+function Chain({ chain, node, model, live }: { chain: ChainNode; node: TableNode; model: RulesetModel; live: LiveInfo | undefined }) {
   const { t, locale } = useI18n();
   const { family, name: table } = node.table;
   const { name, type, hook, policy } = chain.chain;
@@ -287,10 +334,16 @@ function Chain({ chain, node, model }: { chain: ChainNode; node: TableNode; mode
       ) : (
         <ol className={styles.rules}>
           {chain.rules.map((rule, index) => {
-            const text = model.listing.rules.get(ruleKey(family, table, rule.handle));
-            const counter = ruleCounter(rule, node);
+            const source = counterSource(rule, node);
+            const liveCounter = source === undefined || live === undefined ? undefined : (source.kind === 'rule' ? live.state.rules : live.state.counters)[source.key];
+            const rate = source === undefined || live === undefined ? undefined : (source.kind === 'rule' ? live.rates.rules : live.rates.counters)[source.key];
+            const counter = liveCounter ?? ruleCounter(rule, node);
+            const listed = model.listing.rules.get(ruleKey(family, table, rule.handle));
+            // nft printed the values of the moment it was read; show the live ones in the text too.
+            const text = liveCounter !== undefined && source?.kind === 'rule' ? listed?.replace(/counter packets \d+ bytes \d+/, `counter packets ${liveCounter.packets} bytes ${liveCounter.bytes}`) : listed;
+            const busy = rate !== undefined && rate.packets > 0;
             return (
-              <li key={rule.handle} className={styles.rule}>
+              <li key={rule.handle} className={`${styles.rule} ${busy ? styles.ruleBusy : ''}`}>
                 <span className={styles.index}>{index + 1}</span>
                 {text !== undefined ? (
                   <NftCode text={text} className={styles.ruleText} />
@@ -301,6 +354,11 @@ function Chain({ chain, node, model }: { chain: ChainNode; node: TableNode; mode
                   </span>
                 )}
                 <span className={styles.ruleMeta}>
+                  {busy && (
+                    <span className={styles.rate} title={t('live.rateTitle')}>
+                      {t('live.rate', { packets: formatRate(rate.packets, locale), bytes: formatBytes(Math.round(rate.bytes), locale) })}
+                    </span>
+                  )}
                   {counter !== undefined && (
                     <span className={styles.counter}>
                       {t('counts.packets', { count: counter.packets, n: new Intl.NumberFormat(locale).format(counter.packets) })}
@@ -396,4 +454,9 @@ function typeText(type: Json | undefined): string {
   if (typeof type === 'string') return type;
   if (Array.isArray(type)) return type.map(typeText).join(' . ');
   return '';
+}
+
+/** Packets a second: whole numbers from 10 up, one decimal below. */
+function formatRate(value: number, locale: string): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: value < 10 ? 1 : 0 }).format(value);
 }

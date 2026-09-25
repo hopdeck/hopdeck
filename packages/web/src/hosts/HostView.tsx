@@ -1,4 +1,4 @@
-import type { Family, HostFacts, HostKind, HostStatus, HostSummary, Privilege, TableChange } from '@nftm/core';
+import { tableKey, type Family, type HostFacts, type HostKind, type HostStatus, type HostSummary, type Privilege, type TableChange } from '@nftm/core';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import { ErrorBody, ErrorCallout, errorTitle, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
@@ -7,10 +7,12 @@ import { Tabs } from '../components/Tabs.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import type { MessageKey } from '../i18n/locales.ts';
 import { ListingView } from '../ruleset/ListingView.tsx';
+import { changedTables } from '../ruleset/model.ts';
 import { PacketPathView } from '../ruleset/PacketPathView.tsx';
 import { NEW_TRACE_SESSION, TracePanel, type TraceSession } from '../trace/TracePanel.tsx';
 import { RulesetView } from '../ruleset/RulesetView.tsx';
 import { useRuleset, type RulesetState } from '../ruleset/useRuleset.ts';
+import { useLive } from '../ruleset/useLive.ts';
 import { DeploymentDialog, type DeploymentResult } from '../deploy/DeploymentDialog.tsx';
 import { NewTableDialog } from '../edit/NewTableDialog.tsx';
 import { liveSource, newTableSource, type NewTableSpec } from '../edit/table-model.ts';
@@ -84,6 +86,19 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   const [editing, setEditing] = useState<Editing>();
   const [creating, setCreating] = useState(false);
   const [traceSession, setTraceSession] = useState<TraceSession>(NEW_TRACE_SESSION);
+  const [liveSeconds, setLiveSeconds] = useState(5);
+  // Counters and changes are read while the rules (or the editor) are in view.
+  const live = useLive(host.id, liveSeconds, readable && tab === 'rules' && ruleset.model !== undefined);
+  // While nftm applies a change itself, the host differing is expected.
+  const changed =
+    live.info === undefined || ruleset.model === undefined || changes !== undefined || ruleset.loading
+      ? []
+      : changedTables(ruleset.model.fingerprints, live.info.state.fingerprints);
+  const editedKey = editing === undefined ? undefined : tableKey(editing.family, editing.table);
+  const changedOnHost =
+    editedKey !== undefined && live.info !== undefined && ruleset.model !== undefined && changes === undefined
+      ? live.info.state.fingerprints[editedKey] !== ruleset.model.fingerprints[editedKey]
+      : false;
   const editedNode =
     editing === undefined || editing.create !== undefined
       ? undefined
@@ -199,6 +214,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                       draft={editing.draft}
                       onDraft={(draft) => setEditing((current) => current && { ...current, draft })}
                       problem={editing.problem}
+                      changedOnHost={changedOnHost}
                       onReview={(definition) => {
                         setEditing((current) => current && { ...current, sent: definition });
                         const base = source !== undefined && !source.creating ? source.original : undefined;
@@ -218,6 +234,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                     <PersistencePanel hostId={host.id} version={ruleset.model?.readAt} />
                     <RulesetView
                       state={ruleset}
+                      live={{ info: live.info, error: live.error, seconds: liveSeconds, onSeconds: setLiveSeconds, changed }}
                       actions={{
                         manualOverride: host.manualOverride,
                         onChange: setChanges,

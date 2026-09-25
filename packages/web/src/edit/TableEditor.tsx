@@ -37,12 +37,14 @@ interface TableEditorProps {
   onDraft(draft: EditorDraft): void;
   /** Set when nft or nftm rejected the last attempt. */
   problem: EditorProblem | undefined;
+  /** The table on the host no longer matches the one the editor read. */
+  changedOnHost?: boolean;
   onReview(definition: string): void;
   onClose(): void;
 }
 
 /** Edits one table visually or as text; both produce a definition for review. */
-export function TableEditor({ family, name, source, initialMode, draft, onDraft, problem, onReview, onClose }: TableEditorProps) {
+export function TableEditor({ family, name, source, initialMode, draft, onDraft, problem, changedOnHost = false, onReview, onClose }: TableEditorProps) {
   const { t, locale } = useI18n();
   const [chains, setChains] = useState<ChainState[]>(() => draft?.chains ?? source?.chains ?? []);
   const [sets, setSets] = useState<SetState[]>(() => draft?.sets ?? source?.sets ?? []);
@@ -101,6 +103,12 @@ export function TableEditor({ family, name, source, initialMode, draft, onDraft,
           {t('editor.review')}
         </button>
       </div>
+
+      {changedOnHost && (
+        <Callout tone="warn" icon={<AlertIcon />} title={t('editor.changedOnHost')} role="status">
+          {t('editor.changedOnHostHint')}
+        </Callout>
+      )}
 
       {problem !== undefined && (
         <Callout tone="danger" icon={<AlertIcon />} title={t('editor.rejected')} role="alert">

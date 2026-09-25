@@ -338,7 +338,18 @@ The npm supply chain is a real risk for a tool with this access.
     the lines; `-a` gives rule handles.
   - The sandbox brings up `lo` and can send test traffic, so tracing can be
     tried there.
-- **Live data:** counters and events from `nft monitor`.
+- **Live data** (done): while the rules are in view, the panel reads the
+  host every 2, 5 or 15 seconds (or not at all), pausing while the browser
+  tab is hidden. One `nft -j list ruleset` per look, reduced on the server to
+  counter values and one fingerprint per table: a hash of the table's JSON
+  without counter values, quota use, expiry and set elements, which change on
+  their own; nftm's tracing tables are left out. Rules show their live counts
+  and packets and bytes per second, and rules with traffic are highlighted.
+  A table whose fingerprint differs from the one read raises "the rules on
+  the host changed", naming the tables, with a refresh; the editor warns that
+  saving would undo that change. nftm's own deployments in flight do not
+  count. Comparing fingerprints needs no long-running `nft monitor` process
+  as root on the host.
 
 ## Milestones
 
@@ -356,7 +367,8 @@ The npm supply chain is a real risk for a tool with this access.
    creating tables (empty, or from a host firewall template), adding or
    deleting chains, sets and maps, and editing set and map elements in place.
    Next: targeted rule changes.
-4. **Monitoring:** tracing (done, 2026-09-26), `nft monitor`, live counters.
+4. **Monitoring** (done, 2026-09-26): packet tracing, live counters and
+   noticing changes made on the host by others.
 5. **Model B** (project layer).
 
 Text mode comes before forms on purpose: it gives full power immediately, and

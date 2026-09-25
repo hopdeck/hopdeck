@@ -89,6 +89,13 @@ const ROUTES: Route[] = [
   },
   {
     method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/live$/,
+    async handle(_req, [id], ctx) {
+      return { body: { live: found(await ctx.hosts.live(id!)) } };
+    },
+  },
+  {
+    method: 'GET',
     pattern: /^\/api\/hosts\/([^/]+)\/persistence$/,
     async handle(_req, [id], ctx) {
       return { body: { persistence: found(await ctx.hosts.persistence(id!)) } };

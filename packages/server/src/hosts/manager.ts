@@ -13,9 +13,11 @@ import type {
   PersistResult,
   RulesetSnapshot,
   TableChange,
+  LiveState,
   TraceFilter,
   TraceView,
 } from '@nftm/core';
+import { liveState } from '@nftm/core';
 import { HostError } from './errors.ts';
 import { Deployments, type DeployLogEntry, type DeployTarget } from './deploy.ts';
 import { Traces, type TraceOptions } from './trace.ts';
@@ -352,6 +354,22 @@ export class HostManager {
       throw new HostError('command-failed', `nft -j printed something that is not JSON (${reason}): ${json.stdout.slice(0, 300)}`);
     }
     return { json: parsed, listing: listing.stdout, readAt: new Date().toISOString() };
+  }
+
+  /** Counter values and table fingerprints: one `nft -j list ruleset`, reduced to what the panel polls for. */
+  async live(id: string): Promise<LiveState | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    const json = await runNft(this.#access(entry), ['-j', 'list', 'ruleset']);
+    if (json.exitCode !== 0) throw new HostError('command-failed', json.stderr.trim() || `nft exited with code ${json.exitCode}`);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(json.stdout);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new HostError('command-failed', `nft -j printed something that is not JSON (${reason}): ${json.stdout.slice(0, 300)}`);
+    }
+    return liveState(parsed, new Date().toISOString());
   }
 
   /** How to run nft as root on a connected host; throws when that is not possible yet. */
