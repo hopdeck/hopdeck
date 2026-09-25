@@ -8,3 +8,5 @@ export * from './owners.ts';
 export * from './packet-path.ts';
 export * from './changes.ts';
 export * from './diff.ts';
+export * from './rule-form.ts';
+export * from './table-edit.ts';
