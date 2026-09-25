@@ -31,9 +31,8 @@ describe('SshExecutor', () => {
   it('runs non-interactive ssh over a shared connection', async () => {
     await ssh.exec(['true']);
     const args = (await readFile(`${sshPath}.args`, 'utf8')).trimEnd().split('\n');
-    expect(args).toEqual(
-      expect.arrayContaining(['BatchMode=yes', 'ControlMaster=auto', `ControlPath=${join(dir, 'control', '%C')}`]),
-    );
+    expect(args).toEqual(expect.arrayContaining(['BatchMode=yes', 'ControlMaster=auto']));
+    expect(args.find((arg) => arg.startsWith('ControlPath='))).toMatch(new RegExp(`^ControlPath=${join(dir, 'control')}/[0-9a-f]{32}$`));
     expect(args.slice(-3)).toEqual(['--', 'admin@fw1', 'true']);
   });
 
@@ -46,6 +45,17 @@ describe('SshExecutor', () => {
   it('forwards standard input and exit codes', async () => {
     expect((await ssh.exec(['cat'], { stdin: 'flush ruleset\n' })).stdout).toBe('flush ruleset\n');
     expect((await ssh.exec(['sh', '-c', 'exit 7'])).exitCode).toBe(7);
+  });
+
+  it('gives every destination its own shared connection', async () => {
+    const controlPath = async (destination: string, configFile?: string) => {
+      await new SshExecutor({ destination, controlDir: dir, sshPath, configFile }).exec(['true']);
+      return (await readFile(`${sshPath}.args`, 'utf8')).split('\n').find((arg) => arg.startsWith('ControlPath='));
+    };
+    // Two aliases of one server must not share a connection: the second would skip its host key check.
+    expect(await controlPath('fw-a')).not.toBe(await controlPath('fw-b'));
+    expect(await controlPath('fw-a')).toBe(await controlPath('fw-a'));
+    expect(await controlPath('fw-a', '/other/config')).not.toBe(await controlPath('fw-a'));
   });
 
   it('uses another ssh config file when asked', async () => {

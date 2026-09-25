@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { chmod, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -46,7 +47,7 @@ export class SshExecutor implements Executor {
       ...['-o', 'BatchMode=yes'],
       ...['-o', 'ConnectTimeout=10'],
       ...['-o', 'ControlMaster=auto'],
-      ...['-o', `ControlPath=${join(options.controlDir, '%C')}`],
+      ...['-o', `ControlPath=${join(options.controlDir, controlName(options.destination, options.configFile))}`],
       ...['-o', 'ControlPersist=60'],
     ];
   }
@@ -60,6 +61,17 @@ export class SshExecutor implements Executor {
     if (failure !== undefined) throw new HostError(failure, result.stderr.trim());
     return result;
   }
+}
+
+/**
+ * One shared connection per nftm host. ssh's own %C hashes the resolved user,
+ * address and port, so two aliases for the same server (say, with different
+ * known_hosts) would share a connection, and the second would skip its host
+ * key check. Hashing exactly what nftm asks ssh for avoids that; the hash also
+ * keeps the socket path short.
+ */
+function controlName(destination: string, configFile: string | undefined): string {
+  return createHash('sha256').update(`${destination}\0${configFile ?? ''}`).digest('hex').slice(0, 32);
 }
 
 /** A leading "-" would turn the destination into an ssh option such as -oProxyCommand=... */
