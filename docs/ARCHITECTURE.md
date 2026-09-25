@@ -77,7 +77,11 @@ There are three kinds of hosts, one `Executor` implementation each:
 
 **SSH command line.** The SSH executor runs `ssh -o BatchMode=yes
 -o ControlMaster=auto -o ControlPath=... -o ControlPersist=... -- DEST
-<quoted argv>`. ssh joins its arguments into one command line for the remote
+<quoted argv>`. Each nftm host gets its own ControlPath, a hash of the exact
+destination and ssh config file. ssh's own `%C` hashes the resolved user,
+address and port instead, so two aliases of one server would share a
+connection and the second would skip its host key check (found on the test
+host). ssh joins its arguments into one command line for the remote
 login shell, so every argument is single-quoted. The login shell must be
 POSIX-compatible (sh, bash, dash, zsh, ksh, ash); fish and csh are not
 supported.
@@ -235,8 +239,8 @@ The npm supply chain is a real risk for a tool with this access.
 
 1. **Read-only** (done, 2026-09-24). Sandbox, local and SSH executors, host
    facts and privilege detection, tree and text views, packet path diagram.
-   Still missing: confirming unknown SSH host keys in the panel, and a test
-   against a real SSH host.
+   Tested against a real Debian 13 host over SSH (`dev/test-host`). Still
+   missing: confirming unknown SSH host keys in the panel.
 2. **Text-mode editing** of managed tables, with diff, safe apply with
    rollback, and persistence. From here nftm can do everything nftables can.
 3. **Structured rule forms** and live set/map element editing. This is where

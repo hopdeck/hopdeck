@@ -35,6 +35,16 @@ pnpm build && pnpm start   # serve the built UI from the backend
 namespace with a demo firewall. It needs no root and never touches the real
 firewall, so everything can be tried safely.
 
+### Test host
+
+`dev/test-host/up.sh` starts a Debian 13 container with podman (rootless,
+needs `podman`, `passt` and `uidmap`) that plays a remote firewall: systemd,
+sshd, nftables, and one account per privilege case (root, sudo with a
+password, sudo without one, no sudo). `pnpm dev:test-host` then starts nftm
+with those hosts. Its key, known_hosts and ssh config live in
+`.dev/test-host`; `~/.ssh` is never touched, and the container's ruleset is
+separate from the real one. `dev/test-host/down.sh` removes it.
+
 `scripts/nft-fixture.sh FILE.nft` writes what nft prints for a ruleset (JSON and
 the text listing with handles) next to the file, using a throwaway network
 namespace. The host ruleset is not touched.

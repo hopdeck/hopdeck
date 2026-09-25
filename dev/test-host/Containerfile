@@ -1,0 +1,26 @@
+# A Debian 13 host for testing nftm over SSH; start it with dev/test-host/up.sh.
+FROM docker.io/library/debian:trixie
+
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends systemd systemd-sysv openssh-server nftables sudo iproute2 \
+ && rm -rf /var/lib/apt/lists/*
+
+# One account per privilege case nftm handles: root logs in directly, admin
+# needs its sudo password, nopass may run nft through sudo without one, plain
+# may not use sudo at all (it has a password, so sudo can say exactly that).
+RUN useradd -m -s /bin/bash -G sudo admin \
+ && useradd -m -s /bin/bash nopass \
+ && useradd -m -s /bin/bash plain \
+ && printf 'admin:nftm-test\nplain:nftm-test\n' | chpasswd \
+ && echo 'nopass ALL=(root) NOPASSWD: /usr/sbin/nft' > /etc/sudoers.d/nopass \
+ && chmod 0440 /etc/sudoers.d/nopass
+
+COPY sshd.conf /etc/ssh/sshd_config.d/nftm-test.conf
+
+# Like a fresh install: Debian's default /etc/nftables.conf is loaded at boot
+# (openssh-server enables its own service).
+RUN systemctl enable nftables.service
+
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]
