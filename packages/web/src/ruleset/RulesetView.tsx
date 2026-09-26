@@ -3,6 +3,7 @@ import {
   chainKey,
   isManaged,
   parseSetBlock,
+  ruleForm,
   ruleKey,
   userComment,
   type TableChange,
@@ -13,9 +14,11 @@ import {
   type TableNode,
   type TableOwner,
 } from '@nftm/core';
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import { ElementsDialog } from '../edit/ElementsDialog.tsx';
+import { RuleGrid } from '../edit/RuleGrid.tsx';
+import { Segmented } from '../components/Segmented.tsx';
 import type { EditorMode } from '../edit/TableEditor.tsx';
 import { ErrorCallout, type ErrorInfo } from '../components/ErrorCallout.tsx';
 import { AlertIcon, CheckIcon, PlusIcon, RefreshIcon } from '../components/icons.tsx';
@@ -51,9 +54,30 @@ export interface LiveControls {
 
 const LIVE_INTERVALS = [0, 2, 5, 15];
 
+export type RulesMode = 'table' | 'text';
+const MODE_KEY = 'nftm.rulesView';
+
+/** The viewer's last choice; storage can be missing or refuse, so it falls back to the table. */
+function storedMode(): RulesMode {
+  try {
+    return localStorage.getItem(MODE_KEY) === 'text' ? 'text' : 'table';
+  } catch {
+    return 'table';
+  }
+}
+
 export function RulesetView({ state, actions, live }: { state: RulesetState; actions?: RulesetActions | undefined; live?: LiveControls | undefined }) {
   const { t, locale } = useI18n();
   const { model, loading, error, reload } = state;
+  const [mode, setMode] = useState<RulesMode>(storedMode);
+  const chooseMode = (next: RulesMode) => {
+    setMode(next);
+    try {
+      localStorage.setItem(MODE_KEY, next);
+    } catch {
+      // Only a convenience; the choice holds for this visit anyway.
+    }
+  };
 
   return (
     <div className={styles.view}>
@@ -72,6 +96,15 @@ export function RulesetView({ state, actions, live }: { state: RulesetState; act
             </>
           )}
         </p>
+        <Segmented<RulesMode>
+          label={t('ruleset.viewMode')}
+          value={mode}
+          onChange={chooseMode}
+          options={[
+            { value: 'table', label: t('ruleset.viewTable') },
+            { value: 'text', label: t('ruleset.viewText') },
+          ]}
+        />
         {actions !== undefined && model !== undefined && (
           <button type="button" className="btn btn-sm" onClick={actions.onCreate}>
             <PlusIcon />
@@ -124,12 +157,12 @@ export function RulesetView({ state, actions, live }: { state: RulesetState; act
         </Callout>
       )}
 
-      {model !== undefined && <Tables model={model} actions={actions} live={live?.seconds ? live.info : undefined} />}
+      {model !== undefined && <Tables model={model} actions={actions} live={live?.seconds ? live.info : undefined} mode={mode} />}
     </div>
   );
 }
 
-function Tables({ model, actions, live }: { model: RulesetModel; actions: RulesetActions | undefined; live: LiveInfo | undefined }) {
+function Tables({ model, actions, live, mode }: { model: RulesetModel; actions: RulesetActions | undefined; live: LiveInfo | undefined; mode: RulesMode }) {
   const { t } = useI18n();
   const { ruleset } = model;
   return (
@@ -160,6 +193,7 @@ function Tables({ model, actions, live }: { model: RulesetModel; actions: Rulese
           model={model}
           actions={actions}
           live={live}
+          mode={mode}
         />
       ))}
     </>
@@ -171,10 +205,11 @@ interface TableCardProps {
   owner: TableOwner;
   model: RulesetModel;
   live: LiveInfo | undefined;
+  mode: RulesMode;
   actions: RulesetActions | undefined;
 }
 
-function TableCard({ node, owner, model, actions, live }: TableCardProps) {
+function TableCard({ node, owner, model, actions, live, mode }: TableCardProps) {
   const { t } = useI18n();
   const { family, name } = node.table;
   const managed = isManaged(node.table);
@@ -243,7 +278,7 @@ function TableCard({ node, owner, model, actions, live }: TableCardProps) {
 
       <div className={styles.chains}>
         {node.chains.map((chain) => (
-          <Chain key={chain.chain.name} chain={chain} node={node} model={model} live={live} />
+          <Chain key={chain.chain.name} chain={chain} node={node} model={model} live={live} mode={mode} />
         ))}
       </div>
 
@@ -305,12 +340,38 @@ function OwnerNote({ owner }: { owner: Exclude<TableOwner, { kind: 'unknown' }> 
   );
 }
 
-function Chain({ chain, node, model, live }: { chain: ChainNode; node: TableNode; model: RulesetModel; live: LiveInfo | undefined }) {
+interface ChainProps {
+  chain: ChainNode;
+  node: TableNode;
+  model: RulesetModel;
+  live: LiveInfo | undefined;
+  mode: RulesMode;
+}
+
+function Chain({ chain, node, model, live, mode }: ChainProps) {
   const { t, locale } = useI18n();
   const { family, name: table } = node.table;
   const { name, type, hook, policy } = chain.chain;
   const base = hook !== undefined;
   const priority = base ? priorityText(model.listing.chainHeaders.get(chainKey(family, table, name)), chain.chain) : undefined;
+  // The form of each rule, for the table; it changes only when the ruleset is read again.
+  const forms = useMemo(
+    () =>
+      chain.rules.map((rule) => {
+        const listed = model.listing.rules.get(ruleKey(family, table, rule.handle));
+        return listed === undefined ? undefined : ruleForm(rule, listed);
+      }),
+    [chain, model, family, table],
+  );
+  const rules = chain.rules.map((rule, index) => {
+    const source = counterSource(rule, node);
+    const liveCounter = source === undefined || live === undefined ? undefined : (source.kind === 'rule' ? live.state.rules : live.state.counters)[source.key];
+    const rate = source === undefined || live === undefined ? undefined : (source.kind === 'rule' ? live.rates.rules : live.rates.counters)[source.key];
+    const listed = model.listing.rules.get(ruleKey(family, table, rule.handle));
+    // nft printed the values of the moment it was read; show the live ones in the text too.
+    const text = liveCounter !== undefined && source?.kind === 'rule' ? listed?.replace(/counter packets \d+ bytes \d+/, `counter packets ${liveCounter.packets} bytes ${liveCounter.bytes}`) : listed;
+    return { rule, text, form: forms[index], counter: liveCounter ?? ruleCounter(rule, node), rate: rate !== undefined && rate.packets > 0 ? rate : undefined };
+  });
 
   return (
     <section id={chainAnchor(family, table, name)} className={styles.chain}>
@@ -331,17 +392,23 @@ function Chain({ chain, node, model, live }: { chain: ChainNode; node: TableNode
 
       {chain.rules.length === 0 ? (
         <p className={styles.noRules}>{t(base ? 'chain.noRulesBase' : 'chain.noRulesRegular')}</p>
+      ) : mode === 'table' ? (
+        <RuleGrid
+          showRates={live !== undefined && rules.some(({ counter }) => counter !== undefined)}
+          showHandles
+          rows={rules.map(({ rule, text, form, counter, rate }) => ({
+            key: String(rule.handle),
+            text: text ?? JSON.stringify(rule.expr),
+            form,
+            counter: counter && `${new Intl.NumberFormat(locale).format(counter.packets)} / ${formatBytes(counter.bytes, locale)}`,
+            rate: rate === undefined ? undefined : t('live.rate', { packets: formatRate(rate.packets, locale), bytes: formatBytes(Math.round(rate.bytes), locale) }),
+            handle: rule.handle,
+          }))}
+        />
       ) : (
         <ol className={styles.rules}>
-          {chain.rules.map((rule, index) => {
-            const source = counterSource(rule, node);
-            const liveCounter = source === undefined || live === undefined ? undefined : (source.kind === 'rule' ? live.state.rules : live.state.counters)[source.key];
-            const rate = source === undefined || live === undefined ? undefined : (source.kind === 'rule' ? live.rates.rules : live.rates.counters)[source.key];
-            const counter = liveCounter ?? ruleCounter(rule, node);
-            const listed = model.listing.rules.get(ruleKey(family, table, rule.handle));
-            // nft printed the values of the moment it was read; show the live ones in the text too.
-            const text = liveCounter !== undefined && source?.kind === 'rule' ? listed?.replace(/counter packets \d+ bytes \d+/, `counter packets ${liveCounter.packets} bytes ${liveCounter.bytes}`) : listed;
-            const busy = rate !== undefined && rate.packets > 0;
+          {rules.map(({ rule, text, counter, rate }, index) => {
+            const busy = rate !== undefined;
             return (
               <li key={rule.handle} className={`${styles.rule} ${busy ? styles.ruleBusy : ''}`}>
                 <span className={styles.index}>{index + 1}</span>

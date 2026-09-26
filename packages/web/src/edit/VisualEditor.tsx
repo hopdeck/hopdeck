@@ -1,14 +1,12 @@
 import { parseSetBlock, type Family } from '@nftm/core';
-import { Fragment, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ArrowDownIcon, ArrowUpIcon, CopyIcon, EditIcon, PlusIcon, TrashIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
-import type { MessageKey } from '../i18n/locales.ts';
-import { NftCode } from '../ruleset/NftCode.tsx';
 import styles from './Editor.module.css';
 import { ChainDialog } from './ChainDialog.tsx';
 import { SetDialog } from './SetDialog.tsx';
 import { RuleDialog, type RuleEdit } from './RuleDialog.tsx';
-import { ruleColumns, type RuleColumns } from './rule-summary.ts';
+import { RuleGrid } from './RuleGrid.tsx';
 import { addedChain, newRowKey, type ChainState, type RuleRow, type SetState } from './table-model.ts';
 
 interface VisualEditorProps {
@@ -23,26 +21,6 @@ interface VisualEditorProps {
   onChange(chains: ChainState[]): void;
   onSetsChange(sets: SetState[]): void;
 }
-
-type Column = Exclude<keyof RuleColumns, 'action' | 'actionTone'> | 'comment';
-
-/** Grid columns after the action; one shows only when a rule of the chain uses it. */
-const COLUMNS: readonly { id: Column; label: MessageKey; mono: boolean }[] = [
-  { id: 'protocol', label: 'editor.col.protocol', mono: true },
-  { id: 'source', label: 'editor.col.source', mono: true },
-  { id: 'destination', label: 'editor.col.destination', mono: true },
-  { id: 'sourcePort', label: 'editor.col.sourcePort', mono: true },
-  { id: 'destinationPort', label: 'editor.col.destinationPort', mono: true },
-  { id: 'input', label: 'editor.col.input', mono: true },
-  { id: 'output', label: 'editor.col.output', mono: true },
-  { id: 'state', label: 'editor.col.state', mono: false },
-  { id: 'packet', label: 'editor.col.packet', mono: true },
-  { id: 'limits', label: 'editor.col.limits', mono: true },
-  { id: 'extra', label: 'editor.col.extra', mono: false },
-  { id: 'comment', label: 'editor.col.comment', mono: false },
-];
-
-type Cells = RuleColumns & { comment: string };
 
 /** The rules of each chain as a grid, MikroTik style. */
 export function VisualEditor({ family, chains, sets, counters, counterOf, errorRows, onChange, onSetsChange }: VisualEditorProps) {
@@ -169,18 +147,40 @@ export function VisualEditor({ family, chains, sets, counters, counterOf, errorR
           {state.rows.length === 0 ? (
             <p className={styles.empty}>{t(state.policy !== undefined ? 'chain.noRulesBase' : 'chain.noRulesRegular')}</p>
           ) : (
-            <Grid
-              rows={state.rows}
-              counterOf={counterOf}
-              errorRows={errorRows}
-              onEdit={(row) => setEditing({ chain: chainIndex, row })}
-              onMove={(from, to) => move(chainIndex, from, to)}
-              onCopy={(row) => {
-                const rows = [...state.rows];
-                rows.splice(row + 1, 0, { ...rows[row]!, key: newRowKey(), handle: undefined, status: 'new' });
-                setRows(chainIndex, rows);
-              }}
-              onDelete={(row) => setRows(chainIndex, state.rows.filter((_, at) => at !== row))}
+            <RuleGrid
+              rows={state.rows.map((row) => ({
+                key: row.key,
+                text: row.text,
+                form: row.form,
+                status: row.status,
+                error: errorRows.has(row.key),
+                counter: row.handle !== undefined && row.status === 'same' ? counterOf(row.handle) : undefined,
+              }))}
+              onOpen={(row) => setEditing({ chain: chainIndex, row })}
+              actions={(index) => (
+                <span className={styles.rowButtons}>
+                  <IconButton label={t('editor.up')} disabled={index === 0} onClick={() => move(chainIndex, index, index - 1)}>
+                    <ArrowUpIcon />
+                  </IconButton>
+                  <IconButton label={t('editor.down')} disabled={index === state.rows.length - 1} onClick={() => move(chainIndex, index, index + 1)}>
+                    <ArrowDownIcon />
+                  </IconButton>
+                  <IconButton label={t('editor.edit')} onClick={() => setEditing({ chain: chainIndex, row: index })}>
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton label={t('editor.duplicate')}
+                    onClick={() => {
+                      const rows = [...state.rows];
+                      rows.splice(index + 1, 0, { ...rows[index]!, key: newRowKey(), handle: undefined, status: 'new' });
+                      setRows(chainIndex, rows);
+                    }}>
+                    <CopyIcon />
+                  </IconButton>
+                  <IconButton label={t('editor.delete')} danger onClick={() => setRows(chainIndex, state.rows.filter((_, at) => at !== index))}>
+                    <TrashIcon />
+                  </IconButton>
+                </span>
+              )}
             />
           )}
         </section>
@@ -238,109 +238,10 @@ export function VisualEditor({ family, chains, sets, counters, counterOf, errorR
   );
 }
 
-interface GridProps {
-  rows: readonly RuleRow[];
-  counterOf(handle: number): string | undefined;
-  errorRows: ReadonlySet<string>;
-  onEdit(row: number): void;
-  onMove(from: number, to: number): void;
-  onCopy(row: number): void;
-  onDelete(row: number): void;
-}
-
-function Grid({ rows, counterOf, errorRows, onEdit, onMove, onCopy, onDelete }: GridProps) {
-  const { t } = useI18n();
-  const cells = rows.map((row): Cells | undefined => row.form && { ...ruleColumns(row.form), comment: row.form.comment ?? '' });
-  const counters = rows.map((row) => (row.handle !== undefined && row.status === 'same' ? counterOf(row.handle) : undefined));
-  const columns = COLUMNS.filter((column) => cells.some((cell) => cell !== undefined && cell[column.id] !== ''));
-  const showCounters = counters.some((counter) => counter !== undefined);
-
-  return (
-    <div className={styles.gridScroll}>
-      <table className={styles.grid}>
-        <thead>
-          <tr>
-            <th className={styles.index}>#</th>
-            <th>{t('editor.col.action')}</th>
-            {columns.map((column) => (
-              <th key={column.id}>{t(column.label)}</th>
-            ))}
-            {showCounters && <th>{t('editor.col.counter')}</th>}
-            <th className={styles.rowActions}>
-              <span className="visually-hidden">{t('editor.col.actions')}</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => {
-            const cell = cells[index];
-            const status = row.status === 'new' ? styles.rowNew : row.status === 'edited' ? styles.rowEdited : undefined;
-            return (
-              <tr key={row.key} className={errorRows.has(row.key) ? styles.rowError : status} onDoubleClick={() => onEdit(index)}>
-                <td className={styles.index}>{index + 1}</td>
-                {cell === undefined ? (
-                  <td colSpan={1 + columns.length} className={styles.textRule}>
-                    <span className={styles.textBadge} title={t('editor.textRuleTitle')}>
-                      {t('editor.textRule')}
-                    </span>
-                    <NftCode text={row.text} />
-                  </td>
-                ) : (
-                  <>
-                    <td>
-                      <span className={`${styles.action} ${styles[`action-${cell.actionTone}`]}`}>{cell.action}</span>
-                    </td>
-                    {columns.map((column) => (
-                      <td key={column.id} className={column.id === 'comment' ? styles.comment : `${styles.value}${column.mono ? ' mono' : ''}`}>
-                        {column.id === 'comment' ? cell.comment : <Items text={cell[column.id]} />}
-                      </td>
-                    ))}
-                  </>
-                )}
-                {showCounters && <td className={styles.counter}>{counters[index]}</td>}
-                <td className={styles.rowActions}>
-                  <span className={styles.rowButtons}>
-                    <IconButton label={t('editor.up')} disabled={index === 0} onClick={() => onMove(index, index - 1)}>
-                      <ArrowUpIcon />
-                    </IconButton>
-                    <IconButton label={t('editor.down')} disabled={index === rows.length - 1} onClick={() => onMove(index, index + 1)}>
-                      <ArrowDownIcon />
-                    </IconButton>
-                    <IconButton label={t('editor.edit')} onClick={() => onEdit(index)}>
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton label={t('editor.duplicate')} onClick={() => onCopy(index)}>
-                      <CopyIcon />
-                    </IconButton>
-                    <IconButton label={t('editor.delete')} danger onClick={() => onDelete(index)}>
-                      <TrashIcon />
-                    </IconButton>
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 function IconButton({ label, danger = false, disabled, onClick, children }: { label: string; danger?: boolean; disabled?: boolean; onClick(): void; children: ReactNode }) {
   return (
     <button type="button" className={`btn btn-ghost btn-sm btn-icon${danger ? ' btn-danger' : ''}`} title={label} aria-label={label} disabled={disabled} onClick={onClick}>
       {children}
     </button>
   );
-}
-
-/** A comma-separated list that wraps only between its items, never inside one. */
-function Items({ text }: { text: string }) {
-  const items = text.split(', ');
-  return items.map((item, index) => (
-    <Fragment key={index}>
-      {index > 0 && ' '}
-      <span className={styles.item}>{index < items.length - 1 ? `${item},` : item}</span>
-    </Fragment>
-  ));
 }
