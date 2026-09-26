@@ -1,5 +1,8 @@
 {
   "app.loading": "Wczytywanie…",
+  "console.stop": "Stop!",
+  "console.warning": "To narzędzie przeglądarki jest przeznaczone dla programistów. Jeśli ktoś kazał ci tu coś wkleić, żeby włączyć jakąś funkcję, naprawić problem albo uzyskać dostęp, to oszustwo. Wklejony tu kod działa z uprawnieniami tego panelu: może jako root zmienić lub wyłączyć zaporę na każdym serwerze, którym panel zarządza, i oddać je komuś obcemu.",
+  "console.advice": "Nie wklejaj tu niczego, czego nie rozumiesz, i nigdy nie udostępniaj adresu z #token=.",
   "theme.label": "Motyw",
   "theme.system": "Systemowy",
   "theme.light": "Jasny",

@@ -1,5 +1,8 @@
 {
   "app.loading": "Loading…",
+  "console.stop": "Stop!",
+  "console.warning": "This is a browser tool for developers. If someone told you to paste something here to turn on a feature, fix a problem or get access, it is a scam. Code pasted here runs with this panel's access: it can change or switch off the firewall, as root, on every server the panel manages, and hand them to someone else.",
+  "console.advice": "Do not paste anything here that you do not understand, and never share the address with #token= in it.",
   "theme.label": "Theme",
   "theme.system": "System",
   "theme.light": "Light",

@@ -276,6 +276,31 @@ Implemented in [`packages/server/src/security.ts`](../packages/server/src/securi
 - **WebSocket (later):** same checks. Browsers cannot set headers on
   WebSocket connections, so the token goes in the first message.
 - **Host output:** rendered as text, never as HTML and never evaluated.
+- **Browser console:** the panel warns there, in the UI language, not to
+  paste anything: pasted code runs with the panel's token (self-XSS scams).
+- **Weak tokens:** a `NFTM_TOKEN` shorter than 32 characters draws a warning.
+
+## Files on managed hosts
+
+Deployments and traces keep files on the host (nft input, the watchdog
+script, logs) that root reads and runs, so whoever can change them acts as
+root ([`staging.ts`](../packages/server/src/hosts/staging.ts)).
+
+- **Root login, passwordless sudo:** the login user can become root anyway;
+  the files live in a private directory of theirs (`mktemp -d`, mode 700).
+- **sudo for nft only:** root never runs their files; the watchdog runs as
+  the user and calls `sudo nft`.
+- **sudo with a password:** the password is what keeps the login user from
+  root, so any process of theirs must not be able to swap `watchdog.sh` or
+  `change.nft` between nftm writing and root using them. The directory
+  belongs to root (mode 700), and every file gets in through a copy root
+  makes and checks against the SHA-256 nftm computed; a swapped file fails
+  the check and nothing is used. Boot files in `/etc/nftm` are written the
+  same way.
+- Commands take their arguments as argv, never through a local shell; over
+  SSH each argument is quoted. Values that go into nft input (table
+  definitions, elements, trace filters) are checked first: one table block
+  without `include`, one element, values only.
 
 ## Dependency policy
 

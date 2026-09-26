@@ -11,6 +11,7 @@ import {
   type PersistResult,
 } from '@nftm/core';
 import { comparable, readTable } from './deploy.ts';
+import { copyAsRoot } from './staging.ts';
 import { HostError } from './errors.ts';
 import { runAsRoot, runNft, type NftAccess } from './privilege.ts';
 
@@ -231,16 +232,9 @@ async function readNftmFiles(access: NftAccess): Promise<Map<string, string>> {
  * rename, so a crash never leaves half a file. Staging avoids piping content
  * through sudo -S, whose first input line is the password.
  */
+/** Writes a boot file through a copy root checks against the content's SHA-256, see copyAsRoot(). */
 async function writeAsRoot(target: PersistTarget, path: string, content: string): Promise<void> {
-  const staged = await target.executor.exec(['sh', '-c', 'umask 077; f=$(mktemp "${TMPDIR:-/tmp}/nftm-save.XXXXXX") && cat > "$f" && echo "$f"'], {
-    stdin: content,
-  });
-  if (staged.exitCode !== 0) throw new HostError('command-failed', staged.stderr.trim());
-  const source = staged.stdout.trim();
-  const install = `set -e; umask 077; mkdir -p ${NFTM_DIR}; cp "$1" "$2.tmp"; mv -f "$2.tmp" "$2"`;
-  const moved = await runAsRoot(target.access, ['sh', '-c', install, 'sh', source, path]);
-  await target.executor.exec(['rm', '-f', source]);
-  if (moved.exitCode !== 0) throw new HostError('command-failed', moved.stderr.trim());
+  await copyAsRoot(target, content, path);
 }
 
 async function removeAsRoot(access: NftAccess, path: string): Promise<boolean> {

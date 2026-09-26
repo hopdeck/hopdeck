@@ -246,6 +246,19 @@ describe.skipIf(!process.env['NFTM_TEST_HOST'] || !existsSync(sshConfig))('Deplo
     controlDir = await mkdtemp(`${tmpdir()}/nftm-deploy-`);
   });
 
+  it('under sudo with a password, keeps its files where only root can change them', async () => {
+    const target = await hostTarget('admin');
+    const { makeStaging, stageFile, removeStaging } = await import('./staging.ts');
+    const staging = await makeStaging(target);
+    expect(staging.asRoot).toBe(true);
+    await stageFile(target, staging, 'watchdog.sh', 'echo safe\n');
+    const owner = await target.executor.exec(['stat', '-c', '%U %a', staging.dir]);
+    expect(owner.stdout.trim()).toBe('root 700');
+    // The login user can neither replace the script nor even see it.
+    expect((await target.executor.exec(['sh', '-c', 'echo "id > /tmp/pwned" > "$1/watchdog.sh"', 'sh', staging.dir])).exitCode).not.toBe(0);
+    await removeStaging(target, staging);
+  });
+
   it('as root, protects the change with a systemd watchdog', async () => {
     const target = await hostTarget('root');
     const plan = await deployments.prepare(target, [create('nftm_root', '\tchain c {\n\t\ttype filter hook input priority 100; policy accept;\n\t}')]);

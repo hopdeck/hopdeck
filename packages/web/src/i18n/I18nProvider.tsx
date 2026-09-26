@@ -42,7 +42,7 @@ export function useI18n(): I18n {
 }
 
 /** The saved choice, else the browser's preferred languages, else English. */
-function initialLocale(): string {
+export function initialLocale(): string {
   const saved = loadLocale();
   if (saved !== null && saved in MESSAGES) return saved;
   return pickLocale(navigator.languages, LOCALES, SOURCE_LOCALE);

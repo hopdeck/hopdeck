@@ -28,6 +28,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { HostError } from './errors.ts';
 import { runAsRoot, runNft, type NftAccess } from './privilege.ts';
+import { inStaging, makeStaging, removeStaging, stageFile, type Staging } from './staging.ts';
 
 /** Everything deploying to one host needs; HostManager builds it. */
 export interface DeployTarget {
@@ -70,6 +71,7 @@ export interface CurrentTable {
 
 interface Deployment {
   view: DeploymentView;
+  staging: Staging;
   createdAt: number;
   /** How the watchdog was started, to know what "unavailable" meant. */
   watchdogCommand: readonly string[] | undefined;
@@ -131,12 +133,13 @@ export class Deployments {
       tables.push(planTable(change, await readTable(target.access, change.family, change.table), target.manualOverride));
     }
 
-    const directory = await makeDirectory(target.executor);
+    const staging = await makeStaging(target);
+    const directory = staging.dir;
     const change = tables.map((table) => table.script).join('');
     const rollback = tables.map((table) => table.rollback).join('');
-    await writeRemote(target.executor, `${directory}/change.nft`, change);
-    await writeRemote(target.executor, `${directory}/rollback.nft`, rollback);
-    await writeRemote(target.executor, `${directory}/watchdog.sh`, WATCHDOG);
+    await stageFile(target, staging, 'change.nft', change);
+    await stageFile(target, staging, 'rollback.nft', rollback);
+    await stageFile(target, staging, 'watchdog.sh', WATCHDOG);
 
     const checkChange = await runNft(target.access, ['-c', '-f', `${directory}/change.nft`]);
     const checkRollback = await runNft(target.access, ['-c', '-f', `${directory}/rollback.nft`]);
@@ -146,7 +149,7 @@ export class Deployments {
         : checkRollback.exitCode !== 0
           ? { ok: false, message: `nftm could not prepare a way back, so it will not apply this. nft said: ${checkRollback.stderr.trim()}` }
           : { ok: true, message: '' };
-    if (!validation.ok) await removeDirectory(target.executor, directory);
+    if (!validation.ok) await removeStaging(target, staging);
 
     const watchdog = validation.ok ? await watchdogCommand(target, directory, this.#seconds) : undefined;
     const view: DeploymentView = {
@@ -163,7 +166,7 @@ export class Deployments {
       },
       manualOverride: target.manualOverride,
     };
-    this.#deployments.set(view.id, { view, createdAt: Date.now(), watchdogCommand: watchdog?.argv });
+    this.#deployments.set(view.id, { view, staging, createdAt: Date.now(), watchdogCommand: watchdog?.argv });
     return view;
   }
 
@@ -195,12 +198,12 @@ export class Deployments {
       throw new HostError('rollback-unavailable', rollbackUnavailableReason(target));
     }
 
-    await startWatchdog(target, deployment.watchdogCommand, dir);
+    await startWatchdog(target, deployment.watchdogCommand, deployment.staging);
     const armedAt = Date.now();
 
     const applied = await runNft(target.access, ['-f', `${dir}/change.nft`]);
     if (applied.exitCode !== 0) {
-      await disarm(target.executor, dir);
+      await disarm(target, deployment.staging);
       view.state = 'failed';
       view.outcome = { reason: 'nft-error', detail: applied.stderr.trim() || `nft exited with code ${applied.exitCode}` };
       await this.#record(view, 'failed', view.outcome.detail);
@@ -221,7 +224,7 @@ export class Deployments {
         // the watchdog restores the tables at the deadline.
         const undone = await runNft(target.access, ['-f', `${dir}/rollback.nft`]).catch(() => undefined);
         if (undone?.exitCode === 0) {
-          await disarm(target.executor, dir).catch(() => undefined);
+          await disarm(target, deployment.staging).catch(() => undefined);
           view.state = 'rolled-back';
           delete view.deadline;
           await this.#record(view, 'rolled-back', `new connections failed: ${blocked}`);
@@ -231,19 +234,19 @@ export class Deployments {
     }
     // The check can outlast a short watchdog: if the watchdog already restored
     // the tables, say so rather than wait for a confirmation of nothing.
-    const fired = await readRollback(target.executor, dir).catch(() => undefined);
+    const fired = await readRollback(target, deployment.staging).catch(() => undefined);
     if (fired !== undefined) return this.#rolledBack(view, 'timeout', fired, target);
     return view;
   }
 
   /** Keeps the change: the watchdog stands down. Close to the deadline, nftm waits to report what really happened. */
   async confirm(id: string, target: DeployTarget): Promise<DeploymentView> {
-    const { view } = this.#require(id, 'awaiting-confirmation');
+    const { view, staging } = this.#require(id, 'awaiting-confirmation');
     const remaining = Date.parse(view.deadline!) - Date.now();
-    await disarm(target.executor, view.safety.directory);
+    await disarm(target, staging);
     if (remaining < RACE_MARGIN_MS) {
       await new Promise((resolve) => setTimeout(resolve, Math.max(remaining, 0) + RACE_MARGIN_MS));
-      const rolledBack = await readRollback(target.executor, view.safety.directory);
+      const rolledBack = await readRollback(target, staging);
       if (rolledBack !== undefined) return this.#rolledBack(view, 'timeout', rolledBack, target);
     }
     view.state = 'confirmed';
@@ -255,12 +258,12 @@ export class Deployments {
 
   /** Restores the tables now, before the deadline. */
   async rollback(id: string, target: DeployTarget): Promise<DeploymentView> {
-    const { view } = this.#require(id, 'awaiting-confirmation');
-    const undone = await runNft(target.access, ['-f', `${view.safety.directory}/rollback.nft`]);
+    const { view, staging } = this.#require(id, 'awaiting-confirmation');
+    const undone = await runNft(target.access, ['-f', `${staging.dir}/rollback.nft`]);
     if (undone.exitCode !== 0) {
       throw new HostError('command-failed', `rolling back failed; the watchdog will try again at the deadline. nft said: ${undone.stderr.trim()}`);
     }
-    await disarm(target.executor, view.safety.directory);
+    await disarm(target, staging);
     return this.#rolledBack(view, 'user', '', target);
   }
 
@@ -270,15 +273,15 @@ export class Deployments {
     if (deployment === undefined) throw new HostError('deployment-state', 'no such deployment');
     const { view } = deployment;
     if (view.state !== 'awaiting-confirmation' || Date.now() < Date.parse(view.deadline!)) return view;
-    const rolledBack = await readRollback(target.executor, view.safety.directory);
+    const rolledBack = await readRollback(target, deployment.staging);
     return rolledBack === undefined ? view : this.#rolledBack(view, 'timeout', rolledBack, target);
   }
 
   /** Drops a plan that was never applied, with its files on the host. */
   async discard(id: string, target: DeployTarget): Promise<void> {
-    const { view } = this.#require(id, 'planned', 'invalid');
+    const { view, staging } = this.#require(id, 'planned', 'invalid');
     this.#deployments.delete(id);
-    if (view.state === 'planned') await removeDirectory(target.executor, view.safety.directory);
+    if (view.state === 'planned') await removeStaging(target, staging);
   }
 
   #require(id: string, ...states: DeploymentView['state'][]): Deployment {
@@ -294,7 +297,8 @@ export class Deployments {
     view.state = 'rolled-back';
     view.outcome = { reason, detail };
     delete view.deadline;
-    await removeDirectory(target.executor, view.safety.directory).catch(() => undefined);
+    const staging = this.#deployments.get(view.id)?.staging;
+    if (staging !== undefined) await removeStaging(target, staging).catch(() => undefined);
     await this.#record(view, 'rolled-back', reason === 'timeout' ? `not confirmed in time. ${detail}`.trim() : 'by the user');
     return view;
   }
@@ -517,7 +521,7 @@ export function rollbackUnavailableReason(target: DeployTarget): string {
     : 'nothing on this host could roll the change back while nftm is away';
 }
 
-export async function startWatchdog(target: DeployTarget, argv: readonly string[], dir: string): Promise<void> {
+export async function startWatchdog(target: DeployTarget, argv: readonly string[], staging: Staging): Promise<void> {
   const viaSystemd = argv[0] === 'systemd-run';
   const started = viaSystemd ? await runAsRoot(target.access, argv) : await target.executor.exec(argv);
   if (started.exitCode !== 0) {
@@ -525,45 +529,27 @@ export async function startWatchdog(target: DeployTarget, argv: readonly string[
   }
   // Nothing is applied until the watchdog provably runs.
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const running = await target.executor.exec(['sh', '-c', 'test -s "$1/watchdog.pid" && test -d "/proc/$(cat "$1/watchdog.pid")"', 'sh', dir]);
+    const running = await inStaging(target, staging, ['sh', '-c', 'test -s "$1/watchdog.pid" && test -d "/proc/$(cat "$1/watchdog.pid")"', 'sh', staging.dir]);
     if (running.exitCode === 0) return;
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
   throw new HostError('rollback-unavailable', 'the watchdog did not start');
 }
 
-/**
- * A private directory for one deployment. Directories of this user older than
- * a day are removed first: they are left when nftm stopped before a rolled
- * back change was reported, and are kept that long for a look at the logs.
- */
-export async function makeDirectory(executor: Executor): Promise<string> {
-  const made = await executor.exec([
-    'sh',
-    '-c',
-    'base="${TMPDIR:-/tmp}"; find "$base" -maxdepth 1 -name "nftm.*" -user "$(id -u)" -mtime +0 -exec rm -rf {} + 2>/dev/null; umask 077; mktemp -d "$base/nftm.XXXXXX"',
-  ]);
-  if (made.exitCode !== 0) throw new HostError('command-failed', made.stderr.trim());
-  return made.stdout.trim();
-}
-
-export async function writeRemote(executor: Executor, path: string, content: string): Promise<void> {
-  const written = await executor.exec(['sh', '-c', 'umask 077; cat > "$1"', 'sh', path], { stdin: content });
-  if (written.exitCode !== 0) throw new HostError('command-failed', written.stderr.trim());
-}
-
-export async function removeDirectory(executor: Executor, dir: string): Promise<void> {
-  await executor.exec(['rm', '-rf', '--', dir]);
-}
-
-async function disarm(executor: Executor, dir: string): Promise<void> {
-  const touched = await executor.exec(['touch', `${dir}/confirmed`]);
+async function disarm(target: DeployTarget, staging: Staging): Promise<void> {
+  const touched = await inStaging(target, staging, ['touch', `${staging.dir}/confirmed`]);
   if (touched.exitCode !== 0) throw new HostError('command-failed', touched.stderr.trim());
 }
 
 /** The watchdog's record of a rollback: nft's exit code and output; undefined if it did not roll back. */
-async function readRollback(executor: Executor, dir: string): Promise<string | undefined> {
-  const read = await executor.exec(['sh', '-c', 'test -e "$1/rolled-back" || exit 3; echo "exit code $(cat "$1/rolled-back")"; cat "$1/rollback.log"', 'sh', dir]);
+async function readRollback(target: DeployTarget, staging: Staging): Promise<string | undefined> {
+  const read = await inStaging(target, staging, [
+    'sh',
+    '-c',
+    'test -e "$1/rolled-back" || exit 3; echo "exit code $(cat "$1/rolled-back")"; cat "$1/rollback.log"',
+    'sh',
+    staging.dir,
+  ]);
   if (read.exitCode === 3) return undefined;
   return read.stdout.trim();
 }

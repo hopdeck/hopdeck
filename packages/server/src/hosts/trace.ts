@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { replaceTableScript, TRACE_TABLE_PREFIX, traceFilterProblem, traceTable, type TraceFilter, type TraceView } from '@nftm/core';
-import { makeDirectory, removeDirectory, rollbackUnavailableReason, startWatchdog, watchdogCommand, writeRemote, type DeployTarget } from './deploy.ts';
+import { rollbackUnavailableReason, startWatchdog, watchdogCommand, type DeployTarget } from './deploy.ts';
+import { inStaging, makeStaging, removeStaging, stageFile, type Staging } from './staging.ts';
 import { HostError } from './errors.ts';
 import { runNft } from './privilege.ts';
 
@@ -34,7 +35,7 @@ echo $? > "$dir/finished"
 
 interface Trace {
   view: TraceView;
-  directory: string;
+  staging: Staging;
   /** Bytes of trace.log read so far. */
   offset: number;
   /** An unfinished last line, completed by the next read. */
@@ -64,17 +65,18 @@ export class Traces {
 
     const table = `${TRACE_TABLE_PREFIX}${randomBytes(4).toString('hex')}`;
     const definition = traceTable(table, filter, perSecond);
-    const directory = await makeDirectory(target.executor);
+    const staging = await makeStaging(target);
+    const directory = staging.dir;
     const watchdog = await watchdogCommand(target, directory, seconds);
     if (watchdog === undefined) {
-      await removeDirectory(target.executor, directory);
+      await removeStaging(target, staging);
       throw new HostError('trace-unavailable', rollbackUnavailableReason(target).replace('roll the change back', 'remove the tracing table'));
     }
-    await writeRemote(target.executor, `${directory}/trace.nft`, definition);
-    await writeRemote(target.executor, `${directory}/cleanup.nft`, replaceTableScript('inet', table, undefined));
-    await writeRemote(target.executor, `${directory}/watchdog.sh`, TRACE_WATCHDOG);
+    await stageFile(target, staging, 'trace.nft', definition);
+    await stageFile(target, staging, 'cleanup.nft', replaceTableScript('inet', table, undefined));
+    await stageFile(target, staging, 'watchdog.sh', TRACE_WATCHDOG);
     // The watchdog runs before the table exists, so the table cannot outlive it.
-    await startWatchdog(target, watchdog.argv, directory);
+    await startWatchdog(target, watchdog.argv, staging);
 
     const now = Date.now();
     const view: TraceView = {
@@ -90,7 +92,7 @@ export class Traces {
       lines: [],
       dropped: 0,
     };
-    const trace: Trace = { view, directory, offset: 0, partial: '', packets: 0 };
+    const trace: Trace = { view, staging, offset: 0, partial: '', packets: 0 };
     this.#traces.set(view.id, trace);
 
     const loaded = await runNft(target.access, ['-f', `${directory}/trace.nft`]);
@@ -129,8 +131,8 @@ export class Traces {
   }
 
   async #read(trace: Trace, target: DeployTarget): Promise<void> {
-    const { directory } = trace;
-    const read = await target.executor.exec([
+    const directory = trace.staging.dir;
+    const read = await inStaging(target, trace.staging, [
       'sh',
       '-c',
       // New bytes of the log, then whether the watchdog has finished.
@@ -175,11 +177,12 @@ export class Traces {
 
   /** Asks the watchdog to stop, waits for it to remove the table, and reads the rest. */
   async #finish(trace: Trace, target: DeployTarget): Promise<void> {
-    await target.executor.exec(['touch', `${trace.directory}/stop`]);
+    const { staging } = trace;
+    await inStaging(target, staging, ['touch', `${staging.dir}/stop`]);
     for (let attempt = 0; attempt < 30; attempt += 1) {
-      const done = await target.executor.exec(['cat', `${trace.directory}/finished`]);
+      const done = await inStaging(target, staging, ['cat', `${staging.dir}/finished`]);
       if (done.exitCode === 0) {
-        const rest = await target.executor.exec(['tail', '-c', `+${trace.offset + 1}`, `${trace.directory}/trace.log`]);
+        const rest = await inStaging(target, staging, ['tail', '-c', `+${trace.offset + 1}`, `${staging.dir}/trace.log`]);
         this.#append(trace, `${rest.stdout}\n`);
         await this.#collect(trace, target, done.stdout.trim());
         return;
@@ -191,9 +194,9 @@ export class Traces {
   }
 
   async #collect(trace: Trace, target: DeployTarget, exitCode: string): Promise<void> {
-    const { view, directory } = trace;
+    const { view, staging } = trace;
     if (exitCode !== '0') {
-      const log = await target.executor.exec(['cat', `${directory}/cleanup.log`]);
+      const log = await inStaging(target, staging, ['cat', `${staging.dir}/cleanup.log`]);
       view.cleanup = `exit code ${exitCode}: ${log.stdout.trim()}`;
     }
     // A monitor that could not start leaves its complaint instead of trace lines.
@@ -202,6 +205,6 @@ export class Traces {
       view.problem = { code: 'command-failed', detail: complaints.join('\n') };
     }
     view.state = view.problem?.code === 'command-failed' || view.problem?.code === 'invalid-filter' ? 'failed' : 'finished';
-    await removeDirectory(target.executor, directory);
+    await removeStaging(target, staging);
   }
 }

@@ -67,6 +67,10 @@ const hosts = await HostManager.open({
 
 // `pnpm dev` sets NFTM_TOKEN so the browser session survives --watch restarts.
 const token = process.env['NFTM_TOKEN'] || generateToken();
+// The token is all it takes to change firewalls as root; a short one can be guessed.
+if (token.length < 32) {
+  process.stderr.write(`warning: NFTM_TOKEN has ${token.length} characters; anyone who can reach 127.0.0.1 might guess it. Leave it unset for a random one.\n`);
+}
 
 const server = await startServer({
   port,

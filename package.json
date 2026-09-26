@@ -14,7 +14,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:host": "NFTM_TEST_HOST=1 vitest run --no-file-parallelism"
   },
   "devDependencies": {
     "@types/node": "^24.13.5",
