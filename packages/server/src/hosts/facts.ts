@@ -11,6 +11,7 @@ echo "kernel=$(uname -r)"
 if [ -r /etc/os-release ]; then
   (. /etc/os-release; echo "os_id=$ID"; echo "os_version=$VERSION_ID"; echo "os_name=$PRETTY_NAME")
 fi
+if [ -f /etc/openwrt_release ]; then echo "openwrt=yes"; fi
 if [ -d /run/systemd/system ]; then echo "systemd=yes"; else echo "systemd=no"; fi
 for p in "$(command -v nft 2>/dev/null)" /usr/sbin/nft /sbin/nft /usr/local/sbin/nft; do
   if [ -n "$p" ] && [ -x "$p" ]; then
@@ -45,6 +46,8 @@ export function parseFacts(output: string): HostFacts {
     hostname: get('hostname'),
     kernel: get('kernel'),
     os: values.has('os_id') ? { id: get('os_id'), version: get('os_version'), name: get('os_name') } : undefined,
+    // Derivatives such as ImmortalWrt name themselves in os-release but keep openwrt_release.
+    platform: get('os_id') === 'openwrt' || get('openwrt') === 'yes' ? 'openwrt' : 'linux',
     systemd: get('systemd') === 'yes',
     // "nftables v1.1.3 (Commodore Bullmoose #4)"
     nft: nftPath ? { path: nftPath, version: /v(\d+(?:\.\d+)+)/.exec(get('nft_version'))?.[1] ?? '' } : undefined,

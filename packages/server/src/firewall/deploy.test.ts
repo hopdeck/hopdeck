@@ -1,10 +1,11 @@
-import { parseListing, parseRuleset, type Executor } from '@hopdeck/core';
+import { parseListing, parseRuleset, platform, type Executor } from '@hopdeck/core';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { checkDefinition, comparable, Deployments, planTable, readTable, type CurrentTable, type DeployTarget } from './deploy.ts';
 import { HostError } from '../hosts/errors.ts';
 import { Sandbox } from '../hosts/sandbox.ts';
+import { FakeExecutor } from '../testing/fake-executor.ts';
 
 const MINE = 'table inet mine {\n\tchain input {\n\t\ttype filter hook input priority filter; policy accept;\n\t}\n}\n';
 
@@ -70,6 +71,26 @@ describe('planTable', () => {
   });
 });
 
+describe('read-only platforms', () => {
+  it('refuses to plan any change on OpenWrt, before touching the host', async () => {
+    const executor = new FakeExecutor(() => new Error('must not run'));
+    const target: DeployTarget = {
+      hostId: 'router',
+      name: 'router',
+      kind: 'ssh',
+      executor,
+      access: { executor, nftPath: '/usr/sbin/nft', privilege: { kind: 'root' } },
+      platform: platform('openwrt'),
+      systemd: false,
+      manualOverride: true,
+      freshExecutor: undefined,
+    };
+    const adopt = new Deployments().prepare(target, [{ kind: 'adopt', family: 'inet', table: 'fw4' }]);
+    await expect(adopt).rejects.toMatchObject({ code: 'platform-read-only', detail: expect.stringContaining('UCI') });
+    expect(executor.calls).toEqual([]);
+  });
+});
+
 describe('checkDefinition', () => {
   const check = (definition: string) => () => checkDefinition(definition, 'inet', 'mine');
 
@@ -116,6 +137,7 @@ describe.skipIf(NFT === undefined || !USERNS)('Deployments in a sandbox', { time
       kind: 'sandbox',
       executor,
       access: { executor, nftPath: nft, privilege: { kind: 'root' } },
+      platform: platform('linux'),
       systemd: true,
       manualOverride: false,
       freshExecutor: undefined,
@@ -227,6 +249,7 @@ describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('De
       kind: 'ssh',
       executor,
       access: { executor, nftPath: '/usr/sbin/nft', privilege, ...(account === 'admin' && { password: 'hopdeck-test' }) },
+      platform: platform('linux'),
       systemd: true,
       manualOverride: false,
       freshExecutor: new SshExecutor({ destination, controlDir, configFile: sshConfig, shareConnection: false }),

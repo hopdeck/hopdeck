@@ -1,16 +1,30 @@
+import { platform } from '@hopdeck/core';
 import { existsSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Deployments, readTable, type DeployTarget } from './deploy.ts';
-import { collectFacts } from '../hosts/facts.ts';
-import { addInclude, bootDefinition, INCLUDE_LINE, persistenceStatus, persistTables, tableFile, type PersistTarget } from './persist.ts';
+import { collectFacts, parseFacts } from '../hosts/facts.ts';
+import { addInclude, bootDefinition, bootDirectory, includeLine, persistenceStatus, persistTables, tableFile, type PersistTarget } from './persist.ts';
 import { SshExecutor } from '../hosts/ssh.ts';
+import { DEBIAN_FACTS, FakeExecutor } from '../testing/fake-executor.ts';
 
 describe('tableFile and bootDefinition', () => {
   it('names files safely', () => {
-    expect(tableFile('inet', 'filter')).toBe('/etc/hopdeck/inet-filter.nft');
-    expect(tableFile('ip', 'a b/c')).toBe('/etc/hopdeck/ip-a%20b%2fc.nft');
+    const directory = bootDirectory(platform('linux'));
+    expect(directory).toBe('/etc/hopdeck/firewall');
+    expect(tableFile(directory, 'inet', 'filter')).toBe('/etc/hopdeck/firewall/inet-filter.nft');
+    expect(tableFile(directory, 'ip', 'a b/c')).toBe('/etc/hopdeck/firewall/ip-a%20b%2fc.nft');
+  });
+
+  it('saves nothing on OpenWrt, whose boot firewall comes from UCI', async () => {
+    const executor = new FakeExecutor(() => new Error('must not run'));
+    const facts = { ...parseFacts(DEBIAN_FACTS), platform: 'openwrt' as const };
+    const target: PersistTarget = { kind: 'ssh', executor, access: { executor, nftPath: '/usr/sbin/nft', privilege: { kind: 'root' } }, facts };
+    const status = await persistenceStatus(target);
+    expect(status.problem).toMatchObject({ code: 'persistence-unavailable', detail: expect.stringContaining('UCI') });
+    expect(await persistTables(target, [{ family: 'inet', name: 'filter' }])).toMatchObject({ written: [], problem: { code: 'persistence-unavailable' } });
+    expect(executor.calls).toEqual([]);
   });
 
   it('loads at boot with fresh counters and full timeouts, replacing any earlier definition', () => {
@@ -44,6 +58,7 @@ describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('pe
       kind: 'ssh',
       executor,
       access,
+      platform: platform('linux'),
       systemd: true,
       manualOverride: false,
       freshExecutor: new SshExecutor({ destination, controlDir, configFile: sshConfig, shareConnection: false }),
@@ -76,24 +91,26 @@ describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('pe
     await addInclude(root);
     await addInclude(root);
     const main = (await root.executor.exec(['cat', '/etc/nftables.conf'])).stdout;
-    expect(main.split('\n').filter((line) => line === INCLUDE_LINE)).toHaveLength(1);
+    expect(main.split('\n').filter((line) => line === includeLine('/etc/hopdeck/firewall'))).toHaveLength(1);
     backup = (await root.executor.exec(['sh', '-c', 'ls /etc/nftables.conf.hopdeck-backup-*'])).stdout.trim();
     expect(backup).toMatch(/hopdeck-backup-\d{14}$/);
     expect((await persistenceStatus(root)).includePresent).toBe(true);
+    // Root's alone: host settings and the boot tables.
+    expect((await root.executor.exec(['stat', '-c', '%a %U', '/etc/hopdeck', '/etc/hopdeck/firewall'])).stdout).toBe('700 root\n700 root\n');
   });
 
   it('keeps a kept change across a reload of the boot configuration, and forgets a deleted table', async () => {
     const created = await change([{ kind: 'replace', family: 'inet', table: 'hopdeck_boot', definition: 'table inet hopdeck_boot {\n\tset s {\n\t\ttype ipv4_addr\n\t}\n}\n' }]);
-    expect(created.persisted).toMatchObject({ written: ['/etc/hopdeck/inet-hopdeck_boot.nft'], removed: [] });
+    expect(created.persisted).toMatchObject({ written: ['/etc/hopdeck/firewall/inet-hopdeck_boot.nft'], removed: [] });
     expect((await persistenceStatus(root)).tables).toEqual([
-      { family: 'inet', name: 'hopdeck_boot', file: '/etc/hopdeck/inet-hopdeck_boot.nft', state: 'saved', alsoInMainConfig: false },
+      { family: 'inet', name: 'hopdeck_boot', file: '/etc/hopdeck/firewall/inet-hopdeck_boot.nft', state: 'saved', alsoInMainConfig: false },
     ]);
 
     expect((await reload()).exitCode).toBe(0);
     expect((await readTable(root.access, 'inet', 'hopdeck_boot'))?.text).toContain('comment "managed by hopdeck"');
 
     const deleted = await change([{ kind: 'delete', family: 'inet', table: 'hopdeck_boot' }]);
-    expect(deleted.persisted).toMatchObject({ written: [], removed: ['/etc/hopdeck/inet-hopdeck_boot.nft'] });
+    expect(deleted.persisted).toMatchObject({ written: [], removed: ['/etc/hopdeck/firewall/inet-hopdeck_boot.nft'] });
     await reload();
     expect(await readTable(root.access, 'inet', 'hopdeck_boot')).toBeUndefined();
   });

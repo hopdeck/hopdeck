@@ -241,6 +241,7 @@ function hostErrorStatus(error: HostError): number {
     case 'invalid-filter':
       return 400;
     case 'trace-unavailable':
+    case 'platform-read-only':
       return 409;
     default:
       return 502;

@@ -21,6 +21,7 @@ import {
   type HostKind,
   type Listing,
   type PersistResult,
+  type Platform,
   type TableChange,
   type TableNode,
   type TableOwner,
@@ -37,6 +38,7 @@ export interface DeployTarget {
   kind: HostKind;
   executor: Executor;
   access: NftAccess;
+  platform: Platform;
   systemd: boolean;
   manualOverride: boolean;
   /** A connection that shares nothing with `executor`; undefined without a network hop (localhost, sandbox). */
@@ -100,6 +102,15 @@ fi
 echo $? > "$dir/rolled-back"
 `;
 
+/**
+ * Why the firewall module must not change this host's firewall, if it must
+ * not; in English, for error details. Only OpenWrt is read-only so far.
+ */
+export function firewallReadOnly(host: Platform): string | undefined {
+  if (host.firewall !== 'read-only') return undefined;
+  return 'OpenWrt keeps its firewall in UCI (/etc/config/firewall), which LuCI shows and fw4 turns into nftables. hopdeck will make changes there in a later version; until then it changes nothing on this host';
+}
+
 /** Plans, applies and confirms changes on hosts, with a rollback armed on the host before anything changes. */
 export class Deployments {
   readonly #deployments = new Map<string, Deployment>();
@@ -123,6 +134,8 @@ export class Deployments {
 
   /** Checks the changes against ownership rules and nft -c, and stages files on the host. Nothing changes yet. */
   async prepare(target: DeployTarget, changes: readonly TableChange[]): Promise<DeploymentView> {
+    const readOnly = firewallReadOnly(target.platform);
+    if (readOnly !== undefined) throw new HostError('platform-read-only', readOnly);
     if (changes.length === 0) throw new HostError('invalid-definition', 'no changes');
     const seen = new Set<string>();
     const tables: DeploymentTable[] = [];

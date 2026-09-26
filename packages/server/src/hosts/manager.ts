@@ -17,7 +17,7 @@ import type {
   TraceFilter,
   TraceView,
 } from '@hopdeck/core';
-import { liveState } from '@hopdeck/core';
+import { liveState, platform } from '@hopdeck/core';
 import { HostError } from './errors.ts';
 import { Deployments, type DeployLogEntry, type DeployTarget } from '../firewall/deploy.ts';
 import { Traces, type TraceOptions } from '../firewall/trace.ts';
@@ -281,6 +281,7 @@ export class HostManager {
       kind: entry.kind,
       executor: entry.executor,
       access,
+      platform: platform(status.facts.platform),
       systemd: status.facts.systemd,
       manualOverride: entry.manualOverride,
       freshExecutor: entry.kind === 'ssh' ? this.#freshExecutor(entry.destination!) : undefined,

@@ -13,6 +13,7 @@ describe('parseFacts', () => {
       hostname: 'fw1',
       kernel: '6.1.0-18-amd64',
       os: { id: 'debian', version: '12', name: 'Debian GNU/Linux 12 (bookworm)' },
+      platform: 'linux',
       systemd: true,
       nft: { path: '/usr/sbin/nft', version: '1.0.6' },
     });
@@ -21,6 +22,12 @@ describe('parseFacts', () => {
   it('copes with missing os-release and nft', () => {
     const facts = parseFacts('uid=0\nhostname=box\nkernel=5.10.0\nsystemd=no\n');
     expect(facts).toMatchObject({ uid: 0, os: undefined, systemd: false, nft: undefined });
+  });
+
+  it('recognises OpenWrt and its derivatives', () => {
+    expect(parseFacts('uid=0\nos_id=openwrt\nopenwrt=yes\nsystemd=no\n').platform).toBe('openwrt');
+    expect(parseFacts('uid=0\nos_id=immortalwrt\nopenwrt=yes\nsystemd=no\n').platform).toBe('openwrt');
+    expect(parseFacts('uid=0\nos_id=debian\nsystemd=yes\n').platform).toBe('linux');
   });
 
   it('rejects output without a uid', () => {

@@ -8,6 +8,7 @@ const facts: HostFacts = {
   hostname: 'fw1',
   kernel: '6.1.0',
   os: undefined,
+  platform: 'linux',
   systemd: true,
   nft: { path: '/usr/sbin/nft', version: '1.0.6' },
 };

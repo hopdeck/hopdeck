@@ -16,8 +16,9 @@ const STATES: Record<PersistedTable['state'], MessageKey> = {
 };
 
 /**
- * What survives a reboot: the managed tables saved in /etc/hopdeck, whether the
- * boot configuration loads them, and whether anything loads it at all.
+ * What survives a reboot: the managed tables saved in hopdeck's directory on
+ * the host, whether the boot configuration loads them, and whether anything
+ * loads it at all.
  * `version` changes whenever the ruleset was read again.
  */
 export function PersistencePanel({ hostId, version }: { hostId: string; version: unknown }) {
@@ -79,7 +80,7 @@ export function PersistencePanel({ hostId, version }: { hostId: string; version:
 
       {status.problem === undefined && status.mainConfig !== undefined && !status.includePresent && (
         <Callout tone="warn" icon={<AlertIcon />} title={t('persist.noInclude.title')}>
-          <p>{t('persist.noInclude', { file })}</p>
+          <p>{t('persist.noInclude', { file, directory: status.directory })}</p>
           <pre className="details">{status.includeLine}</pre>
           <p>{t('persist.noInclude.safety')}</p>
           {status.source === 'guess' && <p>{t('persist.guess')}</p>}

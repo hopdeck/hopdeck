@@ -3,6 +3,7 @@
 import type { DiffLine } from './diff.ts';
 import type { Family } from './firewall/nft-json.ts';
 import type { TraceFilter } from './firewall/trace.ts';
+import type { PlatformId } from './platform.ts';
 
 export type HostKind = 'local' | 'ssh' | 'sandbox';
 
@@ -34,7 +35,8 @@ export type HostErrorCode =
   | 'persistence-unavailable'
   | 'include-rejected'
   | 'invalid-filter'
-  | 'trace-unavailable';
+  | 'trace-unavailable'
+  | 'platform-read-only';
 
 export interface HostFacts {
   uid: number;
@@ -42,6 +44,8 @@ export interface HostFacts {
   hostname: string;
   kernel: string;
   os: { id: string; version: string; name: string } | undefined;
+  /** See platform(). */
+  platform: PlatformId;
   systemd: boolean;
   /** `path` is absolute: /usr/sbin is often missing from a normal user's PATH. */
   nft: { path: string; version: string } | undefined;
@@ -173,7 +177,7 @@ export interface DeploymentView {
   persisted?: PersistResult;
 }
 
-/** Saving kept changes into /etc/hopdeck; see docs/ARCHITECTURE.md, "Persisting". */
+/** Saving kept changes for boot; see docs/ARCHITECTURE.md, "Persisting". */
 export interface PersistResult {
   /** Files written or removed. */
   written: string[];
@@ -202,7 +206,9 @@ export interface PersistenceStatus {
   source: 'service' | 'guess' | 'none';
   /** Whether the nftables service starts at boot; undefined without systemd or without the service. */
   serviceEnabled: boolean | undefined;
-  /** The main configuration includes /etc/hopdeck/*.nft. */
+  /** Where hopdeck keeps a file per managed table, e.g. /etc/hopdeck/firewall. */
+  directory: string;
+  /** The main configuration includes the files in `directory`. */
   includePresent: boolean;
   /** The exact line hopdeck adds, to show before asking. */
   includeLine: string;

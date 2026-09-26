@@ -29,6 +29,7 @@ const HOST_ERROR_CODES = {
   'include-rejected': true,
   'invalid-filter': true,
   'trace-unavailable': true,
+  'platform-read-only': true,
 } satisfies Record<HostErrorCode, true>;
 
 describe('errorText', () => {

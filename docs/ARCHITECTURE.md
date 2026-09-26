@@ -253,13 +253,13 @@ A change is a list of table operations: adopt, replace (or create), delete.
    cleaned up by the next deployment.
 5. **Persist** ([`persist.ts`](../packages/server/src/firewall/persist.ts)). A
    kept change is saved for boot at once: each managed table goes to
-   `/etc/hopdeck/<family>-<name>.nft` (counters at zero, expiring elements with
+   `/etc/hopdeck/firewall/<family>-<name>.nft` (counters at zero, expiring elements with
    their full timeout), written as root through a staged file and a rename;
    a deleted table's file is removed. Tables changed with Manual override that
    hopdeck does not manage are not saved: their owner decides what loads at boot.
    The file loaded at boot is read from the nftables service's command line
    (`systemctl show -p ExecStart`), else found at its usual path. With the
-   user's consent, hopdeck adds `include "/etc/hopdeck/*.nft"` at its end, keeping a
+   user's consent, hopdeck adds `include "/etc/hopdeck/firewall/*.nft"` at its end, keeping a
    dated copy, and checks the whole file with `nft -c`, putting the copy back
    if nft rejects it. Because the include comes last, hopdeck's copy of a table
    replaces a definition earlier in the file; the UI says when a table is
@@ -307,8 +307,8 @@ root ([`staging.ts`](../packages/server/src/hosts/staging.ts)).
   `change.nft` between hopdeck writing and root using them. The directory
   belongs to root (mode 700), and every file gets in through a copy root
   makes and checks against the SHA-256 hopdeck computed; a swapped file fails
-  the check and nothing is used. Boot files in `/etc/hopdeck` are written the
-  same way.
+  the check and nothing is used. Boot files in `/etc/hopdeck/firewall` are
+  written the same way.
 - Commands take their arguments as argv, never through a local shell; over
   SSH each argument is quoted. Values that go into nft input (table
   definitions, elements, trace filters) are checked first: one table block
@@ -425,6 +425,26 @@ forms add convenience without ever limiting what can be done.
 - **Import:** create a project from a live host.
 - **Integration:** it is just another `RulesetSource`; the apply pipeline stays
   the same.
+
+## Platforms
+
+What differs between kinds of hosts is in one place,
+[`platform.ts`](../packages/core/src/platform.ts), picked from the host's facts
+(`/etc/os-release`, and `/etc/openwrt_release`, which OpenWrt derivatives keep
+too):
+
+| | Linux | OpenWrt |
+|---|---|---|
+| Configuration (`configDir`) | `/etc/hopdeck` | `/etc/hopdeck` |
+| Records such as history (`stateDir`) | `/var/lib/hopdeck` | `/etc/hopdeck/state`: `/var` is in RAM there |
+| Firewall | changed through nft | shown only, until changes go through UCI |
+
+Both directories belong to root with mode 700. Each module keeps its files in
+a subdirectory of its own, such as `/etc/hopdeck/firewall` for the tables that
+load at boot, so settings of the host and of other modules can sit beside
+them. On OpenWrt the server refuses to plan firewall changes or save tables
+(`platform-read-only`), and the UI shows the firewall without edit actions and
+says why; tracing still works, since its temporary table changes no verdict.
 
 ## Future: beyond nftables on servers
 

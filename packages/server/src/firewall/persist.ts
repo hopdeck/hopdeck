@@ -1,6 +1,7 @@
 import {
   isManaged,
   parseRuleset,
+  platform,
   replaceTableScript,
   type Executor,
   type Family,
@@ -9,14 +10,21 @@ import {
   type PersistedTable,
   type PersistenceStatus,
   type PersistResult,
+  type Platform,
 } from '@hopdeck/core';
-import { comparable, readTable } from './deploy.ts';
+import { comparable, firewallReadOnly, readTable } from './deploy.ts';
 import { copyAsRoot } from '../hosts/staging.ts';
 import { HostError } from '../hosts/errors.ts';
 import { runAsRoot, runNft, type NftAccess } from '../hosts/privilege.ts';
 
-export const HOPDECK_DIR = '/etc/hopdeck';
-export const INCLUDE_LINE = `include "${HOPDECK_DIR}/*.nft"`;
+/** Where the tables that load at boot go, one file each. */
+export function bootDirectory(host: Platform): string {
+  return `${host.configDir}/firewall`;
+}
+
+export function includeLine(directory: string): string {
+  return `include "${directory}/*.nft"`;
+}
 
 const HEADER = `# Written by hopdeck: this table is managed there, and hopdeck rewrites this file.
 # To change the table by hand for good, remove its "managed by hopdeck" comment in hopdeck first.
@@ -32,10 +40,10 @@ export interface PersistTarget {
   facts: HostFacts;
 }
 
-/** File name of a table in /etc/hopdeck; characters outside [A-Za-z0-9_.-] are %-escaped. */
-export function tableFile(family: Family, name: string): string {
+/** File of a table in the boot directory; characters outside [A-Za-z0-9_.-] are %-escaped. */
+export function tableFile(directory: string, family: Family, name: string): string {
   const safe = name.replace(/[^A-Za-z0-9_.-]/g, (char) => `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`);
-  return `${HOPDECK_DIR}/${family}-${safe}.nft`;
+  return `${directory}/${family}-${safe}.nft`;
 }
 
 /**
@@ -53,20 +61,22 @@ export function bootDefinition(family: Family, name: string, listing: string): s
 /** Whether saving is possible at all, and how things stand on the host. */
 export async function persistenceStatus(target: PersistTarget): Promise<PersistenceStatus> {
   const unavailable = await unavailableReason(target);
-  const base = { includeLine: INCLUDE_LINE, tables: [] as PersistedTable[] };
+  const directory = bootDirectory(platform(target.facts.platform));
+  const line = includeLine(directory);
+  const base = { directory, includeLine: line, tables: [] as PersistedTable[] };
   if (unavailable !== undefined) {
     return { ...base, mainConfig: undefined, source: 'none', serviceEnabled: undefined, includePresent: false, problem: unavailable };
   }
 
   const { mainConfig, source, serviceEnabled } = await findMainConfig(target);
   const main = mainConfig === undefined ? '' : await readAsRoot(target.access, mainConfig);
-  const includePresent = main.split('\n').some((line) => line.trim() === INCLUDE_LINE);
-  const files = await readBootFiles(target.access);
+  const includePresent = main.split('\n').some((entry) => entry.trim() === line);
+  const files = await readBootFiles(target.access, directory);
   const live = await managedTables(target.access);
 
   const tables: PersistedTable[] = [];
   for (const { family, name, text } of live) {
-    const file = tableFile(family, name);
+    const file = tableFile(directory, family, name);
     const saved = files.get(file);
     const state = saved === undefined ? 'missing' : comparable(saved) === comparable(bootDefinition(family, name, text)) ? 'saved' : 'differs';
     tables.push({ family, name, file, state, alsoInMainConfig: definesTable(main, family, name) });
@@ -82,7 +92,7 @@ export async function persistenceStatus(target: PersistTarget): Promise<Persiste
 }
 
 /**
- * Brings /etc/hopdeck in line with the live tables after a kept change: writes
+ * Brings the boot directory in line with the live tables after a kept change: writes
  * managed tables, removes deleted ones. Tables hopdeck does not manage (changed
  * with Manual override) are not saved; their owner decides what loads at boot.
  */
@@ -90,10 +100,11 @@ export async function persistTables(target: PersistTarget, tables: readonly { fa
   const result: PersistResult = { written: [], removed: [], notManaged: [] };
   const unavailable = await unavailableReason(target);
   if (unavailable !== undefined) return { ...result, problem: unavailable };
+  const directory = bootDirectory(platform(target.facts.platform));
 
   try {
     for (const { family, name } of tables) {
-      const file = tableFile(family, name);
+      const file = tableFile(directory, family, name);
       const current = await readTable(target.access, family, name);
       if (current === undefined) {
         if (await removeAsRoot(target.access, file)) result.removed.push(file);
@@ -139,11 +150,13 @@ export async function addInclude(target: PersistTarget): Promise<void> {
     'main="$1"',
     'backup="$main.hopdeck-backup-$(date +%Y%m%d%H%M%S)"',
     'cp -p "$main" "$backup"',
-    `printf '\\n# Added by hopdeck: the tables it manages are in ${HOPDECK_DIR}.\\n%s\\n' '${INCLUDE_LINE}' >> "$main"`,
-    `mkdir -p ${HOPDECK_DIR} && chmod 700 ${HOPDECK_DIR}`,
+    `printf '\\n# Added by hopdeck: the tables it manages are in %s.\\n%s\\n' "$2" "$3" >> "$main"`,
+    'umask 077',
+    'mkdir -p "$2"',
+    'chmod 700 "$(dirname "$2")" "$2"',
     'echo "$backup"',
   ].join('\n');
-  const added = await runAsRoot(target.access, ['sh', '-c', script, 'sh', status.mainConfig]);
+  const added = await runAsRoot(target.access, ['sh', '-c', script, 'sh', status.mainConfig, status.directory, status.includeLine]);
   if (added.exitCode !== 0) throw new HostError('command-failed', added.stderr.trim());
   const backup = added.stdout.trim();
 
@@ -163,6 +176,8 @@ async function unavailableReason(target: PersistTarget): Promise<{ code: 'persis
   if (target.kind === 'sandbox') {
     return { code: 'persistence-unavailable', detail: 'the sandbox is gone when hopdeck stops, so there is nothing to boot from' };
   }
+  const readOnly = firewallReadOnly(platform(target.facts.platform));
+  if (readOnly !== undefined) return { code: 'persistence-unavailable', detail: readOnly };
   try {
     const probe = await runAsRoot(target.access, ['true']);
     if (probe.exitCode !== 0) {
@@ -171,7 +186,8 @@ async function unavailableReason(target: PersistTarget): Promise<{ code: 'persis
     return undefined;
   } catch (error) {
     if (error instanceof HostError && error.code === 'sudo-not-allowed') {
-      return { code: 'persistence-unavailable', detail: `sudo allows only nft here, and saving files in ${HOPDECK_DIR} needs root. ${error.detail}` };
+      const directory = bootDirectory(platform(target.facts.platform));
+      return { code: 'persistence-unavailable', detail: `sudo allows only nft here, and saving files in ${directory} needs root. ${error.detail}` };
     }
     throw error;
   }
@@ -216,10 +232,10 @@ async function readAsRoot(access: NftAccess, path: string): Promise<string> {
   return read.stdout;
 }
 
-/** Every /etc/hopdeck/*.nft file with its content. */
-async function readBootFiles(access: NftAccess): Promise<Map<string, string>> {
-  const script = `for f in ${HOPDECK_DIR}/*.nft; do [ -f "$f" ] || continue; printf '%s\\0' "$f"; cat "$f"; printf '\\0'; done`;
-  const read = await runAsRoot(access, ['sh', '-c', script]);
+/** Every .nft file in the boot directory with its content. */
+async function readBootFiles(access: NftAccess, directory: string): Promise<Map<string, string>> {
+  const script = `for f in "$1"/*.nft; do [ -f "$f" ] || continue; printf '%s\\0' "$f"; cat "$f"; printf '\\0'; done`;
+  const read = await runAsRoot(access, ['sh', '-c', script, 'sh', directory]);
   if (read.exitCode !== 0) throw new HostError('command-failed', read.stderr.trim());
   const parts = read.stdout.split('\0');
   const files = new Map<string, string>();
@@ -227,11 +243,6 @@ async function readBootFiles(access: NftAccess): Promise<Map<string, string>> {
   return files;
 }
 
-/**
- * Stages the file as the login user, then moves it into place as root with a
- * rename, so a crash never leaves half a file. Staging avoids piping content
- * through sudo -S, whose first input line is the password.
- */
 /** Writes a boot file through a copy root checks against the content's SHA-256, see copyAsRoot(). */
 async function writeAsRoot(target: PersistTarget, path: string, content: string): Promise<void> {
   await copyAsRoot(target, content, path);

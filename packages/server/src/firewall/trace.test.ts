@@ -1,4 +1,4 @@
-import { groupTrace, type Executor, type TraceView } from '@hopdeck/core';
+import { groupTrace, platform, type Executor, type TraceView } from '@hopdeck/core';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -38,6 +38,7 @@ describe.skipIf(NFT === undefined || !USERNS || PING === undefined)('Traces in a
       kind: 'sandbox',
       executor,
       access: { executor, nftPath: NFT!, privilege: { kind: 'root' } },
+      platform: platform('linux'),
       systemd: true,
       manualOverride: false,
       freshExecutor: undefined,
@@ -100,6 +101,7 @@ describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('Tr
       kind: 'ssh',
       executor,
       access: { executor, nftPath: '/usr/sbin/nft', privilege, ...(account === 'admin' && { password: 'hopdeck-test' }) },
+      platform: platform('linux'),
       systemd: true,
       manualOverride: false,
       freshExecutor: undefined,

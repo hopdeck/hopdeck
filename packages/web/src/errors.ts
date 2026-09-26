@@ -41,6 +41,7 @@ const TEXTS = new Map<string, ErrorText>([
   ['invalid-filter', { title: 'error.invalid-filter.title', hint: 'error.invalid-filter.hint' }],
   ['trace-unavailable', { title: 'error.trace-unavailable.title', hint: 'error.trace-unavailable.hint' }],
   ['trace-not-found', { title: 'error.trace-not-found.title', hint: 'error.trace-not-found.hint' }],
+  ['platform-read-only', { title: 'error.platform-read-only.title' }],
   ['ui-error', { title: 'error.ui-error.title', hint: 'error.ui-error.hint' }],
 ]);
 

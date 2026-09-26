@@ -1,4 +1,15 @@
-import { tableKey, type Family, type HostFacts, type HostKind, type HostStatus, type HostSummary, type Privilege, type TableChange } from '@hopdeck/core';
+import {
+  platform,
+  tableKey,
+  type Family,
+  type HostFacts,
+  type HostKind,
+  type HostStatus,
+  type HostSummary,
+  type PlatformId,
+  type Privilege,
+  type TableChange,
+} from '@hopdeck/core';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import { ErrorBody, ErrorCallout, errorTitle, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
@@ -76,6 +87,8 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   const { status } = host;
   const subtitle = hostSubtitle(host);
   const readable = fullAccess(status);
+  // The firewall is only shown where changing it with nft would go behind the platform's back.
+  const readOnly = status.state === 'connected' && platform(status.facts.platform).firewall === 'read-only';
   const ruleset = useRuleset(host.id, readable);
   const [tab, setTab] = useState('rules');
   // A chain to scroll to once the rules tab is shown, e.g. picked in the packet path.
@@ -150,7 +163,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
             {connecting ? <span className="spinner" aria-hidden="true" /> : <RefreshIcon />}
             {t(status.state === 'new' ? 'host.connect' : 'host.reconnect')}
           </button>
-          {readable && <ManualOverrideButton host={host} onUpdate={onUpdate} />}
+          {readable && !readOnly && <ManualOverrideButton host={host} onUpdate={onUpdate} />}
           {host.kind === 'ssh' && (
             <button type="button" className="btn btn-ghost btn-danger" onClick={onRemove}>
               <TrashIcon />
@@ -232,16 +245,26 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                   )
                 ) : (
                   <div className={styles.rules}>
-                    <PersistencePanel hostId={host.id} version={ruleset.model?.readAt} />
+                    {readOnly ? (
+                      <Callout tone="info" icon={<LockIcon />} title={t('platform.readOnly.title')}>
+                        {t('platform.readOnly.openwrt')}
+                      </Callout>
+                    ) : (
+                      <PersistencePanel hostId={host.id} version={ruleset.model?.readAt} />
+                    )}
                     <RulesetView
                       state={ruleset}
                       live={{ info: live.info, error: live.error, seconds: liveSeconds, onSeconds: setLiveSeconds, changed }}
-                      actions={{
-                        manualOverride: host.manualOverride,
-                        onChange: setChanges,
-                        onEdit: (family, table, mode) => setEditing({ family, table, mode }),
-                        onCreate: () => setCreating(true),
-                      }}
+                      actions={
+                        readOnly
+                          ? undefined
+                          : {
+                              manualOverride: host.manualOverride,
+                              onChange: setChanges,
+                              onEdit: (family, table, mode) => setEditing({ family, table, mode }),
+                              onCreate: () => setCreating(true),
+                            }
+                      }
                     />
                   </div>
                 ),
@@ -431,6 +454,8 @@ function PasswordPrompt({ onUnlock }: { onUnlock: HostViewProps['onUnlock'] }) {
   );
 }
 
+const PLATFORM_NAMES: Record<PlatformId, string> = { linux: 'Linux', openwrt: 'OpenWrt' };
+
 function Facts({ facts }: { facts: HostFacts }) {
   const { t } = useI18n();
   return (
@@ -439,6 +464,8 @@ function Facts({ facts }: { facts: HostFacts }) {
       <dl className={styles.facts}>
         <dt>{t('facts.os')}</dt>
         <dd>{facts.os?.name || t('facts.unknown')}</dd>
+        <dt>{t('facts.platform')}</dt>
+        <dd>{PLATFORM_NAMES[facts.platform]}</dd>
         <dt>{t('facts.kernel')}</dt>
         <dd className="mono">{facts.kernel}</dd>
         <dt>{t('facts.nft')}</dt>
