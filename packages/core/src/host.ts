@@ -1,4 +1,4 @@
-import type { Ruleset } from './ruleset.ts';
+import type { Ruleset } from './firewall/ruleset.ts';
 
 export interface ExecOptions {
   /** Written to the command's standard input, e.g. a ruleset for `nft -f -`. */

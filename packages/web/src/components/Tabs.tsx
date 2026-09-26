@@ -1,10 +1,12 @@
-import { useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { Fragment, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import styles from './Tabs.module.css';
 
 export interface Tab {
   id: string;
   label: ReactNode;
   content: ReactNode;
+  /** The module the tab belongs to, e.g. "Firewall"; shown once before its first tab. */
+  group?: string;
 }
 
 interface TabsProps {
@@ -14,7 +16,11 @@ interface TabsProps {
   label: string;
 }
 
-/** WAI-ARIA tabs: arrow keys move between tabs, only the active panel is rendered. */
+/**
+ * WAI-ARIA tabs: arrow keys move between tabs, only the active panel is
+ * rendered. Group captions only sort the tabs for the eye; to assistive
+ * technology the list is one row of tabs, named by `label`.
+ */
 export function Tabs({ tabs, active, onChange, label }: TabsProps) {
   const list = useRef<HTMLDivElement>(null);
   const current = tabs.find((tab) => tab.id === active) ?? tabs[0];
@@ -31,20 +37,26 @@ export function Tabs({ tabs, active, onChange, label }: TabsProps) {
   return (
     <div className={styles.tabs}>
       <div ref={list} role="tablist" aria-label={label} className={styles.list} onKeyDown={onKeyDown}>
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            id={`tab-${tab.id}`}
-            aria-selected={tab.id === current?.id}
-            aria-controls={`panel-${tab.id}`}
-            tabIndex={tab.id === current?.id ? 0 : -1}
-            className={styles.tab}
-            onClick={() => onChange(tab.id)}
-          >
-            {tab.label}
-          </button>
+        {tabs.map((tab, index) => (
+          <Fragment key={tab.id}>
+            {tab.group !== undefined && tab.group !== tabs[index - 1]?.group && (
+              <span className={styles.group} aria-hidden="true">
+                {tab.group}
+              </span>
+            )}
+            <button
+              type="button"
+              role="tab"
+              id={`tab-${tab.id}`}
+              aria-selected={tab.id === current?.id}
+              aria-controls={`panel-${tab.id}`}
+              tabIndex={tab.id === current?.id ? 0 : -1}
+              className={styles.tab}
+              onClick={() => onChange(tab.id)}
+            >
+              {tab.label}
+            </button>
+          </Fragment>
         ))}
       </div>
       {current !== undefined && (

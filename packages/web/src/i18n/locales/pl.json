@@ -53,6 +53,8 @@
   "tabs.system": "System",
   "tabs.path": "Droga pakietu",
   "tabs.trace": "Śledzenie",
+  "tabs.group.firewall": "Firewall",
+  "tabs.group.host": "Host",
   "facts.title": "System",
   "facts.os": "System operacyjny",
   "facts.kernel": "Jądro",

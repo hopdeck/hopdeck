@@ -53,6 +53,8 @@
   "tabs.system": "System",
   "tabs.path": "Packet path",
   "tabs.trace": "Trace",
+  "tabs.group.firewall": "Firewall",
+  "tabs.group.host": "Host",
   "facts.title": "System",
   "facts.os": "Operating system",
   "facts.kernel": "Kernel",

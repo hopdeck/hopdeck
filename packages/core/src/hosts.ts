@@ -1,8 +1,8 @@
 /** Shapes of the hosts API, shared by the server and the UI. */
 
 import type { DiffLine } from './diff.ts';
-import type { Family } from './nft-json.ts';
-import type { TraceFilter } from './trace.ts';
+import type { Family } from './firewall/nft-json.ts';
+import type { TraceFilter } from './firewall/trace.ts';
 
 export type HostKind = 'local' | 'ssh' | 'sandbox';
 

@@ -6,18 +6,18 @@ import { AlertIcon, CheckIcon, HostKindIcon, LockIcon, RefreshIcon, SandboxIcon,
 import { Tabs } from '../components/Tabs.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import type { MessageKey } from '../i18n/locales.ts';
-import { ListingView } from '../ruleset/ListingView.tsx';
-import { changedTables } from '../ruleset/model.ts';
-import { PacketPathView } from '../ruleset/PacketPathView.tsx';
-import { NEW_TRACE_SESSION, TracePanel, type TraceSession } from '../trace/TracePanel.tsx';
-import { RulesetView } from '../ruleset/RulesetView.tsx';
-import { useRuleset, type RulesetState } from '../ruleset/useRuleset.ts';
-import { useLive } from '../ruleset/useLive.ts';
-import { DeploymentDialog, type DeploymentResult } from '../deploy/DeploymentDialog.tsx';
-import { NewTableDialog } from '../edit/NewTableDialog.tsx';
-import { liveSource, newTableSource, type NewTableSpec } from '../edit/table-model.ts';
-import { TableEditor, type EditorDraft, type EditorMode, type EditorProblem } from '../edit/TableEditor.tsx';
-import { PersistencePanel } from '../deploy/PersistencePanel.tsx';
+import { ListingView } from '../firewall/ruleset/ListingView.tsx';
+import { changedTables } from '../firewall/ruleset/model.ts';
+import { PacketPathView } from '../firewall/ruleset/PacketPathView.tsx';
+import { NEW_TRACE_SESSION, TracePanel, type TraceSession } from '../firewall/trace/TracePanel.tsx';
+import { RulesetView } from '../firewall/ruleset/RulesetView.tsx';
+import { useRuleset, type RulesetState } from '../firewall/ruleset/useRuleset.ts';
+import { useLive } from '../firewall/ruleset/useLive.ts';
+import { DeploymentDialog, type DeploymentResult } from '../firewall/deploy/DeploymentDialog.tsx';
+import { NewTableDialog } from '../firewall/edit/NewTableDialog.tsx';
+import { liveSource, newTableSource, type NewTableSpec } from '../firewall/edit/table-model.ts';
+import { TableEditor, type EditorDraft, type EditorMode, type EditorProblem } from '../firewall/edit/TableEditor.tsx';
+import { PersistencePanel } from '../firewall/deploy/PersistencePanel.tsx';
 import { HostKeyPanel } from './HostKeyPanel.tsx';
 import { ManualOverrideBanner, ManualOverrideButton } from './ManualOverride.tsx';
 import styles from './HostView.module.css';
@@ -201,6 +201,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
           tabs={[
             {
               id: 'rules',
+              group: t('tabs.group.firewall'),
               label: t('tabs.rules'),
               content:
                 editing !== undefined && ruleset.model !== undefined ? (
@@ -247,6 +248,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
             },
             {
               id: 'path',
+              group: t('tabs.group.firewall'),
               label: t('tabs.path'),
               content:
                 ruleset.model !== undefined ? (
@@ -263,6 +265,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
             },
             {
               id: 'trace',
+              group: t('tabs.group.firewall'),
               label: t('tabs.trace'),
               content: (
                 <TracePanel
@@ -277,8 +280,8 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                 />
               ),
             },
-            { id: 'text', label: t('tabs.text'), content: <Listing state={ruleset} /> },
-            { id: 'system', label: t('tabs.system'), content: <Facts facts={status.facts} /> },
+            { id: 'text', group: t('tabs.group.firewall'), label: t('tabs.text'), content: <Listing state={ruleset} /> },
+            { id: 'system', group: t('tabs.group.host'), label: t('tabs.system'), content: <Facts facts={status.facts} /> },
           ]}
         />
       )}

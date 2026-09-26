@@ -61,6 +61,13 @@ tools, such as a topology view, come later.
 | `packages/web` | The UI |
 | `packages/cli` | The `hopdeck` command. Starts the panel; later also `diff`, `apply` and `rollback` for scripting. |
 
+**Modules.** Each network tool is a module with a `firewall/`-style
+directory in core, server and web; the firewall (nftables) is the first. What
+every module needs stays outside them: hosts, executors, privileges and
+staging files (`server/src/hosts`), the API shapes and the line diff (core),
+and the host view, whose tab bar groups tabs by module. A module that spans
+hosts, like a topology view, gets its own place beside the host list.
+
 The two seams that keep options open are in
 [`packages/core/src/host.ts`](../packages/core/src/host.ts):
 
@@ -211,7 +218,7 @@ disappears with it.
 
 ## Applying changes
 
-Implemented in [`packages/server/src/hosts/deploy.ts`](../packages/server/src/hosts/deploy.ts).
+Implemented in [`packages/server/src/firewall/deploy.ts`](../packages/server/src/firewall/deploy.ts).
 A change is a list of table operations: adopt, replace (or create), delete.
 
 1. **Plan.** Ownership rules decide what may change (see above). Each table
@@ -244,7 +251,7 @@ A change is a list of table operations: adopt, replace (or create), delete.
    through nft. Without a decision the host rolls back by itself, and hopdeck
    reads the watchdog's record to report it. Directories older than a day are
    cleaned up by the next deployment.
-5. **Persist** ([`persist.ts`](../packages/server/src/hosts/persist.ts)). A
+5. **Persist** ([`persist.ts`](../packages/server/src/firewall/persist.ts)). A
    kept change is saved for boot at once: each managed table goes to
    `/etc/hopdeck/<family>-<name>.nft` (counters at zero, expiring elements with
    their full timeout), written as root through a staged file and a rename;

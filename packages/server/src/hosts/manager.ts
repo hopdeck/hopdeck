@@ -19,11 +19,11 @@ import type {
 } from '@hopdeck/core';
 import { liveState } from '@hopdeck/core';
 import { HostError } from './errors.ts';
-import { Deployments, type DeployLogEntry, type DeployTarget } from './deploy.ts';
-import { Traces, type TraceOptions } from './trace.ts';
+import { Deployments, type DeployLogEntry, type DeployTarget } from '../firewall/deploy.ts';
+import { Traces, type TraceOptions } from '../firewall/trace.ts';
 import { collectFacts } from './facts.ts';
 import { HostKeys } from './host-keys.ts';
-import { addInclude, enableService, persistenceStatus, persistTables, saveAll, type PersistTarget } from './persist.ts';
+import { addInclude, enableService, persistenceStatus, persistTables, saveAll, type PersistTarget } from '../firewall/persist.ts';
 import { LocalExecutor } from './local.ts';
 import { detectPrivilege, runNft, type NftAccess } from './privilege.ts';
 import { isValidDestination, SshExecutor } from './ssh.ts';
