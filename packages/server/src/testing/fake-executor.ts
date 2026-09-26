@@ -1,4 +1,4 @@
-import type { ExecOptions, ExecResult, Executor } from '@nftm/core';
+import type { ExecOptions, ExecResult, Executor } from '@hopdeck/core';
 
 /** Answers a command with a result, or with an error to throw. */
 export type Script = (argv: readonly string[], stdin: string | undefined) => ExecResult | Error;

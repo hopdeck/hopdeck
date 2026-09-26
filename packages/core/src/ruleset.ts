@@ -34,7 +34,7 @@ export interface TableNode {
 
 /**
  * A ruleset grouped by table. Every object is the one nft printed, not a copy;
- * items nftm does not recognise are kept verbatim in `unknown`.
+ * items hopdeck does not recognise are kept verbatim in `unknown`.
  */
 export interface Ruleset {
   metainfo: NftMetainfo | undefined;

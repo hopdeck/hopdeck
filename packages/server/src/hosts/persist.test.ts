@@ -9,8 +9,8 @@ import { SshExecutor } from './ssh.ts';
 
 describe('tableFile and bootDefinition', () => {
   it('names files safely', () => {
-    expect(tableFile('inet', 'filter')).toBe('/etc/nftm/inet-filter.nft');
-    expect(tableFile('ip', 'a b/c')).toBe('/etc/nftm/ip-a%20b%2fc.nft');
+    expect(tableFile('inet', 'filter')).toBe('/etc/hopdeck/inet-filter.nft');
+    expect(tableFile('ip', 'a b/c')).toBe('/etc/hopdeck/ip-a%20b%2fc.nft');
   });
 
   it('loads at boot with fresh counters and full timeouts, replacing any earlier definition', () => {
@@ -19,22 +19,22 @@ describe('tableFile and bootDefinition', () => {
     expect(boot).toContain('table inet t {}\ndelete table inet t\ntable inet t {');
     expect(boot).toContain('packets 0 bytes 0');
     expect(boot).toContain('10.0.0.1 timeout 1h }');
-    expect(boot.startsWith('# Written by nftm')).toBe(true);
+    expect(boot.startsWith('# Written by hopdeck')).toBe(true);
   });
 });
 
-// Against the podman test host: NFTM_TEST_HOST=1 pnpm test (after dev/test-host/up.sh).
+// Against the podman test host: HOPDECK_TEST_HOST=1 pnpm test (after dev/test-host/up.sh).
 const sshConfig = new URL('../../../../.dev/test-host/ssh_config', import.meta.url).pathname;
 
-describe.skipIf(!process.env['NFTM_TEST_HOST'] || !existsSync(sshConfig))('persistence on the test host', { timeout: 90_000 }, () => {
+describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('persistence on the test host', { timeout: 90_000 }, () => {
   let root: PersistTarget & { deploy: DeployTarget };
   let backup: string | undefined;
   // As HostManager wires it: a kept change is saved for boot.
   const deployments = new Deployments({ seconds: 30, afterConfirm: (view) => persistTables(root, view.tables) });
 
   const connect = async (account: 'root' | 'nopass') => {
-    const controlDir = await mkdtemp(`${tmpdir()}/nftm-persist-`);
-    const destination = `nftm-test-${account}`;
+    const controlDir = await mkdtemp(`${tmpdir()}/hopdeck-persist-`);
+    const destination = `hopdeck-test-${account}`;
     const executor = new SshExecutor({ destination, controlDir, configFile: sshConfig });
     const access = { executor, nftPath: '/usr/sbin/nft', privilege: account === 'root' ? ({ kind: 'root' } as const) : ({ kind: 'sudo' } as const) };
     const facts = await collectFacts(executor);
@@ -64,7 +64,7 @@ describe.skipIf(!process.env['NFTM_TEST_HOST'] || !existsSync(sshConfig))('persi
   afterAll(async () => {
     // Put the test host back as it was.
     if (backup !== undefined) await root.executor.exec(['cp', '-p', backup, '/etc/nftables.conf']);
-    await root.executor.exec(['sh', '-c', 'rm -rf /etc/nftm /etc/nftables.conf.nftm-backup-*; systemctl restart nftables.service']);
+    await root.executor.exec(['sh', '-c', 'rm -rf /etc/hopdeck /etc/nftables.conf.hopdeck-backup-*; systemctl restart nftables.service']);
   });
 
   it('finds the boot configuration through the nftables service', async () => {
@@ -77,25 +77,25 @@ describe.skipIf(!process.env['NFTM_TEST_HOST'] || !existsSync(sshConfig))('persi
     await addInclude(root);
     const main = (await root.executor.exec(['cat', '/etc/nftables.conf'])).stdout;
     expect(main.split('\n').filter((line) => line === INCLUDE_LINE)).toHaveLength(1);
-    backup = (await root.executor.exec(['sh', '-c', 'ls /etc/nftables.conf.nftm-backup-*'])).stdout.trim();
-    expect(backup).toMatch(/nftm-backup-\d{14}$/);
+    backup = (await root.executor.exec(['sh', '-c', 'ls /etc/nftables.conf.hopdeck-backup-*'])).stdout.trim();
+    expect(backup).toMatch(/hopdeck-backup-\d{14}$/);
     expect((await persistenceStatus(root)).includePresent).toBe(true);
   });
 
   it('keeps a kept change across a reload of the boot configuration, and forgets a deleted table', async () => {
-    const created = await change([{ kind: 'replace', family: 'inet', table: 'nftm_boot', definition: 'table inet nftm_boot {\n\tset s {\n\t\ttype ipv4_addr\n\t}\n}\n' }]);
-    expect(created.persisted).toMatchObject({ written: ['/etc/nftm/inet-nftm_boot.nft'], removed: [] });
+    const created = await change([{ kind: 'replace', family: 'inet', table: 'hopdeck_boot', definition: 'table inet hopdeck_boot {\n\tset s {\n\t\ttype ipv4_addr\n\t}\n}\n' }]);
+    expect(created.persisted).toMatchObject({ written: ['/etc/hopdeck/inet-hopdeck_boot.nft'], removed: [] });
     expect((await persistenceStatus(root)).tables).toEqual([
-      { family: 'inet', name: 'nftm_boot', file: '/etc/nftm/inet-nftm_boot.nft', state: 'saved', alsoInMainConfig: false },
+      { family: 'inet', name: 'hopdeck_boot', file: '/etc/hopdeck/inet-hopdeck_boot.nft', state: 'saved', alsoInMainConfig: false },
     ]);
 
     expect((await reload()).exitCode).toBe(0);
-    expect((await readTable(root.access, 'inet', 'nftm_boot'))?.text).toContain('comment "managed by nftm"');
+    expect((await readTable(root.access, 'inet', 'hopdeck_boot'))?.text).toContain('comment "managed by hopdeck"');
 
-    const deleted = await change([{ kind: 'delete', family: 'inet', table: 'nftm_boot' }]);
-    expect(deleted.persisted).toMatchObject({ written: [], removed: ['/etc/nftm/inet-nftm_boot.nft'] });
+    const deleted = await change([{ kind: 'delete', family: 'inet', table: 'hopdeck_boot' }]);
+    expect(deleted.persisted).toMatchObject({ written: [], removed: ['/etc/hopdeck/inet-hopdeck_boot.nft'] });
     await reload();
-    expect(await readTable(root.access, 'inet', 'nftm_boot')).toBeUndefined();
+    expect(await readTable(root.access, 'inet', 'hopdeck_boot')).toBeUndefined();
   });
 
   it('says why nothing can be saved when sudo allows only nft', async () => {

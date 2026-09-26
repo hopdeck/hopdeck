@@ -1,4 +1,4 @@
-import type { HostKeyCheck, HostSummary } from '@nftm/core';
+import type { HostKeyCheck, HostSummary } from '@hopdeck/core';
 import { Fragment, useState } from 'react';
 import { api } from '../api.ts';
 import { ErrorCallout, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';

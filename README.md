@@ -1,21 +1,24 @@
-# nftm
+# hopdeck
 
-A GUI for nftables that can do everything nftables can do, only easier. It
-runs as a local web panel and manages the local machine and remote hosts over
-SSH, with no agent on the hosts.
+A local web panel for running networks, starting with the firewall. It manages
+the local machine and remote hosts over SSH, with no agent on the hosts.
 
-**Status:** early development. Nothing touches a firewall yet.
-
-Planned:
+The first module is a GUI for nftables that can do everything nftables can do,
+only easier:
 
 - Structured editors for rules, sets and maps, plus a full text mode. Nothing
   nftables supports is out of reach.
 - Validation by the host's own `nft`, a diff before every change, atomic
   apply, and automatic rollback unless you confirm.
-- Coexistence with Docker, firewalld, fail2ban and others: nftm edits only the
+- Coexistence with Docker, firewalld, fail2ban and others: hopdeck edits only the
   tables it manages.
-- A packet path view (hooks and priorities across all tables) and packet
-  tracing.
+- A packet path view (hooks and priorities across all tables), packet tracing
+  and live counters.
+
+Planned: a change history kept on each host, OpenWrt through UCI, and more
+network tools, such as a topology view.
+
+**Status:** early development, not released yet.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
 
@@ -31,7 +34,7 @@ pnpm typecheck
 pnpm build && pnpm start   # serve the built UI from the backend
 ```
 
-`nftm --sandbox` (used by `pnpm dev`) adds a sandbox host: a private network
+`hopdeck --sandbox` (used by `pnpm dev`) adds a sandbox host: a private network
 namespace with a demo firewall. It needs no root and never touches the real
 firewall, so everything can be tried safely.
 
@@ -40,7 +43,7 @@ firewall, so everything can be tried safely.
 `dev/test-host/up.sh` starts a Debian 13 container with podman (rootless,
 needs `podman`, `passt` and `uidmap`) that plays a remote firewall: systemd,
 sshd, nftables, and one account per privilege case (root, sudo with a
-password, sudo without one, no sudo). `pnpm dev:test-host` then starts nftm
+password, sudo without one, no sudo). `pnpm dev:test-host` then starts hopdeck
 with those hosts, and `pnpm test:host` runs the tests including the ones that need
 it. Its key, known_hosts and ssh config live in
 `.dev/test-host`; `~/.ssh` is never touched, and the container's ruleset is

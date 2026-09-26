@@ -1,4 +1,4 @@
-import type { DeploymentView, HostSummary } from '@nftm/core';
+import type { DeploymentView, HostSummary } from '@hopdeck/core';
 import { spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -26,7 +26,7 @@ describe.skipIf(!USERNS)('deployments API', { timeout: 30_000 }, () => {
   };
 
   beforeAll(async () => {
-    configDir = await mkdtemp(join(tmpdir(), 'nftm-deploy-api-'));
+    configDir = await mkdtemp(join(tmpdir(), 'hopdeck-deploy-api-'));
     sandbox = await Sandbox.start();
     await sandbox.load('table inet mine {\n\tchain input {\n\t\ttype filter hook input priority filter; policy accept;\n\t}\n}\n');
     const hosts = await HostManager.open({ configDir, controlDir: configDir, sandbox: sandbox.executor, rollbackSeconds: 3 });
@@ -54,10 +54,10 @@ describe.skipIf(!USERNS)('deployments API', { timeout: 30_000 }, () => {
     expect(log[0]).toMatchObject({ host: 'sandbox', tables: ['adopt inet mine'], manualOverride: false });
   });
 
-  it('needs Manual override for tables nftm does not manage', async () => {
+  it('needs Manual override for tables hopdeck does not manage', async () => {
     await call('POST', '/hosts/sandbox/deployments', { changes: [] }).then((r) => expect(r.status).toBe(400));
     const other = { kind: 'replace', family: 'inet', table: 'other', definition: 'table inet other {\n}\n' };
-    // Creating a table is fine: nftm manages what it creates.
+    // Creating a table is fine: hopdeck manages what it creates.
     expect((await call('POST', '/hosts/sandbox/deployments', { changes: [other] })).body.deployment.tables[0]?.action).toBe('create');
 
     await sandbox.executor.exec(['/usr/sbin/nft', 'add', 'table', 'inet', 'foreign']);

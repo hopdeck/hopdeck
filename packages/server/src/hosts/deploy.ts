@@ -24,7 +24,7 @@ import {
   type TableChange,
   type TableNode,
   type TableOwner,
-} from '@nftm/core';
+} from '@hopdeck/core';
 import { randomUUID } from 'node:crypto';
 import { HostError } from './errors.ts';
 import { runAsRoot, runNft, type NftAccess } from './privilege.ts';
@@ -78,7 +78,7 @@ interface Deployment {
 }
 
 const PLAN_LIFETIME_MS = 15 * 60_000;
-/** A confirmation this close to the deadline may race the watchdog; nftm then waits and reports what happened. */
+/** A confirmation this close to the deadline may race the watchdog; hopdeck then waits and reports what happened. */
 const RACE_MARGIN_MS = 3000;
 
 // Runs on the host as root, or as the login user with sudo for nft. Unless
@@ -86,7 +86,7 @@ const RACE_MARGIN_MS = 3000;
 // tables from rollback.nft with the command in the other arguments and records
 // the outcome; confirmed or not, the directory is removed once it is done.
 const WATCHDOG = `#!/bin/sh
-# nftm rollback watchdog; see packages/server/src/hosts/deploy.ts.
+# hopdeck rollback watchdog; see packages/server/src/hosts/deploy.ts.
 dir=$(dirname "$0")
 seconds=$1
 shift
@@ -147,7 +147,7 @@ export class Deployments {
       checkChange.exitCode !== 0
         ? { ok: false, message: checkChange.stderr.trim() || `nft exited with code ${checkChange.exitCode}` }
         : checkRollback.exitCode !== 0
-          ? { ok: false, message: `nftm could not prepare a way back, so it will not apply this. nft said: ${checkRollback.stderr.trim()}` }
+          ? { ok: false, message: `hopdeck could not prepare a way back, so it will not apply this. nft said: ${checkRollback.stderr.trim()}` }
           : { ok: true, message: '' };
     if (!validation.ok) await removeStaging(target, staging);
 
@@ -239,7 +239,7 @@ export class Deployments {
     return view;
   }
 
-  /** Keeps the change: the watchdog stands down. Close to the deadline, nftm waits to report what really happened. */
+  /** Keeps the change: the watchdog stands down. Close to the deadline, hopdeck waits to report what really happened. */
   async confirm(id: string, target: DeployTarget): Promise<DeploymentView> {
     const { view, staging } = this.#require(id, 'awaiting-confirmation');
     const remaining = Date.parse(view.deadline!) - Date.now();
@@ -316,7 +316,7 @@ export class Deployments {
 }
 
 /**
- * What changes in one table, after the ownership rules: nftm changes only
+ * What changes in one table, after the ownership rules: hopdeck changes only
  * tables it manages, unless Manual override is on; tables with xt expressions
  * never, because nft cannot recreate those statements.
  */
@@ -328,12 +328,12 @@ export function planTable(change: TableChange, current: CurrentTable | undefined
     throw new HostError('table-not-editable', `${label} contains xt expressions that nft cannot recreate; change it with iptables`);
   }
   const managed = current !== undefined && isManaged(current.node.table);
-  const unmanaged = `${label} is not managed by nftm; adopt it first, or switch on Manual override`;
+  const unmanaged = `${label} is not managed by hopdeck; adopt it first, or switch on Manual override`;
 
   switch (change.kind) {
     case 'adopt': {
       if (current === undefined) throw new HostError('table-not-editable', `${label} does not exist`);
-      if (managed) throw new HostError('table-not-editable', `${label} is already managed by nftm`);
+      if (managed) throw new HostError('table-not-editable', `${label} is already managed by hopdeck`);
       if (owner !== undefined && owner.kind !== 'unknown') {
         throw new HostError('table-not-editable', `${label} belongs to ${ownerName(owner)}; tables of other tools cannot be adopted`);
       }
@@ -348,7 +348,7 @@ export function planTable(change: TableChange, current: CurrentTable | undefined
         current !== undefined && change.base !== undefined
           ? refreshUntouched(change.definition, change.base, current.text, family, name)
           : change.definition;
-      // Tables nftm creates or manages keep the marker, so it cannot be lost by accident.
+      // Tables hopdeck creates or manages keep the marker, so it cannot be lost by accident.
       const after = current === undefined || managed ? withManagedComment(definition) : definition;
       const before = current?.text;
       return {
@@ -517,8 +517,8 @@ export async function watchdogCommand(
 
 export function rollbackUnavailableReason(target: DeployTarget): string {
   return target.access.privilege.kind === 'sudo-password'
-    ? 'sudo needs a password here and does not allow systemd-run, so nothing could roll the change back while nftm is away'
-    : 'nothing on this host could roll the change back while nftm is away';
+    ? 'sudo needs a password here and does not allow systemd-run, so nothing could roll the change back while hopdeck is away'
+    : 'nothing on this host could roll the change back while hopdeck is away';
 }
 
 export async function startWatchdog(target: DeployTarget, argv: readonly string[], staging: Staging): Promise<void> {

@@ -1,7 +1,7 @@
-import type { ExecOptions, ExecResult, Executor, HostFacts, Privilege } from '@nftm/core';
+import type { ExecOptions, ExecResult, Executor, HostFacts, Privilege } from '@hopdeck/core';
 import { HostError } from './errors.ts';
 
-// sudo's messages are localized; nftm parses them, so it asks for English.
+// sudo's messages are localized; hopdeck parses them, so it asks for English.
 const SUDO = ['env', 'LC_ALL=C', 'sudo'];
 
 // "tenir is not in the sudoers file.", "Sorry, user tenir is not allowed to

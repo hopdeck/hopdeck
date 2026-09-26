@@ -1,4 +1,4 @@
-import { parseSetBlock, type Family } from '@nftm/core';
+import { parseSetBlock, type Family } from '@hopdeck/core';
 import { useState, type ReactNode } from 'react';
 import { ArrowDownIcon, ArrowUpIcon, CopyIcon, EditIcon, PlusIcon, TrashIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';

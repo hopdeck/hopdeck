@@ -1,4 +1,4 @@
-import { parseListing, parseRuleset, ruleKey } from '@nftm/core';
+import { parseListing, parseRuleset, ruleKey } from '@hopdeck/core';
 import { spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { release, tmpdir } from 'node:os';
@@ -22,7 +22,7 @@ describe('HostManager', () => {
     HostManager.open({ configDir, controlDir: configDir, createSshExecutor: () => new FakeExecutor(script) });
 
   beforeEach(async () => {
-    configDir = await mkdtemp(join(tmpdir(), 'nftm-config-'));
+    configDir = await mkdtemp(join(tmpdir(), 'hopdeck-config-'));
   });
   afterEach(() => rm(configDir, { recursive: true, force: true }));
 
@@ -136,7 +136,7 @@ const USERNS = spawnSync('unshare', ['--user', '--map-root-user', '--net', 'true
 describe.skipIf(!USERNS)('HostManager with a sandbox', () => {
   it('connects to the sandbox as root', async () => {
     const sandbox = await Sandbox.start();
-    const configDir = await mkdtemp(join(tmpdir(), 'nftm-config-'));
+    const configDir = await mkdtemp(join(tmpdir(), 'hopdeck-config-'));
     try {
       const hosts = await HostManager.open({ configDir, controlDir: configDir, sandbox: sandbox.executor });
       const connected = await hosts.connect('sandbox');

@@ -7,28 +7,37 @@ const table = 'table inet filter {\n\tchain input {\n\t\ttype filter hook input 
 describe('managed marker', () => {
   it('adds the marker after the opening line', () => {
     expect(withManagedComment(table)).toBe(
-      'table inet filter {\n\tcomment "managed by nftm"\n\tchain input {\n\t\ttype filter hook input priority filter; policy drop;\n\t}\n}\n',
+      'table inet filter {\n\tcomment "managed by hopdeck"\n\tchain input {\n\t\ttype filter hook input priority filter; policy drop;\n\t}\n}\n',
     );
   });
 
   it("keeps the user's own comment after the marker, and does not add it twice", () => {
     const commented = 'table inet filter {\n\tcomment "office firewall"\n}\n';
     const adopted = withManagedComment(commented);
-    expect(adopted).toBe('table inet filter {\n\tcomment "managed by nftm: office firewall"\n}\n');
+    expect(adopted).toBe('table inet filter {\n\tcomment "managed by hopdeck: office firewall"\n}\n');
     expect(withManagedComment(adopted)).toBe(adopted);
   });
 
   it("shows only the user's part of a comment", () => {
-    expect(userComment('managed by nftm')).toBeUndefined();
-    expect(userComment('managed by nftm: office firewall')).toBe('office firewall');
+    expect(userComment('managed by hopdeck')).toBeUndefined();
+    expect(userComment('managed by hopdeck: office firewall')).toBe('office firewall');
     expect(userComment('office firewall')).toBe('office firewall');
   });
 
   it('recognises managed tables', () => {
-    expect(isManaged({ comment: 'managed by nftm' })).toBe(true);
-    expect(isManaged({ comment: 'managed by nftm: office firewall' })).toBe(true);
-    expect(isManaged({ comment: 'not managed by nftm' })).toBe(false);
+    expect(isManaged({ comment: 'managed by hopdeck' })).toBe(true);
+    expect(isManaged({ comment: 'managed by hopdeck: office firewall' })).toBe(true);
+    expect(isManaged({ comment: 'not managed by hopdeck' })).toBe(false);
     expect(isManaged({})).toBe(false);
+  });
+
+  it('still recognises the marker from before the rename, and replaces it on the next change', () => {
+    expect(isManaged({ comment: 'managed by nftm' })).toBe(true);
+    expect(userComment('managed by nftm: office firewall')).toBe('office firewall');
+    expect(withManagedComment('table inet filter {\n\tcomment "managed by nftm: office firewall"\n}\n')).toBe(
+      'table inet filter {\n\tcomment "managed by hopdeck: office firewall"\n}\n',
+    );
+    expect(withManagedComment('table inet filter {\n\tcomment "managed by nftm"\n}\n')).toBe('table inet filter {\n\tcomment "managed by hopdeck"\n}\n');
   });
 });
 
@@ -56,7 +65,7 @@ describe('diffLines', () => {
 
   it('shows one added line for adopting', () => {
     const diff = diffLines(table, withManagedComment(table));
-    expect(diff.filter((line) => line.kind !== 'same')).toEqual([{ kind: 'add', text: '\tcomment "managed by nftm"' }]);
+    expect(diff.filter((line) => line.kind !== 'same')).toEqual([{ kind: 'add', text: '\tcomment "managed by hopdeck"' }]);
     expect(hasChanges(diffLines(table, table))).toBe(false);
   });
 

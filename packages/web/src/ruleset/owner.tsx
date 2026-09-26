@@ -1,4 +1,4 @@
-import type { KnownTool, TableOwner } from '@nftm/core';
+import type { KnownTool, TableOwner } from '@hopdeck/core';
 import styles from './Ruleset.module.css';
 
 const TOOL_NAMES: Record<KnownTool, string> = {
@@ -11,7 +11,7 @@ const TOOL_NAMES: Record<KnownTool, string> = {
   libvirt: 'libvirt',
   lxd: 'LXD',
   nixos: 'NixOS',
-  'nftm-trace': 'nftm (nftrace)',
+  'hopdeck-trace': 'hopdeck (nftrace)',
   openwrt: 'OpenWrt firewall4',
   podman: 'Podman',
   tailscale: 'Tailscale',

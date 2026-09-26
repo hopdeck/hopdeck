@@ -39,8 +39,8 @@ describe('tableFingerprints', () => {
       const expr = item['rule']?.['expr'] as Record<string, unknown>[] | undefined;
       for (const statement of expr ?? []) if (typeof statement['counter'] === 'object') statement['counter'] = { packets: 7, bytes: 700 };
     }
-    // A trace table appears while nftm traces.
-    json.nftables.push({ table: { family: 'inet', name: 'nftm_trace_ab12', handle: 99 } });
+    // A trace table appears while hopdeck traces.
+    json.nftables.push({ table: { family: 'inet', name: 'hopdeck_trace_ab12', handle: 99 } });
     expect(tableFingerprints(json)).toEqual(before);
   });
 

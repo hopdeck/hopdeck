@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { HostSummary } from '@nftm/core';
+import type { HostSummary } from '@hopdeck/core';
 import { HostManager } from './hosts/manager.ts';
 import { startServer, type RunningServer } from './server.ts';
 import { DEBIAN_FACTS, FakeExecutor, ok } from './testing/fake-executor.ts';
@@ -16,7 +16,7 @@ describe('hosts API', () => {
   let api: (path: string, init?: RequestInit) => Promise<Response>;
 
   beforeAll(async () => {
-    configDir = await mkdtemp(join(tmpdir(), 'nftm-api-'));
+    configDir = await mkdtemp(join(tmpdir(), 'hopdeck-api-'));
     const hosts = await HostManager.open({
       configDir,
       controlDir: configDir,

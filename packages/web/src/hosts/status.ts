@@ -1,4 +1,4 @@
-import type { HostSummary } from '@nftm/core';
+import type { HostSummary } from '@hopdeck/core';
 import type { MessageKey } from '../i18n/locales.ts';
 
 export type Tone = 'neutral' | 'busy' | 'ok' | 'warn' | 'danger';

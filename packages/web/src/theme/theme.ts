@@ -2,7 +2,7 @@ export type ThemeChoice = 'system' | 'light' | 'dark';
 
 export const THEME_CHOICES: readonly ThemeChoice[] = ['system', 'light', 'dark'];
 
-const STORAGE_KEY = 'nftm.theme';
+const STORAGE_KEY = 'hopdeck.theme';
 const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
 
 /**

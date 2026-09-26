@@ -1,5 +1,5 @@
 {
-  "name": "@nftm/web",
+  "name": "@hopdeck/web",
   "version": "0.1.0-dev",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@nftm/core": "workspace:*",
+    "@hopdeck/core": "workspace:*",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },

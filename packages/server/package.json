@@ -1,5 +1,5 @@
 {
-  "name": "@nftm/server",
+  "name": "@hopdeck/server",
   "version": "0.1.0-dev",
   "private": true,
   "type": "module",
@@ -11,6 +11,6 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@nftm/core": "workspace:*"
+    "@hopdeck/core": "workspace:*"
   }
 }

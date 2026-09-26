@@ -1,7 +1,7 @@
-const TOKEN_KEY = 'nftm.token';
+const TOKEN_KEY = 'hopdeck.token';
 
 /**
- * `nftm` prints the panel URL with the token in the fragment, which is never
+ * `hopdeck` prints the panel URL with the token in the fragment, which is never
  * sent to the server or leaked in Referer. Move it to sessionStorage and
  * remove it from the address bar.
  */

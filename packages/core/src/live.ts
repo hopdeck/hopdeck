@@ -9,7 +9,7 @@ export interface Counter {
 
 /** What a periodic look at the host yields: counter values, and whether any table changed. */
 export interface LiveState {
-  /** When nftm read it, ISO 8601. */
+  /** When hopdeck read it, ISO 8601. */
   readAt: string;
   /** Rules with an anonymous counter, by ruleKey(). */
   rules: Record<string, Counter>;
@@ -41,7 +41,7 @@ export function liveState(json: unknown, readAt: string): LiveState {
 
 /**
  * Per table, a hash of its definition without counter values, quota use,
- * expiry and set elements: those change on their own. nftm's tracing tables
+ * expiry and set elements: those change on their own. hopdeck's tracing tables
  * are left out, since they come and go while it traces.
  */
 export function tableFingerprints(json: unknown): Record<string, string> {

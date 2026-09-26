@@ -1,4 +1,4 @@
-import { groupTrace, type Executor, type TraceView } from '@nftm/core';
+import { groupTrace, type Executor, type TraceView } from '@hopdeck/core';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -76,22 +76,22 @@ describe.skipIf(NFT === undefined || !USERNS || PING === undefined)('Traces in a
 
   it('refuses a filter that could be more than a filter, before touching the host', async () => {
     await expect(traces.start(target, { protocol: 'tcp', dport: '22 drop' }, { seconds: 10, perSecond: 10 })).rejects.toMatchObject({ code: 'invalid-filter' });
-    expect(await tables()).not.toContain('nftm_trace_');
+    expect(await tables()).not.toContain('hopdeck_trace_');
   });
 });
 
-// Against the podman test host: NFTM_TEST_HOST=1 pnpm test (after dev/test-host/up.sh).
+// Against the podman test host: HOPDECK_TEST_HOST=1 pnpm test (after dev/test-host/up.sh).
 const repo = new URL('../../../../', import.meta.url).pathname;
 const sshConfig = `${repo}.dev/test-host/ssh_config`;
 
-describe.skipIf(!process.env['NFTM_TEST_HOST'] || !existsSync(sshConfig))('Traces on the test host', { timeout: 60_000 }, () => {
+describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('Traces on the test host', { timeout: 60_000 }, () => {
   const traces = new Traces();
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
   let controlDir: string;
 
   const hostTarget = async (account: 'root' | 'nopass' | 'admin'): Promise<DeployTarget> => {
     const { SshExecutor } = await import('./ssh.ts');
-    const destination = `nftm-test-${account}`;
+    const destination = `hopdeck-test-${account}`;
     const executor = new SshExecutor({ destination, controlDir, configFile: sshConfig });
     const privilege = account === 'root' ? ({ kind: 'root' } as const) : account === 'nopass' ? ({ kind: 'sudo' } as const) : ({ kind: 'sudo-password' } as const);
     return {
@@ -99,7 +99,7 @@ describe.skipIf(!process.env['NFTM_TEST_HOST'] || !existsSync(sshConfig))('Trace
       name: destination,
       kind: 'ssh',
       executor,
-      access: { executor, nftPath: '/usr/sbin/nft', privilege, ...(account === 'admin' && { password: 'nftm-test' }) },
+      access: { executor, nftPath: '/usr/sbin/nft', privilege, ...(account === 'admin' && { password: 'hopdeck-test' }) },
       systemd: true,
       manualOverride: false,
       freshExecutor: undefined,
@@ -109,13 +109,13 @@ describe.skipIf(!process.env['NFTM_TEST_HOST'] || !existsSync(sshConfig))('Trace
   beforeAll(async () => {
     const { mkdtemp } = await import('node:fs/promises');
     const { tmpdir } = await import('node:os');
-    controlDir = await mkdtemp(`${tmpdir()}/nftm-trace-`);
+    controlDir = await mkdtemp(`${tmpdir()}/hopdeck-trace-`);
   });
 
   for (const account of ['root', 'nopass', 'admin'] as const) {
     it(`traces as ${account}, and the host removes the table`, async () => {
       const target = await hostTarget(account);
-      // nftm's own SSH connection is the traffic: the container has no ping.
+      // hopdeck's own SSH connection is the traffic: the container has no ping.
       const started = await traces.start(target, { protocol: 'tcp', dport: '22' }, { seconds: 30, perSecond: 10 });
       expect(started.state).toBe('running');
       await target.executor.exec(['true']);

@@ -1,4 +1,4 @@
-import type { DiffLine } from '@nftm/core';
+import type { DiffLine } from '@hopdeck/core';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import { collapseDiff } from './collapse.ts';
 import styles from './Deploy.module.css';

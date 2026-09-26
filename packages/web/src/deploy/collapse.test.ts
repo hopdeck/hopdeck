@@ -1,4 +1,4 @@
-import type { DiffLine } from '@nftm/core';
+import type { DiffLine } from '@hopdeck/core';
 import { describe, expect, it } from 'vitest';
 import { collapseDiff } from './collapse.ts';
 

@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { replaceTableScript, TRACE_TABLE_PREFIX, traceFilterProblem, traceTable, type TraceFilter, type TraceView } from '@nftm/core';
+import { replaceTableScript, TRACE_TABLE_PREFIX, traceFilterProblem, traceTable, type TraceFilter, type TraceView } from '@hopdeck/core';
 import { rollbackUnavailableReason, startWatchdog, watchdogCommand, type DeployTarget } from './deploy.ts';
 import { inStaging, makeStaging, removeStaging, stageFile, type Staging } from './staging.ts';
 import { HostError } from './errors.ts';
@@ -15,7 +15,7 @@ const MAX_PACKETS = 500;
 // records the trace until $1 seconds pass, "stop" appears or the monitor ends,
 // then always removes the table with cleanup.nft and says so in "finished".
 const TRACE_WATCHDOG = `#!/bin/sh
-# nftm trace watchdog; see packages/server/src/hosts/trace.ts.
+# hopdeck trace watchdog; see packages/server/src/hosts/trace.ts.
 dir=$(dirname "$0")
 seconds=$1
 shift
@@ -40,7 +40,7 @@ interface Trace {
   offset: number;
   /** An unfinished last line, completed by the next read. */
   partial: string;
-  /** Packets seen so far: passes nftm's chain reported. */
+  /** Packets seen so far: passes hopdeck's chain reported. */
   packets: number;
 }
 
@@ -162,7 +162,7 @@ export class Traces {
     const lines = text.split('\n');
     trace.partial = lines.pop() ?? '';
     const { view } = trace;
-    // The kernel reuses trace ids, so packets are counted where nftm's chain first reports them.
+    // The kernel reuses trace ids, so packets are counted where hopdeck's chain first reports them.
     const begins = new RegExp(`^trace id \\S+ inet ${view.table} \\S+ packet: `);
     for (const line of lines) {
       if (begins.test(line)) trace.packets += 1;

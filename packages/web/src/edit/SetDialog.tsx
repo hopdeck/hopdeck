@@ -1,4 +1,4 @@
-import { editSetBlock, elementProblem, newSetBlock, setSpecOf, splitList, type EditableBlock, type SetSpec } from '@nftm/core';
+import { editSetBlock, elementProblem, newSetBlock, setSpecOf, splitList, type EditableBlock, type SetSpec } from '@hopdeck/core';
 import { useEffect, useRef, useState } from 'react';
 import { Segmented } from '../components/Segmented.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';

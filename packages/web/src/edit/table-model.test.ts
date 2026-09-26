@@ -1,4 +1,4 @@
-import { editableTable, editSetBlock, emptyRule, findTable, newSetBlock, renderRule, renderTable, setSpecOf } from '@nftm/core';
+import { editableTable, editSetBlock, emptyRule, findTable, newSetBlock, renderRule, renderTable, setSpecOf } from '@hopdeck/core';
 import { describe, expect, it } from 'vitest';
 import basicJson from '../../../core/test/fixtures/basic.json' with { type: 'json' };
 import basicListing from '../../../core/test/fixtures/basic.listing?raw';
@@ -141,7 +141,7 @@ describe('editor sources', () => {
     expect(definitionOf(source.table, source.chains, source.sets).text).toBe(
       [
         'table inet fw {',
-        '\tcomment "managed by nftm"',
+        '\tcomment "managed by hopdeck"',
         '\tchain input {',
         '\t\ttype filter hook input priority filter; policy drop;',
         '\t\tct state established,related accept',
@@ -159,7 +159,7 @@ describe('editor sources', () => {
     expect(ip.chains[0]!.rows.map((row) => row.text)).not.toContainEqual(expect.stringContaining('icmpv6'));
     expect(ip.chains[0]!.rows.map((row) => row.text)).not.toContainEqual(expect.stringContaining('dport 22'));
     expect(definitionOf(newTableSource('netdev', 'x', { template: 'empty', ssh: true }).table, [], []).text).toBe(
-      'table netdev x {\n\tcomment "managed by nftm"\n}\n',
+      'table netdev x {\n\tcomment "managed by hopdeck"\n}\n',
     );
   });
 });

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
-import type { ExecOptions, ExecResult, Executor } from '@nftm/core';
+import type { ExecOptions, ExecResult, Executor } from '@hopdeck/core';
 import { HostError } from './errors.ts';
 import { collectFacts } from './facts.ts';
 import { DEFAULT_TIMEOUT_MS, runProcess } from './process.ts';
@@ -11,7 +11,7 @@ import { DEFAULT_TIMEOUT_MS, runProcess } from './process.ts';
  * real firewall is never touched.
  *
  * A keep-alive process holds the namespaces open. It reads its standard input
- * from nftm, so when nftm exits, even by crashing, the input closes, the process
+ * from hopdeck, so when hopdeck exits, even by crashing, the input closes, the process
  * ends and the namespaces disappear.
  */
 export class Sandbox {

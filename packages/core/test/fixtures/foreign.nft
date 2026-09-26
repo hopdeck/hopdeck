@@ -1,4 +1,4 @@
-# Tables named like the ones other tools create, to test how nftm recognises
+# Tables named like the ones other tools create, to test how hopdeck recognises
 # them. Only the names and chain layout imitate those tools; the rules are
 # made up. (Real iptables-nft tables also carry xt expressions and a marker
 # that plain nft cannot create; unit tests cover those separately.)

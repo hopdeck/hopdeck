@@ -10,7 +10,7 @@ import {
   type RuleAction,
   type RuleForm,
   type TcpFlags,
-} from '@nftm/core';
+} from '@hopdeck/core';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Segmented } from '../components/Segmented.tsx';
 import { Tabs } from '../components/Tabs.tsx';

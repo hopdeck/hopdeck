@@ -1,4 +1,4 @@
-import { parseListing, parseRuleset, type Executor } from '@nftm/core';
+import { parseListing, parseRuleset, type Executor } from '@hopdeck/core';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -18,14 +18,14 @@ describe('planTable', () => {
   it('adopts a plain table by adding the marker', () => {
     const plan = planTable({ kind: 'adopt', family: 'inet', table: 'mine' }, current(MINE), false);
     expect(plan.action).toBe('adopt');
-    expect(plan.diff.filter((line) => line.kind !== 'same')).toEqual([{ kind: 'add', text: '\tcomment "managed by nftm"' }]);
+    expect(plan.diff.filter((line) => line.kind !== 'same')).toEqual([{ kind: 'add', text: '\tcomment "managed by hopdeck"' }]);
   });
 
   it('changes unmanaged tables only with Manual override, and keeps the marker on managed ones', () => {
     const replace = { kind: 'replace' as const, family: 'inet' as const, table: 'mine', definition: MINE };
     expect(() => planTable(replace, current(MINE), false)).toThrow(/adopt it first, or switch on Manual override/);
     expect(planTable(replace, current(MINE), true).after).toBe(MINE);
-    expect(planTable(replace, current(MINE, 'managed by nftm'), false).after).toContain('comment "managed by nftm"');
+    expect(planTable(replace, current(MINE, 'managed by hopdeck'), false).after).toContain('comment "managed by hopdeck"');
     expect(planTable(replace, undefined, false)).toMatchObject({ action: 'create', before: undefined });
   });
 
@@ -33,7 +33,7 @@ describe('planTable', () => {
     const text = 'table inet mine {\n\tset allow {\n\t\ttype ipv4_addr\n\t\telements = { 10.0.0.1, 10.0.0.2 comment "b" }\n\t}\n}\n';
     const change = { kind: 'elements' as const, family: 'inet' as const, table: 'mine', set: 'allow', setKind: 'set' as const, add: ['10.0.0.3'], remove: ['10.0.0.1'] };
     expect(() => planTable(change, current(text), false)).toThrow(/adopt it first/);
-    const plan = planTable(change, current(text, 'managed by nftm'), false);
+    const plan = planTable(change, current(text, 'managed by hopdeck'), false);
     expect(plan).toMatchObject({
       action: 'elements',
       set: { kind: 'set', name: 'allow' },
@@ -45,17 +45,17 @@ describe('planTable', () => {
       { kind: 'remove', text: '10.0.0.1' },
       { kind: 'add', text: '10.0.0.3' },
     ]);
-    expect(() => planTable({ ...change, set: 'nope' }, current(text, 'managed by nftm'), false)).toThrow(/has no set nope/);
-    expect(() => planTable({ ...change, add: ['1.2.3.4 }\nflush ruleset'] }, current(text, 'managed by nftm'), false)).toThrow(/newline/);
+    expect(() => planTable({ ...change, set: 'nope' }, current(text, 'managed by hopdeck'), false)).toThrow(/has no set nope/);
+    expect(() => planTable({ ...change, add: ['1.2.3.4 }\nflush ruleset'] }, current(text, 'managed by hopdeck'), false)).toThrow(/newline/);
   });
 
   it('takes sets the editor left alone from the host as it is now', () => {
     const table = (elements: string, policy: string) =>
-      `table inet mine {\n\tcomment "managed by nftm"\n\tset s {\n\t\ttype ipv4_addr\n\t\tflags timeout\n\t\telements = { ${elements} }\n\t}\n\n\tchain input {\n\t\ttype filter hook input priority filter; policy ${policy};\n\t}\n}\n`;
+      `table inet mine {\n\tcomment "managed by hopdeck"\n\tset s {\n\t\ttype ipv4_addr\n\t\tflags timeout\n\t\telements = { ${elements} }\n\t}\n\n\tchain input {\n\t\ttype filter hook input priority filter; policy ${policy};\n\t}\n}\n`;
     const base = table('1.1.1.1 expires 50m, 2.2.2.2 expires 10s', 'accept');
     const now = table('1.1.1.1 expires 49m', 'accept');
     const change = { kind: 'replace' as const, family: 'inet' as const, table: 'mine', definition: table('1.1.1.1 expires 50m, 2.2.2.2 expires 10s', 'drop'), base };
-    const plan = planTable(change, current(now, 'managed by nftm'), false);
+    const plan = planTable(change, current(now, 'managed by hopdeck'), false);
     expect(plan.after).toBe(table('1.1.1.1 expires 49m', 'drop'));
     expect(plan.diff.filter((line) => line.kind !== 'same').map((line) => line.text)).toEqual([
       '\t\ttype filter hook input priority filter; policy drop;',
@@ -129,11 +129,11 @@ describe.skipIf(NFT === undefined || !USERNS)('Deployments in a sandbox', { time
 
     const applied = await deployments.apply(plan.id, target);
     expect(applied.state).toBe('awaiting-confirmation');
-    expect(await table()).toContain('comment "managed by nftm"');
+    expect(await table()).toContain('comment "managed by hopdeck"');
 
     expect((await deployments.confirm(plan.id, target)).state).toBe('confirmed');
     await sleep(3000);
-    expect(await table()).toContain('comment "managed by nftm"');
+    expect(await table()).toContain('comment "managed by hopdeck"');
     expect((await executor.exec(['test', '-e', plan.safety.directory])).exitCode).toBe(1);
   });
 
@@ -206,18 +206,18 @@ describe.skipIf(NFT === undefined || !USERNS)('Deployments in a sandbox', { time
   });
 });
 
-// Against the podman test host: NFTM_TEST_HOST=1 pnpm test (after dev/test-host/up.sh).
+// Against the podman test host: HOPDECK_TEST_HOST=1 pnpm test (after dev/test-host/up.sh).
 const repo = new URL('../../../../', import.meta.url).pathname;
 const sshConfig = `${repo}.dev/test-host/ssh_config`;
 
-describe.skipIf(!process.env['NFTM_TEST_HOST'] || !existsSync(sshConfig))('Deployments on the test host', { timeout: 90_000 }, () => {
+describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('Deployments on the test host', { timeout: 90_000 }, () => {
   const deployments = new Deployments({ seconds: 5 });
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
   let controlDir: string;
 
   const hostTarget = async (account: 'root' | 'nopass' | 'admin'): Promise<DeployTarget> => {
     const { SshExecutor } = await import('./ssh.ts');
-    const destination = `nftm-test-${account}`;
+    const destination = `hopdeck-test-${account}`;
     const executor = new SshExecutor({ destination, controlDir, configFile: sshConfig });
     const privilege =
       account === 'root' ? ({ kind: 'root' } as const) : account === 'nopass' ? ({ kind: 'sudo' } as const) : ({ kind: 'sudo-password' } as const);
@@ -226,7 +226,7 @@ describe.skipIf(!process.env['NFTM_TEST_HOST'] || !existsSync(sshConfig))('Deplo
       name: destination,
       kind: 'ssh',
       executor,
-      access: { executor, nftPath: '/usr/sbin/nft', privilege, ...(account === 'admin' && { password: 'nftm-test' }) },
+      access: { executor, nftPath: '/usr/sbin/nft', privilege, ...(account === 'admin' && { password: 'hopdeck-test' }) },
       systemd: true,
       manualOverride: false,
       freshExecutor: new SshExecutor({ destination, controlDir, configFile: sshConfig, shareConnection: false }),
@@ -243,7 +243,7 @@ describe.skipIf(!process.env['NFTM_TEST_HOST'] || !existsSync(sshConfig))('Deplo
   beforeAll(async () => {
     const { mkdtemp } = await import('node:fs/promises');
     const { tmpdir } = await import('node:os');
-    controlDir = await mkdtemp(`${tmpdir()}/nftm-deploy-`);
+    controlDir = await mkdtemp(`${tmpdir()}/hopdeck-deploy-`);
   });
 
   it('under sudo with a password, keeps its files where only root can change them', async () => {
@@ -261,18 +261,18 @@ describe.skipIf(!process.env['NFTM_TEST_HOST'] || !existsSync(sshConfig))('Deplo
 
   it('as root, protects the change with a systemd watchdog', async () => {
     const target = await hostTarget('root');
-    const plan = await deployments.prepare(target, [create('nftm_root', '\tchain c {\n\t\ttype filter hook input priority 100; policy accept;\n\t}')]);
+    const plan = await deployments.prepare(target, [create('hopdeck_root', '\tchain c {\n\t\ttype filter hook input priority 100; policy accept;\n\t}')]);
     expect(plan.safety).toMatchObject({ watchdog: 'systemd', freshConnectionCheck: true });
     expect((await deployments.apply(plan.id, target)).state).toBe('awaiting-confirmation');
     expect((await deployments.confirm(plan.id, target)).state).toBe('confirmed');
-    const cleanup = await deployments.prepare(target, [remove('nftm_root')]);
+    const cleanup = await deployments.prepare(target, [remove('hopdeck_root')]);
     await deployments.apply(cleanup.id, target);
     await deployments.confirm(cleanup.id, target);
   });
 
   // The classic mistake: established traffic still flows, new connections (like the next ssh) are dropped.
   const lockout = create(
-    'nftm_lockout',
+    'hopdeck_lockout',
     '\tchain input {\n\t\ttype filter hook input priority filter; policy drop;\n\t\tct state established,related accept\n\t}',
   );
 
@@ -283,7 +283,7 @@ describe.skipIf(!process.env['NFTM_TEST_HOST'] || !existsSync(sshConfig))('Deplo
     const applied = await patient.apply(plan.id, target);
     expect(applied).toMatchObject({ state: 'rolled-back', outcome: { reason: 'fresh-connection-failed' } });
     expect((await target.freshExecutor!.exec(['true'])).exitCode).toBe(0);
-    expect(await readTable(target.access, 'inet', 'nftm_lockout')).toBeUndefined();
+    expect(await readTable(target.access, 'inet', 'hopdeck_lockout')).toBeUndefined();
   });
 
   it('reports a watchdog that rolled back during the connection check, instead of awaiting confirmation', async () => {
@@ -293,26 +293,26 @@ describe.skipIf(!process.env['NFTM_TEST_HOST'] || !existsSync(sshConfig))('Deplo
     const plan = await deployments.prepare(target, [lockout]);
     const applied = await deployments.apply(plan.id, target);
     expect(applied).toMatchObject({ state: 'rolled-back', outcome: { reason: 'timeout' } });
-    expect(await readTable(target.access, 'inet', 'nftm_lockout')).toBeUndefined();
+    expect(await readTable(target.access, 'inet', 'hopdeck_lockout')).toBeUndefined();
   });
 
   it('with sudo for nft only, the watchdog survives the SSH session and rolls back', async () => {
     const target = await hostTarget('nopass');
-    const plan = await deployments.prepare(target, [create('nftm_nopass', '\tset s {\n\t\ttype ipv4_addr\n\t}')]);
+    const plan = await deployments.prepare(target, [create('hopdeck_nopass', '\tset s {\n\t\ttype ipv4_addr\n\t}')]);
     expect(plan.safety.watchdog).toBe('detached');
     await deployments.apply(plan.id, target);
-    expect(await readTable(target.access, 'inet', 'nftm_nopass')).toBeDefined();
+    expect(await readTable(target.access, 'inet', 'hopdeck_nopass')).toBeDefined();
     await sleep(7000);
     expect(await deployments.refresh(plan.id, target)).toMatchObject({ state: 'rolled-back', outcome: { reason: 'timeout' } });
-    expect(await readTable(target.access, 'inet', 'nftm_nopass')).toBeUndefined();
+    expect(await readTable(target.access, 'inet', 'hopdeck_nopass')).toBeUndefined();
   });
 
   it('with a sudo password, starts the watchdog through sudo and systemd', async () => {
     const target = await hostTarget('admin');
-    const plan = await deployments.prepare(target, [create('nftm_admin', '\tset s {\n\t\ttype ipv4_addr\n\t}')]);
+    const plan = await deployments.prepare(target, [create('hopdeck_admin', '\tset s {\n\t\ttype ipv4_addr\n\t}')]);
     expect(plan.safety.watchdog).toBe('systemd');
     await deployments.apply(plan.id, target);
     expect((await deployments.rollback(plan.id, target)).state).toBe('rolled-back');
-    expect(await readTable(target.access, 'inet', 'nftm_admin')).toBeUndefined();
+    expect(await readTable(target.access, 'inet', 'hopdeck_admin')).toBeUndefined();
   });
 });

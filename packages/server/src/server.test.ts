@@ -12,9 +12,9 @@ describe('startServer', () => {
   const auth = { Authorization: 'Bearer test-token' };
 
   beforeAll(async () => {
-    webRoot = await mkdtemp(join(tmpdir(), 'nftm-web-'));
+    webRoot = await mkdtemp(join(tmpdir(), 'hopdeck-web-'));
     await mkdir(join(webRoot, 'assets'));
-    await writeFile(join(webRoot, 'index.html'), '<!doctype html><title>nftm</title>');
+    await writeFile(join(webRoot, 'index.html'), '<!doctype html><title>hopdeck</title>');
     await writeFile(join(webRoot, 'assets', 'app.js'), 'console.log(1)');
     const hosts = await HostManager.open({ configDir: join(webRoot, 'config'), controlDir: webRoot });
     server = await startServer({ port: 0, token: 'test-token', webRoot, version: '0.0.0-test', hosts });

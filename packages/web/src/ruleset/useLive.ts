@@ -1,4 +1,4 @@
-import type { Counter, LiveState } from '@nftm/core';
+import type { Counter, LiveState } from '@hopdeck/core';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.ts';
 import { toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';

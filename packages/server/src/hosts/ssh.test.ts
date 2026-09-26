@@ -19,7 +19,7 @@ describe('SshExecutor', () => {
   let ssh: SshExecutor;
 
   beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'nftm-ssh-'));
+    dir = await mkdtemp(join(tmpdir(), 'hopdeck-ssh-'));
     sshPath = join(dir, 'ssh');
     await writeFile(sshPath, FAKE_SSH);
     await chmod(sshPath, 0o755);
@@ -59,10 +59,10 @@ describe('SshExecutor', () => {
   });
 
   it('uses another ssh config file when asked', async () => {
-    const custom = new SshExecutor({ destination: 'fw1', controlDir: dir, sshPath, configFile: '/etc/nftm/ssh config' });
+    const custom = new SshExecutor({ destination: 'fw1', controlDir: dir, sshPath, configFile: '/etc/hopdeck/ssh config' });
     await custom.exec(['true']);
     const args = (await readFile(`${sshPath}.args`, 'utf8')).trimEnd().split('\n');
-    expect(args.slice(0, 2)).toEqual(['-F', '/etc/nftm/ssh config']);
+    expect(args.slice(0, 2)).toEqual(['-F', '/etc/hopdeck/ssh config']);
   });
 
   it('refuses destinations that ssh would read as options', () => {

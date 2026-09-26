@@ -1,7 +1,7 @@
 import { blockKey, chainKey, ruleKey, tableKey } from './keys.ts';
 
 /**
- * What `nft -a list ruleset` prints, cut into pieces. nftm shows nft's own text
+ * What `nft -a list ruleset` prints, cut into pieces. hopdeck shows nft's own text
  * rather than rendering JSON itself, so rules look exactly as nft prints them on
  * this host's version.
  */

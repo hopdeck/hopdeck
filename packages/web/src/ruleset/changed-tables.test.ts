@@ -1,4 +1,4 @@
-import { tableKey } from '@nftm/core';
+import { tableKey } from '@hopdeck/core';
 import { describe, expect, it } from 'vitest';
 import { changedTables } from './model.ts';
 

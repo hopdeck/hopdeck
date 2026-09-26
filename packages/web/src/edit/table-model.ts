@@ -16,7 +16,7 @@ import {
   type Family,
   type RuleForm,
   type TableNode,
-} from '@nftm/core';
+} from '@hopdeck/core';
 import { priorityText, ruleCounter, type RulesetModel } from '../ruleset/model.ts';
 
 export interface RuleRow {

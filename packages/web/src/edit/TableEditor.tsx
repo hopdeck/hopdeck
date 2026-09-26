@@ -1,4 +1,4 @@
-import type { Family } from '@nftm/core';
+import type { Family } from '@hopdeck/core';
 import { useEffect, useState } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import { AlertIcon } from '../components/icons.tsx';
@@ -35,7 +35,7 @@ interface TableEditorProps {
   initialMode: EditorMode;
   draft: EditorDraft | undefined;
   onDraft(draft: EditorDraft): void;
-  /** Set when nft or nftm rejected the last attempt. */
+  /** Set when nft or hopdeck rejected the last attempt. */
   problem: EditorProblem | undefined;
   /** The table on the host no longer matches the one the editor read. */
   changedOnHost?: boolean;

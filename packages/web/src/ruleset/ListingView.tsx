@@ -1,4 +1,4 @@
-import { stripHandles } from '@nftm/core';
+import { stripHandles } from '@hopdeck/core';
 import { useState } from 'react';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import { NftCode } from './NftCode.tsx';

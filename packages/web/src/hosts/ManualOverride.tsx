@@ -1,4 +1,4 @@
-import type { HostSummary } from '@nftm/core';
+import type { HostSummary } from '@hopdeck/core';
 import { useRef, useState } from 'react';
 import { api } from '../api.ts';
 import { ErrorCallout, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';

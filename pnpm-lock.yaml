@@ -178,7 +178,7 @@ importers:
 
   packages/cli:
     dependencies:
-      '@nftm/server':
+      '@hopdeck/server':
         specifier: workspace:*
         version: link:../server
 
@@ -186,13 +186,13 @@ importers:
 
   packages/server:
     dependencies:
-      '@nftm/core':
+      '@hopdeck/core':
         specifier: workspace:*
         version: link:../core
 
   packages/web:
     dependencies:
-      '@nftm/core':
+      '@hopdeck/core':
         specifier: workspace:*
         version: link:../core
       react:

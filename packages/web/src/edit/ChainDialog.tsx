@@ -1,4 +1,4 @@
-import { newChain, type BaseChainSpec, type Family } from '@nftm/core';
+import { newChain, type BaseChainSpec, type Family } from '@hopdeck/core';
 import { useEffect, useRef, useState } from 'react';
 import { Segmented } from '../components/Segmented.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';

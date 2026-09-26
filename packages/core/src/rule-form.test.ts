@@ -153,7 +153,7 @@ describe('newTable and newChain', () => {
     expect(renderTable(table)).toBe(
       [
         'table inet my_fw {',
-        '\tcomment "managed by nftm"',
+        '\tcomment "managed by hopdeck"',
         '\tchain input {',
         '\t\ttype filter hook input priority filter; policy drop;',
         '\t\tiif "lo" accept',

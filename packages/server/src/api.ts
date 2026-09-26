@@ -1,4 +1,4 @@
-import type { Family, TableChange, TraceFilter } from '@nftm/core';
+import type { Family, TableChange, TraceFilter } from '@hopdeck/core';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HostError } from './hosts/errors.ts';
 import { HostStateError, InvalidHostError, type HostManager } from './hosts/manager.ts';

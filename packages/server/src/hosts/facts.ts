@@ -1,4 +1,4 @@
-import type { Executor, HostFacts } from '@nftm/core';
+import type { Executor, HostFacts } from '@hopdeck/core';
 import { HostError } from './errors.ts';
 
 // One round trip collects everything; `nft --version` needs no root. Output is

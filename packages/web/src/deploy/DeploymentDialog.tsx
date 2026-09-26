@@ -1,4 +1,4 @@
-import type { DeploymentView, TableChange } from '@nftm/core';
+import type { DeploymentView, TableChange } from '@hopdeck/core';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.ts';
 import { Callout } from '../components/Callout.tsx';

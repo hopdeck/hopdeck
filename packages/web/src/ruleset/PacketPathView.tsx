@@ -1,4 +1,4 @@
-import { chainKey, hasPath, packetPath, type HookStage, type PathKind, type Traffic } from '@nftm/core';
+import { chainKey, hasPath, packetPath, type HookStage, type PathKind, type Traffic } from '@hopdeck/core';
 import { Fragment, useState } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import { AlertIcon, ChevronRightIcon, GlobeIcon, InfoIcon, RouteIcon, TerminalIcon } from '../components/icons.tsx';

@@ -14,7 +14,7 @@ import {
   type RulesetSnapshot,
   type TableNode,
   type TableOwner,
-} from '@nftm/core';
+} from '@hopdeck/core';
 
 export interface RulesetModel {
   ruleset: Ruleset;

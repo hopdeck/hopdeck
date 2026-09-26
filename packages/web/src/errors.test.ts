@@ -1,4 +1,4 @@
-import type { HostErrorCode } from '@nftm/core';
+import type { HostErrorCode } from '@hopdeck/core';
 import { describe, expect, it } from 'vitest';
 import { errorText } from './errors.ts';
 

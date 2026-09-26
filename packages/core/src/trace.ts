@@ -6,8 +6,8 @@
 
 import { emptyRule, renderRule, type RuleForm } from './rule-form.ts';
 
-/** Tables nftm creates to mark the packets it traces. */
-export const TRACE_TABLE_PREFIX = 'nftm_trace_';
+/** Tables hopdeck creates to mark the packets it traces. */
+export const TRACE_TABLE_PREFIX = 'hopdeck_trace_';
 
 /** Which packets to trace; every field is optional. */
 export interface TraceFilter {
@@ -106,10 +106,10 @@ export interface TracedPacket {
   key: string;
   /** nft's trace id; the kernel may give it to a later packet again. */
   id: string;
-  /** How nftm caught it: arriving (prerouting) or sent by the host itself (output). */
+  /** How hopdeck caught it: arriving (prerouting) or sent by the host itself (output). */
   direction: 'in' | 'out' | undefined;
   summary: PacketSummary;
-  /** The chains and rules it passed, nftm's own tracing table left out. */
+  /** The chains and rules it passed, hopdeck's own tracing table left out. */
   steps: TraceEvent[];
   /**
    * drop as soon as any chain dropped it; accept when every chain that decided
@@ -142,7 +142,7 @@ export function parseTraceLine(line: string): TraceEvent | undefined {
  * The lines of a trace, one entry per pass of a packet through the hooks, in
  * the order they began. The kernel derives trace ids from the packet buffer's
  * address, so a later packet can get the id of an earlier one (on lo, a ping
- * and its reply often do). A pass begins where nftm's tracing chain, which runs
+ * and its reply often do). A pass begins where hopdeck's tracing chain, which runs
  * before all others, first reports the packet; that starts a new entry even
  * for an id seen before.
  */
@@ -168,7 +168,7 @@ export function groupTrace(lines: readonly string[]): TracedPacket[] {
     const deciding = steps.filter((event) => event.verdict !== undefined && ['accept', 'drop'].includes(event.verdict));
     const drop = deciding.find((event) => event.verdict === 'drop');
     const decidedBy = drop ?? deciding.at(-1);
-    // Seen by nftm's chain but by no chain of the firewall: nothing held it back.
+    // Seen by hopdeck's chain but by no chain of the firewall: nothing held it back.
     const passed = own !== undefined && steps.length === 0;
     return {
       key: `${id}#${index}`,

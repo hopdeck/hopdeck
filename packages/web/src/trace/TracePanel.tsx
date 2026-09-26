@@ -1,4 +1,4 @@
-import { groupTrace, TRACE_PROTOCOLS, type HostKind, type TraceEvent, type TraceFilter, type TracedPacket, type TraceView } from '@nftm/core';
+import { groupTrace, TRACE_PROTOCOLS, type HostKind, type TraceEvent, type TraceFilter, type TracedPacket, type TraceView } from '@hopdeck/core';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { api } from '../api.ts';
 import { Callout } from '../components/Callout.tsx';

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ExecResult } from '@nftm/core';
+import type { ExecResult } from '@hopdeck/core';
 import { HostError } from './errors.ts';
 import { runAsRoot, type NftAccess } from './privilege.ts';
 
@@ -10,9 +10,9 @@ import { runAsRoot, type NftAccess } from './privilege.ts';
  *
  * Under sudo with a password, the password is what keeps the login user from
  * root. A directory of that user would let any process of theirs swap
- * watchdog.sh or change.nft between nftm writing and root using it, root
+ * watchdog.sh or change.nft between hopdeck writing and root using it, root
  * without the password. There the directory belongs to root, and every file
- * gets in through a copy root makes and checks against the SHA-256 nftm
+ * gets in through a copy root makes and checks against the SHA-256 hopdeck
  * computed. Everywhere else the user can become root anyway (root login,
  * passwordless sudo) or root never runs their files (sudo for nft only, where
  * the watchdog runs as the user), so the user's own directory is enough.
@@ -28,9 +28,9 @@ export interface StagingTarget {
   access: NftAccess;
 }
 
-// Left behind when nftm stopped before it could clean up; kept a day for a look at the logs.
+// Left behind when hopdeck stopped before it could clean up; kept a day for a look at the logs.
 const MAKE_DIRECTORY =
-  'base="${TMPDIR:-/tmp}"; find "$base" -maxdepth 1 -name "nftm.*" -user "$(id -u)" -mtime +0 -exec rm -rf {} + 2>/dev/null; umask 077; mktemp -d "$base/nftm.XXXXXX"';
+  'base="${TMPDIR:-/tmp}"; find "$base" -maxdepth 1 -name "hopdeck.*" -user "$(id -u)" -mtime +0 -exec rm -rf {} + 2>/dev/null; umask 077; mktemp -d "$base/hopdeck.XXXXXX"';
 
 export async function makeStaging(target: StagingTarget): Promise<Staging> {
   const asRoot = target.access.privilege.kind === 'sudo-password';
@@ -61,7 +61,7 @@ export async function stageFile(target: StagingTarget, staging: Staging, name: s
  * it takes the file's place. A file swapped in between fails the check.
  */
 export async function copyAsRoot(target: StagingTarget, content: string, path: string, mode = '600'): Promise<void> {
-  const temporary = await target.executor.exec(['sh', '-c', 'umask 077; f=$(mktemp "${TMPDIR:-/tmp}/nftm-copy.XXXXXX") && cat > "$f" && echo "$f"'], { stdin: content });
+  const temporary = await target.executor.exec(['sh', '-c', 'umask 077; f=$(mktemp "${TMPDIR:-/tmp}/hopdeck-copy.XXXXXX") && cat > "$f" && echo "$f"'], { stdin: content });
   if (temporary.exitCode !== 0) throw new HostError('command-failed', temporary.stderr.trim());
   const source = temporary.stdout.trim();
   const sha256 = createHash('sha256').update(content).digest('hex');
@@ -69,10 +69,10 @@ export async function copyAsRoot(target: StagingTarget, content: string, path: s
     'set -e',
     'umask 077',
     'mkdir -p "$(dirname "$2")"',
-    'cp -- "$1" "$2.nftm-new"',
-    'if ! echo "$3  $2.nftm-new" | sha256sum -c >/dev/null 2>&1; then rm -f "$2.nftm-new"; echo "the file changed while it was copied; nothing was written" >&2; exit 1; fi',
-    'chmod "$4" "$2.nftm-new"',
-    'mv -f "$2.nftm-new" "$2"',
+    'cp -- "$1" "$2.hopdeck-new"',
+    'if ! echo "$3  $2.hopdeck-new" | sha256sum -c >/dev/null 2>&1; then rm -f "$2.hopdeck-new"; echo "the file changed while it was copied; nothing was written" >&2; exit 1; fi',
+    'chmod "$4" "$2.hopdeck-new"',
+    'mv -f "$2.hopdeck-new" "$2"',
   ].join('\n');
   const copied = await runAsRoot(target.access, ['sh', '-c', copy, 'sh', source, path, sha256, mode]);
   await target.executor.exec(['rm', '-f', '--', source]);

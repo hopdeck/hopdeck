@@ -139,7 +139,7 @@ export function newChain(name: string, base?: BaseChainSpec): EditableChain {
   return { name, opening: `\tchain ${nftName(name)} {`, header, rules: [] };
 }
 
-/** A table that does not exist yet, marked as managed by nftm, without chains. */
+/** A table that does not exist yet, marked as managed by hopdeck, without chains. */
 export function newTable(family: Family, name: string): EditableTable {
   return {
     family,

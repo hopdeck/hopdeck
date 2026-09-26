@@ -1,4 +1,4 @@
-import type { HostKey, HostKeyCheck } from '@nftm/core';
+import type { HostKey, HostKeyCheck } from '@hopdeck/core';
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { appendFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -18,7 +18,7 @@ export interface HostKeySettings {
 }
 
 export interface HostKeysOptions {
-  /** The ssh config file nftm uses instead of ~/.ssh/config, if any. */
+  /** The ssh config file hopdeck uses instead of ~/.ssh/config, if any. */
   configFile?: string | undefined;
   sshPath?: string;
   sshKeygenPath?: string;
@@ -117,7 +117,7 @@ export class HostKeys {
    * the rest of the ssh configuration.
    */
   async #presented(destination: string): Promise<PresentedKey> {
-    const dir = await mkdtemp(join(tmpdir(), 'nftm-hostkey-'));
+    const dir = await mkdtemp(join(tmpdir(), 'hopdeck-hostkey-'));
     const file = join(dir, 'known_hosts');
     try {
       const result = await runProcess(

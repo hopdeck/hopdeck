@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import type { ExecResult } from '@nftm/core';
+import type { ExecResult } from '@hopdeck/core';
 import { HostError } from './errors.ts';
 
 export const DEFAULT_TIMEOUT_MS = 30_000;

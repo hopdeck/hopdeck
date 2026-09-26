@@ -1,4 +1,4 @@
-import { RulesetParseError } from '@nftm/core';
+import { RulesetParseError } from '@hopdeck/core';
 import { ApiError } from '../api.ts';
 import { errorText } from '../errors.ts';
 import { useI18n, type I18n } from '../i18n/I18nProvider.tsx';

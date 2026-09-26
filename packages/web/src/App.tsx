@@ -1,4 +1,4 @@
-import type { HostSummary } from '@nftm/core';
+import type { HostSummary } from '@hopdeck/core';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.ts';
 import styles from './App.module.css';

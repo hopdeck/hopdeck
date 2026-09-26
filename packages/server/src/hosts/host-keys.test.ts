@@ -39,7 +39,7 @@ describe('parseSshSettings and knownHostsName', () => {
 describe('fingerprint and hashName', () => {
   let dir: string;
   beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'nftm-keys-'));
+    dir = await mkdtemp(join(tmpdir(), 'hopdeck-keys-'));
   });
   afterAll(() => rm(dir, { recursive: true, force: true }));
 
@@ -55,19 +55,19 @@ describe('fingerprint and hashName', () => {
   });
 });
 
-// Against the podman test host: NFTM_TEST_HOST=1 pnpm test (after dev/test-host/up.sh).
+// Against the podman test host: HOPDECK_TEST_HOST=1 pnpm test (after dev/test-host/up.sh).
 const repo = resolve(import.meta.dirname, '../../../..');
 const testKey = join(repo, '.dev/test-host/id_ed25519');
-const port = process.env['NFTM_TEST_PORT'] ?? '2222';
+const port = process.env['HOPDECK_TEST_PORT'] ?? '2222';
 
-describe.skipIf(!process.env['NFTM_TEST_HOST'] || !existsSync(testKey))('HostKeys against the test host', () => {
+describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(testKey))('HostKeys against the test host', () => {
   let dir: string;
   let keys: HostKeys;
   let serverFingerprint: string;
   const bogusKey = 'AAAAC3NzaC1lZDI1NTE5AAAAIOl5iG6n0rA8Z6z9Z9t8b7T4y1bqf3o0X2cWq8JwWmZs';
 
   beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'nftm-hostkeys-'));
+    dir = await mkdtemp(join(tmpdir(), 'hopdeck-hostkeys-'));
     const common = `HostName 127.0.0.1\n\tPort ${port}\n\tUser root\n\tIdentityFile ${testKey}\n\tIdentitiesOnly yes\n\tStrictHostKeyChecking yes`;
     await writeFile(
       join(dir, 'ssh_config'),

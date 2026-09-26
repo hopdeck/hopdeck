@@ -1,5 +1,5 @@
 {
-  "name": "nftm-workspace",
+  "name": "hopdeck-workspace",
   "private": true,
   "type": "module",
   "license": "GPL-3.0-or-later",
@@ -8,14 +8,14 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "NFTM_TOKEN=$(node -e \"console.log(crypto.randomUUID())\") pnpm -r --parallel dev",
-    "dev:test-host": "NFTM_CONFIG_DIR=$PWD/.dev/test-host/config NFTM_SSH_CONFIG=$PWD/.dev/test-host/ssh_config pnpm dev",
+    "dev": "HOPDECK_TOKEN=$(node -e \"console.log(crypto.randomUUID())\") pnpm -r --parallel dev",
+    "dev:test-host": "HOPDECK_CONFIG_DIR=$PWD/.dev/test-host/config HOPDECK_SSH_CONFIG=$PWD/.dev/test-host/ssh_config pnpm dev",
     "start": "node packages/cli/src/main.ts",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:host": "NFTM_TEST_HOST=1 vitest run --no-file-parallelism"
+    "test:host": "HOPDECK_TEST_HOST=1 vitest run --no-file-parallelism"
   },
   "devDependencies": {
     "@types/node": "^24.13.5",

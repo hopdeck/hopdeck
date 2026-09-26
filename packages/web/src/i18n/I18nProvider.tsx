@@ -9,7 +9,7 @@ export interface I18n {
   t(key: MessageKey, vars?: Vars): string;
 }
 
-const STORAGE_KEY = 'nftm.locale';
+const STORAGE_KEY = 'hopdeck.locale';
 const I18nContext = createContext<I18n | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {

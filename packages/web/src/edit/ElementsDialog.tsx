@@ -1,4 +1,4 @@
-import { elementParts, elementProblem, splitList, type Family, type SetBlock, type TableChange } from '@nftm/core';
+import { elementParts, elementProblem, splitList, type Family, type SetBlock, type TableChange } from '@hopdeck/core';
 import { useEffect, useRef, useState } from 'react';
 import { CloseIcon, EditIcon, TrashIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';

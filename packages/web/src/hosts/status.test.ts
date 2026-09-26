@@ -1,4 +1,4 @@
-import type { HostFacts, HostStatus, HostSummary } from '@nftm/core';
+import type { HostFacts, HostStatus, HostSummary } from '@hopdeck/core';
 import { describe, expect, it } from 'vitest';
 import { hostStatus } from './status.ts';
 

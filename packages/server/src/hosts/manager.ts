@@ -16,8 +16,8 @@ import type {
   LiveState,
   TraceFilter,
   TraceView,
-} from '@nftm/core';
-import { liveState } from '@nftm/core';
+} from '@hopdeck/core';
+import { liveState } from '@hopdeck/core';
 import { HostError } from './errors.ts';
 import { Deployments, type DeployLogEntry, type DeployTarget } from './deploy.ts';
 import { Traces, type TraceOptions } from './trace.ts';
@@ -48,7 +48,7 @@ interface StoredHost {
 }
 
 export interface HostManagerOptions {
-  /** Where hosts.json lives, e.g. ~/.config/nftm. */
+  /** Where hosts.json lives, e.g. ~/.config/hopdeck. */
   configDir: string;
   /** Directory for SSH ControlMaster sockets. */
   controlDir: string;

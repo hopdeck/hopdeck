@@ -1,4 +1,4 @@
-import { findTable } from '@nftm/core';
+import { findTable } from '@hopdeck/core';
 import { describe, expect, it } from 'vitest';
 import basicJson from '../../../core/test/fixtures/basic.json' with { type: 'json' };
 import basicListing from '../../../core/test/fixtures/basic.listing?raw';

@@ -10,7 +10,7 @@ export function TopBar({ version }: { version?: string | undefined }) {
         <span className={styles.logo}>
           <LogoIcon />
         </span>
-        <span className={styles.name}>nftm</span>
+        <span className={styles.name}>hopdeck</span>
         {version !== undefined && <span className={styles.version}>v{version}</span>}
       </div>
       <div className={styles.controls}>

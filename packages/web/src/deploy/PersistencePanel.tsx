@@ -1,4 +1,4 @@
-import type { PersistedTable, PersistenceStatus } from '@nftm/core';
+import type { PersistedTable, PersistenceStatus } from '@hopdeck/core';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.ts';
 import { Callout } from '../components/Callout.tsx';
@@ -16,7 +16,7 @@ const STATES: Record<PersistedTable['state'], MessageKey> = {
 };
 
 /**
- * What survives a reboot: the managed tables saved in /etc/nftm, whether the
+ * What survives a reboot: the managed tables saved in /etc/hopdeck, whether the
  * boot configuration loads them, and whether anything loads it at all.
  * `version` changes whenever the ruleset was read again.
  */

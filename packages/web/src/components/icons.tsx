@@ -1,4 +1,4 @@
-import type { HostKind } from '@nftm/core';
+import type { HostKind } from '@hopdeck/core';
 import type { SVGProps } from 'react';
 
 type IconProps = SVGProps<SVGSVGElement>;
@@ -22,7 +22,7 @@ function Svg({ children, ...props }: IconProps) {
   );
 }
 
-/** A shield with filter lines: the nftm mark. */
+/** A shield with filter lines: the hopdeck mark. */
 export const LogoIcon = (props: IconProps) => (
   <Svg {...props}>
     <path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z" />

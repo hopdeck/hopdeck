@@ -1,4 +1,4 @@
-import { tableKey, type Family, type HostFacts, type HostKind, type HostStatus, type HostSummary, type Privilege, type TableChange } from '@nftm/core';
+import { tableKey, type Family, type HostFacts, type HostKind, type HostStatus, type HostSummary, type Privilege, type TableChange } from '@hopdeck/core';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import { ErrorBody, ErrorCallout, errorTitle, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
@@ -44,7 +44,7 @@ interface Editing {
   problem?: EditorProblem;
 }
 
-/** Lines nft names in its messages start with two of nftm's own; a restored managed marker adds one more. */
+/** Lines nft names in its messages start with two of hopdeck's own; a restored managed marker adds one more. */
 function rejection(result: DeploymentResult, sent: string): EditorProblem | undefined {
   const lines = (text: string) => text.trimEnd().split('\n').length;
   const after = result.view?.tables[0]?.after;
@@ -89,7 +89,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   const [liveSeconds, setLiveSeconds] = useState(5);
   // Counters and changes are read while the rules (or the editor) are in view.
   const live = useLive(host.id, liveSeconds, readable && tab === 'rules' && ruleset.model !== undefined);
-  // While nftm applies a change itself, the host differing is expected.
+  // While hopdeck applies a change itself, the host differing is expected.
   const changed =
     live.info === undefined || ruleset.model === undefined || changes !== undefined || ruleset.loading
       ? []
@@ -352,7 +352,7 @@ function NoAccess({ privilege, facts, kind }: { privilege: Extract<Privilege, { 
     const group = sudoGroup(facts.os?.id);
     title = t('access.notAllowedTitle', { user });
     hints = [group ? t('access.notAllowedHintGroup', { user, group }) : t('access.notAllowedHint', { user })];
-    // sudo checks the groups of the process that runs it, i.e. of nftm itself.
+    // sudo checks the groups of the process that runs it, i.e. of hopdeck itself.
     if (kind === 'local') hints.push(t('access.restartNote'));
   } else if (privilege.reason === 'sudo-missing') {
     title = t('access.sudoMissingTitle');

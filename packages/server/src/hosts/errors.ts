@@ -1,4 +1,4 @@
-import type { HostErrorCode } from '@nftm/core';
+import type { HostErrorCode } from '@hopdeck/core';
 
 export type { HostErrorCode };
 

@@ -13,7 +13,7 @@ import {
   type NftSet,
   type TableNode,
   type TableOwner,
-} from '@nftm/core';
+} from '@hopdeck/core';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import { ElementsDialog } from '../edit/ElementsDialog.tsx';
@@ -48,14 +48,14 @@ export interface LiveControls {
   /** Seconds between looks; 0 is off. */
   seconds: number;
   onSeconds(seconds: number): void;
-  /** Tables that differ on the host from what the view shows, as "family name"; empty while nftm itself changes them. */
+  /** Tables that differ on the host from what the view shows, as "family name"; empty while hopdeck itself changes them. */
   changed: readonly string[];
 }
 
 const LIVE_INTERVALS = [0, 2, 5, 15];
 
 export type RulesMode = 'table' | 'text';
-const MODE_KEY = 'nftm.rulesView';
+const MODE_KEY = 'hopdeck.rulesView';
 
 /** The viewer's last choice; storage can be missing or refuse, so it falls back to the table. */
 function storedMode(): RulesMode {
@@ -217,7 +217,7 @@ function TableCard({ node, owner, model, actions, live, mode }: TableCardProps) 
   const frozen = owner.kind === 'iptables-nft' && owner.evidence === 'xt';
   const canAdopt = actions !== undefined && !managed && owner.kind === 'unknown';
   const canDelete = actions !== undefined && !frozen && (managed || actions.manualOverride);
-  // Editing follows the same rules as deleting: what nftm manages, or anything under Manual override.
+  // Editing follows the same rules as deleting: what hopdeck manages, or anything under Manual override.
   const canEdit = canDelete;
   const [elements, setElements] = useState<{ kind: 'set' | 'map'; name: string }>();
   const elementsBlock = elements && model.listing.blocks.get(blockKey(family, name, elements.kind, elements.name));
@@ -236,7 +236,7 @@ function TableCard({ node, owner, model, actions, live, mode }: TableCardProps) 
         <span className={`${styles.tableName} mono`}>{name}</span>
         {managed && (
           <span className={`${styles.badge} ${styles.badgeManaged}`} title={t('table.managedTitle')}>
-            nftm
+            hopdeck
           </span>
         )}
         <OwnerBadge owner={owner} />
@@ -324,7 +324,7 @@ function TableCard({ node, owner, model, actions, live, mode }: TableCardProps) 
   );
 }
 
-/** Why nftm thinks another tool owns the table: the evidence, never just a verdict. */
+/** Why hopdeck thinks another tool owns the table: the evidence, never just a verdict. */
 function OwnerNote({ owner }: { owner: Exclude<TableOwner, { kind: 'unknown' }> }) {
   const { t } = useI18n();
   if (owner.kind === 'tool') {

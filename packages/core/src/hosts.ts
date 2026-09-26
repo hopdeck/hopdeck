@@ -73,11 +73,11 @@ export interface HostKey {
   fingerprint: string;
 }
 
-/** What nftm found out about an SSH host's key, for the user to confirm. */
+/** What hopdeck found out about an SSH host's key, for the user to confirm. */
 export interface HostKeyCheck {
   /** How known_hosts names the host, e.g. "fw1" or "[10.0.0.1]:2222". */
   name: string;
-  /** Where nftm would write the key: the first known_hosts file ssh uses for this host. */
+  /** Where hopdeck would write the key: the first known_hosts file ssh uses for this host. */
   knownHostsFile: string;
   /** The key the server presents now. */
   presented: HostKey;
@@ -91,7 +91,7 @@ export interface RulesetSnapshot {
   json: unknown;
   /** Output of `nft -a list ruleset`: the text form with handles. */
   listing: string;
-  /** When nftm read it, ISO 8601. */
+  /** When hopdeck read it, ISO 8601. */
   readAt: string;
 }
 
@@ -173,12 +173,12 @@ export interface DeploymentView {
   persisted?: PersistResult;
 }
 
-/** Saving kept changes into /etc/nftm; see docs/ARCHITECTURE.md, "Persisting". */
+/** Saving kept changes into /etc/hopdeck; see docs/ARCHITECTURE.md, "Persisting". */
 export interface PersistResult {
   /** Files written or removed. */
   written: string[];
   removed: string[];
-  /** Tables changed through Manual override that nftm does not manage, hence not saved. */
+  /** Tables changed through Manual override that hopdeck does not manage, hence not saved. */
   notManaged: string[];
   /** Why nothing (or not everything) could be saved. */
   problem?: { code: HostErrorCode; detail: string };
@@ -190,11 +190,11 @@ export interface PersistedTable {
   file: string;
   /** saved: the file matches the live table; differs or missing: a reboot would load something else; orphaned: a file without a managed live table. */
   state: 'saved' | 'differs' | 'missing' | 'orphaned';
-  /** The main configuration defines the table too; nftm's file replaces that definition at boot. */
+  /** The main configuration defines the table too; hopdeck's file replaces that definition at boot. */
   alsoInMainConfig: boolean;
 }
 
-/** Whether what nftm manages on a host survives a reboot. */
+/** Whether what hopdeck manages on a host survives a reboot. */
 export interface PersistenceStatus {
   /** The file loaded at boot, e.g. /etc/nftables.conf. */
   mainConfig: string | undefined;
@@ -202,16 +202,16 @@ export interface PersistenceStatus {
   source: 'service' | 'guess' | 'none';
   /** Whether the nftables service starts at boot; undefined without systemd or without the service. */
   serviceEnabled: boolean | undefined;
-  /** The main configuration includes /etc/nftm/*.nft. */
+  /** The main configuration includes /etc/hopdeck/*.nft. */
   includePresent: boolean;
-  /** The exact line nftm adds, to show before asking. */
+  /** The exact line hopdeck adds, to show before asking. */
   includeLine: string;
   tables: PersistedTable[];
-  /** Why nftm cannot save anything on this host. */
+  /** Why hopdeck cannot save anything on this host. */
   problem?: { code: HostErrorCode; detail: string };
 }
 
-/** A packet trace on a host: nftm marks packets matching the filter and records what nft reports about them. */
+/** A packet trace on a host: hopdeck marks packets matching the filter and records what nft reports about them. */
 export interface TraceView {
   id: string;
   hostId: string;

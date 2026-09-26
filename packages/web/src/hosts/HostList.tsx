@@ -1,4 +1,4 @@
-import type { HostSummary } from '@nftm/core';
+import type { HostSummary } from '@hopdeck/core';
 import { HostKindIcon, PlusIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import styles from './HostList.module.css';

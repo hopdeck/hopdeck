@@ -1,19 +1,21 @@
-# nftm architecture
+# hopdeck architecture
 
 Status: draft, agreed on 2026-09-24. Update it when a decision changes.
 
-nftm is a GUI for nftables that can do everything nftables can do, only
-easier. It manages the local machine and remote hosts over SSH.
+hopdeck is a local panel for running networks. It manages the local machine
+and remote hosts over SSH. Its first module, and so far the only one, is a GUI
+for nftables that can do everything nftables can do, only easier; more network
+tools, such as a topology view, come later.
 
 ## Principles
 
 1. **Lossless.** The data model is the libnftables JSON format
-   (libnftables-json(5)). Constructs nftm understands get structured editors;
+   (libnftables-json(5)). Constructs hopdeck understands get structured editors;
    everything else is shown as nft text or raw JSON and passed through
    untouched. A plain text editor is always available as the escape hatch.
-2. **The host's own `nft` parses and validates.** nftm contains no nft grammar.
+2. **The host's own `nft` parses and validates.** hopdeck contains no nft grammar.
    Each host decides what is valid for its nft and kernel version.
-3. **Never break what nftm does not own.** No `flush ruleset`. Tables of other
+3. **Never break what hopdeck does not own.** No `flush ruleset`. Tables of other
    tools (Docker, firewalld, libvirt, fail2ban, iptables-nft, ...) are
    read-only.
 4. **Every change is reversible.** Validate, show a diff, apply atomically,
@@ -27,6 +29,7 @@ easier. It manages the local machine and remote hosts over SSH.
 
 | Topic | Choice | Why |
 |---|---|---|
+| Name | hopdeck (decided 2026-09-27; formerly nftm) | The tool grows beyond the firewall, so the name is about networks, not nftables. Free on npm and GitHub, and no network tool of that name exists. Tables adopted as nftm keep their old marker until their next change, see [Ownership and coexistence](#ownership-and-coexistence). |
 | Form factor | Local web panel in the browser | Rich UI ecosystem: graph layout, code editors, diff views. A desktop wrapper can come later. |
 | Language | TypeScript everywhere | One model shared by the server, the UI and the CLI |
 | Runtime | Node.js 24 LTS | Runs `.ts` directly (type stripping), so the server and the CLI need no build step |
@@ -46,7 +49,7 @@ easier. It manages the local machine and remote hosts over SSH.
 ```
  browser ── packages/web (React)
     │  HTTP (+ WebSocket later), 127.0.0.1 only, token
- nftm backend ── packages/server, started by packages/cli
+ hopdeck backend ── packages/server, started by packages/cli
     │  Executor: local, system ssh, or sandbox namespace
  managed host ── nft, sh, systemd-run
 ```
@@ -56,7 +59,7 @@ easier. It manages the local machine and remote hosts over SSH.
 | `packages/core` | No I/O; runs in Node and in the browser. libnftables JSON types, ruleset parsing and grouping; later normalization, diff, ownership rules, transaction building. Defines the `Executor` and `RulesetSource` interfaces. |
 | `packages/server` | HTTP API, access control, executors, host inventory, snapshots, the apply pipeline, audit log |
 | `packages/web` | The UI |
-| `packages/cli` | The `nftm` command. Starts the panel; later also `diff`, `apply` and `rollback` for scripting. |
+| `packages/cli` | The `hopdeck` command. Starts the panel; later also `diff`, `apply` and `rollback` for scripting. |
 
 The two seams that keep options open are in
 [`packages/core/src/host.ts`](../packages/core/src/host.ts):
@@ -78,7 +81,7 @@ There are three kinds of hosts, one `Executor` implementation each:
 
 **SSH command line.** The SSH executor runs `ssh -o BatchMode=yes
 -o ControlMaster=auto -o ControlPath=... -o ControlPersist=... -- DEST
-<quoted argv>`. Each nftm host gets its own ControlPath, a hash of the exact
+<quoted argv>`. Each hopdeck host gets its own ControlPath, a hash of the exact
 destination and ssh config file. ssh's own `%C` hashes the resolved user,
 address and port instead, so two aliases of one server would share a
 connection and the second would skip its host key check (found on the test
@@ -94,7 +97,7 @@ after the user confirms. Keys are never accepted automatically.
 
 **Host keys** (`hosts/host-keys.ts`). `ssh -G` gives the host's effective
 settings (known_hosts files, host name form, hashing). To read the key the
-server presents, nftm runs ssh with every authentication method off and a
+server presents, hopdeck runs ssh with every authentication method off and a
 throwaway known_hosts in `accept-new` mode: the key is recorded during key
 exchange and nothing is sent to the unverified server. Unlike `ssh-keyscan`,
 this honours ProxyJump. On confirmation the server is asked again, and the key
@@ -102,12 +105,12 @@ is written only if its fingerprint is still the one the user saw. A changed
 key is replaced only on explicit request, through `ssh-keygen -R` (which keeps
 `FILE.old`); keys in system-wide files are left to root.
 
-**Privileges.** nft needs root. On connect nftm checks, in order:
+**Privileges.** nft needs root. On connect hopdeck checks, in order:
 
 1. `id -u` is 0 (root login, or the sandbox): run nft directly.
 2. `sudo -n <nft> --version` succeeds: prefix commands with `sudo -n --`.
 3. sudo wants a password: the panel asks for it once per host and session.
-   nftm keeps it in backend memory only, never on disk, and sends it with
+   hopdeck keeps it in backend memory only, never on disk, and sends it with
    `sudo -S -p ''` as the first line of standard input. Consequence: under
    `sudo -S` a ruleset is never piped to `nft -f -`. It is uploaded to a file
    first, because a password line mixed into the ruleset could end up in
@@ -121,7 +124,7 @@ It reduces mistakes, nothing more.
 **nft location.** `/usr/sbin` is often missing from a normal user's PATH, so
 the absolute path of `nft` is detected once per host and used everywhere.
 
-**Host facts.** On connect, nftm also collects: nft and kernel versions,
+**Host facts.** On connect, hopdeck also collects: nft and kernel versions,
 systemd presence, distribution and its persistence file, and which tables
 belong to other tools.
 
@@ -130,14 +133,14 @@ belong to other tools.
 `unshare -rn` creates a user and network namespace without root, on
 distributions that allow unprivileged user namespaces (Debian 11+ does). A
 keep-alive process holds the namespace open, and each command enters it with
-`nsenter --preserve-credentials`. Inside, nftm is root with its own empty
+`nsenter --preserve-credentials`. Inside, hopdeck is root with its own empty
 nftables ruleset. The real firewall is never touched.
 
 - **Development and tests:** every feature can be exercised against a real
   `nft` without root and without the risk of a lockout.
 - **Later, for users:** a place to try a ruleset before applying it anywhere.
 
-The keep-alive process reads its standard input from nftm. When nftm exits,
+The keep-alive process reads its standard input from hopdeck. When hopdeck exits,
 even by crashing, the input closes, the process ends and the namespace
 disappears with it.
 
@@ -161,10 +164,10 @@ disappears with it.
 
 ## Ownership and coexistence
 
-- nftm edits only tables it manages: ones it created, or ones the user
+- hopdeck edits only tables it manages: ones it created, or ones the user
   **adopted** with an explicit action. Everything else stays visible
   (including in the packet path view) but read-only.
-- **Marker:** a managed table carries `comment "managed by nftm"`, visible in
+- **Marker:** a managed table carries `comment "managed by hopdeck"`, visible in
   a plain `nft list ruleset` and independent of which admin machine connects.
   nft cannot add a comment to an existing table: `nft add table ... {
   comment ... }` exits 0 and silently changes nothing (nft 1.1.3). Adopting
@@ -172,7 +175,9 @@ disappears with it.
   table X`, then the table as listed plus the comment), which keeps counter
   values and dynamic set elements with their expiry. It goes through the same
   pipeline as any change: diff, validation, automatic rollback. Tables of
-  other tools cannot be adopted.
+  other tools cannot be adopted. `managed by nftm`, the marker from before
+  the rename, still counts; for the same reason it stays until the table's
+  next change, which writes the current one.
 - **Manual override** (PL: Ręczne sterowanie). A per-host switch that lifts
   the ownership rule: any table can be edited without adopting, including
   other tools' tables (each with a warning that the tool may overwrite the
@@ -215,43 +220,43 @@ A change is a list of table operations: adopt, replace (or create), delete.
    single, indented block for the named table, without `include`. The change
    and the way back are written as `table X {}; delete table X; ...` scripts
    into a private directory on the host (`mktemp -d`, mode 0700), and **both**
-   are checked with `nft -c`: nftm applies nothing it could not undo. The UI
+   are checked with `nft -c`: hopdeck applies nothing it could not undo. The UI
    shows the diff, nft's verdict and how the change is protected.
 2. **Apply.** First, the tables are compared with the plan, ignoring counter
    values, quota usage and expiry countdowns; if someone changed them
-   meanwhile, nftm stops. Then the **watchdog** is armed: a small POSIX script
+   meanwhile, hopdeck stops. Then the **watchdog** is armed: a small POSIX script
    that, unless a `confirmed` file appears within the deadline (60 s by
    default), restores the tables from the rollback script. It runs as a
    transient systemd unit when root may start one, otherwise as a process
    detached with `setsid` (hosts without systemd, the sandbox), or as the
    login user calling `sudo -n nft` when sudo allows only nft. If none is
-   possible, nftm refuses to apply. The change is applied with `nft -f` in one
+   possible, hopdeck refuses to apply. The change is applied with `nft -f` in one
    transaction.
 3. **Check.** For SSH hosts, a new connection that shares nothing with the
    existing one runs `true`. An existing connection usually survives a rule
    that blocks every new one (thanks to `ct state established`), so it would
-   report a false "works". If the new connection fails, nftm undoes the change
-   at once through the existing connection. Afterwards nftm checks whether the
+   report a false "works". If the new connection fails, hopdeck undoes the change
+   at once through the existing connection. Afterwards hopdeck checks whether the
    watchdog already fired (a check can outlast a short deadline) and reports
    what really happened.
 4. **Confirm or roll back.** Keeping the change creates `confirmed`; the
    watchdog then removes the directory. "Roll back now" restores the tables
-   through nft. Without a decision the host rolls back by itself, and nftm
+   through nft. Without a decision the host rolls back by itself, and hopdeck
    reads the watchdog's record to report it. Directories older than a day are
    cleaned up by the next deployment.
 5. **Persist** ([`persist.ts`](../packages/server/src/hosts/persist.ts)). A
    kept change is saved for boot at once: each managed table goes to
-   `/etc/nftm/<family>-<name>.nft` (counters at zero, expiring elements with
+   `/etc/hopdeck/<family>-<name>.nft` (counters at zero, expiring elements with
    their full timeout), written as root through a staged file and a rename;
    a deleted table's file is removed. Tables changed with Manual override that
-   nftm does not manage are not saved: their owner decides what loads at boot.
+   hopdeck does not manage are not saved: their owner decides what loads at boot.
    The file loaded at boot is read from the nftables service's command line
    (`systemctl show -p ExecStart`), else found at its usual path. With the
-   user's consent, nftm adds `include "/etc/nftm/*.nft"` at its end, keeping a
+   user's consent, hopdeck adds `include "/etc/hopdeck/*.nft"` at its end, keeping a
    dated copy, and checks the whole file with `nft -c`, putting the copy back
-   if nft rejects it. Because the include comes last, nftm's copy of a table
+   if nft rejects it. Because the include comes last, hopdeck's copy of a table
    replaces a definition earlier in the file; the UI says when a table is
-   defined there too, since deleting it in nftm does not remove it from there.
+   defined there too, since deleting it in hopdeck does not remove it from there.
    Saving needs root: with sudo for nft only, the UI explains why it cannot.
    Tested with a real restart of the Debian test host.
 
@@ -278,7 +283,7 @@ Implemented in [`packages/server/src/security.ts`](../packages/server/src/securi
 - **Host output:** rendered as text, never as HTML and never evaluated.
 - **Browser console:** the panel warns there, in the UI language, not to
   paste anything: pasted code runs with the panel's token (self-XSS scams).
-- **Weak tokens:** a `NFTM_TOKEN` shorter than 32 characters draws a warning.
+- **Weak tokens:** a `HOPDECK_TOKEN` shorter than 32 characters draws a warning.
 
 ## Files on managed hosts
 
@@ -292,10 +297,10 @@ root ([`staging.ts`](../packages/server/src/hosts/staging.ts)).
   the user and calls `sudo nft`.
 - **sudo with a password:** the password is what keeps the login user from
   root, so any process of theirs must not be able to swap `watchdog.sh` or
-  `change.nft` between nftm writing and root using them. The directory
+  `change.nft` between hopdeck writing and root using them. The directory
   belongs to root (mode 700), and every file gets in through a copy root
-  makes and checks against the SHA-256 nftm computed; a swapped file fails
-  the check and nothing is used. Boot files in `/etc/nftm` are written the
+  makes and checks against the SHA-256 hopdeck computed; a swapped file fails
+  the check and nothing is used. Boot files in `/etc/hopdeck` are written the
   same way.
 - Commands take their arguments as argv, never through a local shell; over
   SSH each argument is quoted. Values that go into nft input (table
@@ -342,7 +347,7 @@ The npm supply chain is a real risk for a tool with this access.
   - Text edits cannot be turned back into the grid, so after editing text by
     hand the visual mode stays off until the change is applied or discarded.
   - A new table starts in the same editor and reaches the host through the
-    same review; it is created with the nftm marker, so nftm manages it from
+    same review; it is created with the hopdeck marker, so hopdeck manages it from
     the start.
 - **Diff view** before every apply.
 - **Set and map editor** that adds and removes elements live, without
@@ -350,7 +355,7 @@ The npm supply chain is a real risk for a tool with this access.
 - **Packet tracing** (done): the Trace tab marks packets that match a
   filter (protocol, addresses, ports, input interface) and shows each one's
   way through the chains and rules and what decided, with links to the rules.
-  - A temporary table `inet nftm_trace_<random>` does the marking: chains at
+  - A temporary table `inet hopdeck_trace_<random>` does the marking: chains at
     prerouting and output with priority -350 (before all others), policy
     accept, one rule `<filter> limit rate N/second meta nftrace set 1`. It
     never changes what happens to a packet. Filter fields take values only,
@@ -368,11 +373,11 @@ The npm supply chain is a real risk for a tool with this access.
   tab is hidden. One `nft -j list ruleset` per look, reduced on the server to
   counter values and one fingerprint per table: a hash of the table's JSON
   without counter values, quota use, expiry and set elements, which change on
-  their own; nftm's tracing tables are left out. Rules show their live counts
+  their own; hopdeck's tracing tables are left out. Rules show their live counts
   and packets and bytes per second, and rules with traffic are highlighted.
   A table whose fingerprint differs from the one read raises "the rules on
   the host changed", naming the tables, with a refresh; the editor warns that
-  saving would undo that change. nftm's own deployments in flight do not
+  saving would undo that change. hopdeck's own deployments in flight do not
   count. Comparing fingerprints needs no long-running `nft monitor` process
   as root on the host.
 
@@ -383,7 +388,7 @@ The npm supply chain is a real risk for a tool with this access.
    Tested against a real Debian 13 host over SSH (`dev/test-host`), including
    confirming unknown and changed host keys in the panel.
 2. **Text-mode editing** of managed tables, with diff, safe apply with
-   rollback, and persistence (done, 2026-09-25). From here nftm can do
+   rollback, and persistence (done, 2026-09-25). From here hopdeck can do
    everything nftables can: safe apply with the watchdog, adopting and
    deleting tables, Manual override, persistence across reboots, the text
    editor.
@@ -424,14 +429,14 @@ different ways of reading and changing a host.
   (`/etc/config/firewall`) is OpenWrt's source of truth: firewall4 generates
   `inet fw4` from it (recognised already as another tool's table), and LuCI
   reads and writes only UCI. Direct nft changes would be invisible to LuCI
-  and lost on the next firewall reload. nftm will edit UCI with `uci` or
+  and lost on the next firewall reload. hopdeck will edit UCI with `uci` or
   ubus, so everything it does shows up in LuCI and the other way round.
 - **Full nftables power there** comes from fw4's nftables includes (UCI
   `config include` entries of type `nftables`, and `/etc/nftables.d/*.nft`),
   which LuCI also shows.
 - **Safe apply there** should use OpenWrt's own apply with rollback (rpcd
   `uci apply` with a rollback timeout, then `confirm`), the mechanism LuCI
-  uses, rather than nftm's systemd timer.
+  uses, rather than hopdeck's systemd timer.
 - **No server assumptions on hosts:** OpenWrt has procd instead of systemd,
   root login instead of sudo, dropbear instead of an OpenSSH server, and
   BusyBox instead of GNU tools.

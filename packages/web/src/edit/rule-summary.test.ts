@@ -1,4 +1,4 @@
-import { emptyRule } from '@nftm/core';
+import { emptyRule } from '@hopdeck/core';
 import { describe, expect, it } from 'vitest';
 import { ruleColumns } from './rule-summary.ts';
 

@@ -14,7 +14,7 @@ export type KnownTool =
   | 'libvirt'
   | 'lxd'
   | 'nixos'
-  | 'nftm-trace'
+  | 'hopdeck-trace'
   | 'openwrt'
   | 'podman'
   | 'tailscale'
@@ -22,7 +22,7 @@ export type KnownTool =
 
 /**
  * Who a table probably belongs to, with the evidence, so the UI can say how
- * sure it is. nftm edits none of these.
+ * sure it is. hopdeck edits none of these.
  */
 export type TableOwner =
   | {
@@ -77,8 +77,8 @@ export function tableOwner(node: TableNode, listing?: Listing): TableOwner {
   if (family !== 'inet' && family !== 'netdev' && IPTABLES_TABLES.has(name) && chainNames.some((chain) => IPTABLES_CHAINS.has(chain))) {
     return { kind: 'iptables-nft', evidence: 'chains', users };
   }
-  // nftm's own temporary table while it traces packets.
-  if (family === 'inet' && name.startsWith(TRACE_TABLE_PREFIX)) return { kind: 'tool', tool: 'nftm-trace', evidence: 'table-name' };
+  // hopdeck's own temporary table while it traces packets.
+  if (family === 'inet' && name.startsWith(TRACE_TABLE_PREFIX)) return { kind: 'tool', tool: 'hopdeck-trace', evidence: 'table-name' };
   const tool = TABLE_NAMES.get(name);
   if (tool !== undefined) return { kind: 'tool', tool, evidence: 'table-name' };
   return { kind: 'unknown' };

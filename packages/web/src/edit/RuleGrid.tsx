@@ -1,4 +1,4 @@
-import type { RuleForm } from '@nftm/core';
+import type { RuleForm } from '@hopdeck/core';
 import { Fragment, type ReactNode } from 'react';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import type { MessageKey } from '../i18n/locales.ts';

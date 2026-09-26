@@ -9,17 +9,17 @@ import {
   type PersistedTable,
   type PersistenceStatus,
   type PersistResult,
-} from '@nftm/core';
+} from '@hopdeck/core';
 import { comparable, readTable } from './deploy.ts';
 import { copyAsRoot } from './staging.ts';
 import { HostError } from './errors.ts';
 import { runAsRoot, runNft, type NftAccess } from './privilege.ts';
 
-export const NFTM_DIR = '/etc/nftm';
-export const INCLUDE_LINE = `include "${NFTM_DIR}/*.nft"`;
+export const HOPDECK_DIR = '/etc/hopdeck';
+export const INCLUDE_LINE = `include "${HOPDECK_DIR}/*.nft"`;
 
-const HEADER = `# Written by nftm: this table is managed there, and nftm rewrites this file.
-# To change the table by hand for good, remove its "managed by nftm" comment in nftm first.
+const HEADER = `# Written by hopdeck: this table is managed there, and hopdeck rewrites this file.
+# To change the table by hand for good, remove its "managed by hopdeck" comment in hopdeck first.
 `;
 
 /** Where the main configuration lives when the service does not say. */
@@ -32,10 +32,10 @@ export interface PersistTarget {
   facts: HostFacts;
 }
 
-/** File name of a table in /etc/nftm; characters outside [A-Za-z0-9_.-] are %-escaped. */
+/** File name of a table in /etc/hopdeck; characters outside [A-Za-z0-9_.-] are %-escaped. */
 export function tableFile(family: Family, name: string): string {
   const safe = name.replace(/[^A-Za-z0-9_.-]/g, (char) => `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`);
-  return `${NFTM_DIR}/${family}-${safe}.nft`;
+  return `${HOPDECK_DIR}/${family}-${safe}.nft`;
 }
 
 /**
@@ -61,7 +61,7 @@ export async function persistenceStatus(target: PersistTarget): Promise<Persiste
   const { mainConfig, source, serviceEnabled } = await findMainConfig(target);
   const main = mainConfig === undefined ? '' : await readAsRoot(target.access, mainConfig);
   const includePresent = main.split('\n').some((line) => line.trim() === INCLUDE_LINE);
-  const files = await readNftmFiles(target.access);
+  const files = await readBootFiles(target.access);
   const live = await managedTables(target.access);
 
   const tables: PersistedTable[] = [];
@@ -82,8 +82,8 @@ export async function persistenceStatus(target: PersistTarget): Promise<Persiste
 }
 
 /**
- * Brings /etc/nftm in line with the live tables after a kept change: writes
- * managed tables, removes deleted ones. Tables nftm does not manage (changed
+ * Brings /etc/hopdeck in line with the live tables after a kept change: writes
+ * managed tables, removes deleted ones. Tables hopdeck does not manage (changed
  * with Manual override) are not saved; their owner decides what loads at boot.
  */
 export async function persistTables(target: PersistTarget, tables: readonly { family: Family; name: string }[]): Promise<PersistResult> {
@@ -137,10 +137,10 @@ export async function addInclude(target: PersistTarget): Promise<void> {
   const script = [
     'set -e',
     'main="$1"',
-    'backup="$main.nftm-backup-$(date +%Y%m%d%H%M%S)"',
+    'backup="$main.hopdeck-backup-$(date +%Y%m%d%H%M%S)"',
     'cp -p "$main" "$backup"',
-    `printf '\\n# Added by nftm: the tables it manages are in ${NFTM_DIR}.\\n%s\\n' '${INCLUDE_LINE}' >> "$main"`,
-    `mkdir -p ${NFTM_DIR} && chmod 700 ${NFTM_DIR}`,
+    `printf '\\n# Added by hopdeck: the tables it manages are in ${HOPDECK_DIR}.\\n%s\\n' '${INCLUDE_LINE}' >> "$main"`,
+    `mkdir -p ${HOPDECK_DIR} && chmod 700 ${HOPDECK_DIR}`,
     'echo "$backup"',
   ].join('\n');
   const added = await runAsRoot(target.access, ['sh', '-c', script, 'sh', status.mainConfig]);
@@ -161,7 +161,7 @@ export async function enableService(target: PersistTarget): Promise<void> {
 
 async function unavailableReason(target: PersistTarget): Promise<{ code: 'persistence-unavailable'; detail: string } | undefined> {
   if (target.kind === 'sandbox') {
-    return { code: 'persistence-unavailable', detail: 'the sandbox is gone when nftm stops, so there is nothing to boot from' };
+    return { code: 'persistence-unavailable', detail: 'the sandbox is gone when hopdeck stops, so there is nothing to boot from' };
   }
   try {
     const probe = await runAsRoot(target.access, ['true']);
@@ -171,7 +171,7 @@ async function unavailableReason(target: PersistTarget): Promise<{ code: 'persis
     return undefined;
   } catch (error) {
     if (error instanceof HostError && error.code === 'sudo-not-allowed') {
-      return { code: 'persistence-unavailable', detail: `sudo allows only nft here, and saving files in ${NFTM_DIR} needs root. ${error.detail}` };
+      return { code: 'persistence-unavailable', detail: `sudo allows only nft here, and saving files in ${HOPDECK_DIR} needs root. ${error.detail}` };
     }
     throw error;
   }
@@ -192,7 +192,7 @@ async function findMainConfig(target: PersistTarget): Promise<Pick<PersistenceSt
   return found.exitCode === 0 && path !== '' ? { mainConfig: path, source: 'guess', serviceEnabled: undefined } : { mainConfig: undefined, source: 'none', serviceEnabled: undefined };
 }
 
-/** Live tables that carry the nftm marker, with their listing. */
+/** Live tables that carry the hopdeck marker, with their listing. */
 async function managedTables(access: NftAccess): Promise<{ family: Family; name: string; text: string }[]> {
   const listed = await runNft(access, ['-j', 'list', 'tables']);
   if (listed.exitCode !== 0) throw new HostError('command-failed', listed.stderr.trim());
@@ -216,9 +216,9 @@ async function readAsRoot(access: NftAccess, path: string): Promise<string> {
   return read.stdout;
 }
 
-/** Every /etc/nftm/*.nft file with its content. */
-async function readNftmFiles(access: NftAccess): Promise<Map<string, string>> {
-  const script = `for f in ${NFTM_DIR}/*.nft; do [ -f "$f" ] || continue; printf '%s\\0' "$f"; cat "$f"; printf '\\0'; done`;
+/** Every /etc/hopdeck/*.nft file with its content. */
+async function readBootFiles(access: NftAccess): Promise<Map<string, string>> {
+  const script = `for f in ${HOPDECK_DIR}/*.nft; do [ -f "$f" ] || continue; printf '%s\\0' "$f"; cat "$f"; printf '\\0'; done`;
   const read = await runAsRoot(access, ['sh', '-c', script]);
   if (read.exitCode !== 0) throw new HostError('command-failed', read.stderr.trim());
   const parts = read.stdout.split('\0');

@@ -1,7 +1,7 @@
-import type { ExecOptions, ExecResult, Executor } from '@nftm/core';
+import type { ExecOptions, ExecResult, Executor } from '@hopdeck/core';
 import { DEFAULT_TIMEOUT_MS, runProcess } from './process.ts';
 
-/** Runs commands on the machine nftm itself runs on. */
+/** Runs commands on the machine hopdeck itself runs on. */
 export class LocalExecutor implements Executor {
   readonly host = 'localhost';
   readonly #timeoutMs: number;

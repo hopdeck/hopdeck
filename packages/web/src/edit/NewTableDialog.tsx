@@ -1,4 +1,4 @@
-import type { Family } from '@nftm/core';
+import type { Family } from '@hopdeck/core';
 import { useEffect, useRef, useState } from 'react';
 import { Segmented } from '../components/Segmented.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
@@ -11,7 +11,7 @@ interface NewTableDialogProps {
   open: boolean;
   /** Tables the host has; a new one needs another family or name. */
   existing: readonly { family: Family; name: string }[];
-  /** Whether nftm reaches the host over SSH, so the template should keep SSH open. */
+  /** Whether hopdeck reaches the host over SSH, so the template should keep SSH open. */
   remote: boolean;
   onCreate(family: Family, name: string, spec: NewTableSpec): void;
   onClose(): void;
@@ -35,7 +35,7 @@ export function NewTableDialog({ open, existing, remote, onCreate, onClose }: Ne
     if (element === null) return;
     if (open && !element.open) {
       setFamily('inet');
-      setName(taken('filter', 'inet') ? 'nftm' : 'filter');
+      setName(taken('filter', 'inet') ? 'hopdeck' : 'filter');
       setTemplate('host');
       setSsh(remote);
       element.showModal();

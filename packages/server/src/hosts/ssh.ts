@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { chmod, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { ExecOptions, ExecResult, Executor } from '@nftm/core';
+import type { ExecOptions, ExecResult, Executor } from '@hopdeck/core';
 import { HostError, type HostErrorCode } from './errors.ts';
 import { DEFAULT_TIMEOUT_MS, runProcess } from './process.ts';
 import { shellCommand } from './shell-quote.ts';
@@ -74,10 +74,10 @@ export class SshExecutor implements Executor {
 }
 
 /**
- * One shared connection per nftm host. ssh's own %C hashes the resolved user,
+ * One shared connection per hopdeck host. ssh's own %C hashes the resolved user,
  * address and port, so two aliases for the same server (say, with different
  * known_hosts) would share a connection, and the second would skip its host
- * key check. Hashing exactly what nftm asks ssh for avoids that; the hash also
+ * key check. Hashing exactly what hopdeck asks ssh for avoids that; the hash also
  * keeps the socket path short.
  */
 function controlName(destination: string, configFile: string | undefined): string {
@@ -110,7 +110,7 @@ export function sshFailure(stderr: string): HostErrorCode | undefined {
  */
 export async function ensureControlDir(): Promise<string> {
   const base = process.env['XDG_RUNTIME_DIR'] || join(homedir(), '.cache');
-  const dir = join(base, 'nftm', 'ssh');
+  const dir = join(base, 'hopdeck', 'ssh');
   await mkdir(dir, { recursive: true, mode: 0o700 });
   await chmod(dir, 0o700);
   return dir;

@@ -3,7 +3,7 @@
  * and accepted by `nft -j -f`. See libnftables-json(5).
  *
  * Only the object envelopes are typed. Rule expressions, set elements and
- * similar payloads stay as opaque JSON, so constructs nftm does not understand
+ * similar payloads stay as opaque JSON, so constructs hopdeck does not understand
  * yet pass through untouched.
  */
 

@@ -1,4 +1,4 @@
-import type { Privilege } from '@nftm/core';
+import type { Privilege } from '@hopdeck/core';
 import { describe, expect, it } from 'vitest';
 import { DEBIAN_FACTS, FakeExecutor, failed, ok } from '../testing/fake-executor.ts';
 import { HostError } from './errors.ts';

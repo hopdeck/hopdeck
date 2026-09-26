@@ -1,17 +1,17 @@
 {
-  "name": "@nftm/cli",
+  "name": "@hopdeck/cli",
   "version": "0.1.0-dev",
   "private": true,
   "type": "module",
   "license": "GPL-3.0-or-later",
   "bin": {
-    "nftm": "./src/main.ts"
+    "hopdeck": "./src/main.ts"
   },
   "scripts": {
     "dev": "node --watch src/main.ts --dev --sandbox",
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@nftm/server": "workspace:*"
+    "@hopdeck/server": "workspace:*"
   }
 }

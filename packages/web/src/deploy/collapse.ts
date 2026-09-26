@@ -1,4 +1,4 @@
-import type { DiffLine } from '@nftm/core';
+import type { DiffLine } from '@hopdeck/core';
 
 export type DiffBlock = { kind: 'line'; line: DiffLine } | { kind: 'gap'; count: number };
 

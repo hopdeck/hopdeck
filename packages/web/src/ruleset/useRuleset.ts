@@ -1,4 +1,4 @@
-import type { RulesetSnapshot } from '@nftm/core';
+import type { RulesetSnapshot } from '@hopdeck/core';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.ts';
 import { toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';

@@ -3,12 +3,12 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { demoRuleset, ensureControlDir, generateToken, HostManager, Sandbox, startServer } from '@nftm/server';
+import { demoRuleset, ensureControlDir, generateToken, HostManager, Sandbox, startServer } from '@hopdeck/server';
 import pkg from '../package.json' with { type: 'json' };
 
-const HELP = `Usage: nftm [options]
+const HELP = `Usage: hopdeck [options]
 
-Starts the nftm panel on 127.0.0.1 and prints its URL.
+Starts the hopdeck panel on 127.0.0.1 and prints its URL.
 
 Options:
   -p, --port <port>  port to listen on (default: 7400)
@@ -18,8 +18,8 @@ Options:
   -h, --help         show this help
 
 Environment:
-  NFTM_CONFIG_DIR    where hosts.json is kept (default: ~/.config/nftm)
-  NFTM_SSH_CONFIG    an ssh config file to use instead of ~/.ssh/config
+  HOPDECK_CONFIG_DIR    where hosts.json is kept (default: ~/.config/hopdeck)
+  HOPDECK_SSH_CONFIG    an ssh config file to use instead of ~/.ssh/config
 `;
 
 const DEV_UI_ORIGINS = ['http://127.0.0.1:5173', 'http://localhost:5173'];
@@ -44,7 +44,7 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) {
 }
 
 const configDir =
-  process.env['NFTM_CONFIG_DIR'] || join(process.env['XDG_CONFIG_HOME'] || join(homedir(), '.config'), 'nftm');
+  process.env['HOPDECK_CONFIG_DIR'] || join(process.env['XDG_CONFIG_HOME'] || join(homedir(), '.config'), 'hopdeck');
 
 let sandbox: Sandbox | undefined;
 if (values.sandbox) {
@@ -56,7 +56,7 @@ if (values.sandbox) {
   }
 }
 
-const sshConfig = process.env['NFTM_SSH_CONFIG'];
+const sshConfig = process.env['HOPDECK_SSH_CONFIG'];
 
 const hosts = await HostManager.open({
   configDir,
@@ -65,11 +65,11 @@ const hosts = await HostManager.open({
   ...(sandbox && { sandbox: sandbox.executor }),
 });
 
-// `pnpm dev` sets NFTM_TOKEN so the browser session survives --watch restarts.
-const token = process.env['NFTM_TOKEN'] || generateToken();
+// `pnpm dev` sets HOPDECK_TOKEN so the browser session survives --watch restarts.
+const token = process.env['HOPDECK_TOKEN'] || generateToken();
 // The token is all it takes to change firewalls as root; a short one can be guessed.
 if (token.length < 32) {
-  process.stderr.write(`warning: NFTM_TOKEN has ${token.length} characters; anyone who can reach 127.0.0.1 might guess it. Leave it unset for a random one.\n`);
+  process.stderr.write(`warning: HOPDECK_TOKEN has ${token.length} characters; anyone who can reach 127.0.0.1 might guess it. Leave it unset for a random one.\n`);
 }
 
 const server = await startServer({
@@ -90,9 +90,9 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 
 // The token goes in the fragment, which browsers never send to the server.
 const uiOrigin = values.dev ? DEV_UI_ORIGINS[0] : `http://127.0.0.1:${server.port}`;
-process.stdout.write(`nftm ${pkg.version} is running at:\n\n  ${uiOrigin}/#token=${token}\n\n`);
+process.stdout.write(`hopdeck ${pkg.version} is running at:\n\n  ${uiOrigin}/#token=${token}\n\n`);
 
 function fail(message: string): never {
-  process.stderr.write(`nftm: ${message}\n`);
+  process.stderr.write(`hopdeck: ${message}\n`);
   process.exit(2);
 }
