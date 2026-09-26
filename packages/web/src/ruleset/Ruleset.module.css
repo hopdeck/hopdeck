@@ -7,11 +7,12 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
 }
 
+/* The summary takes the free space, so the controls stay together on the right. */
 .summary {
+  flex: 1;
   display: flex;
   flex-wrap: wrap;
   gap: 4px 14px;

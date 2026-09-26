@@ -1,7 +1,6 @@
 .view {
   display: grid;
   gap: 18px;
-  max-width: 1100px;
 }
 
 .header {
