@@ -1,7 +1,7 @@
 .panel {
   display: grid;
-  gap: 12px;
-  padding: 14px 18px;
+  gap: 8px;
+  padding: 8px 12px;
 }
 
 .title {
@@ -42,22 +42,22 @@
 }
 
 .state {
-  padding: 0 8px;
+  padding: 0 4px;
   border: 1px solid;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   font-size: var(--text-xs);
   font-weight: 600;
+  font-family: var(--font-mono);
+  line-height: 16px;
 }
 
 .stateOk {
   border-color: var(--ok-border);
-  background: var(--ok-soft);
   color: var(--ok);
 }
 
 .stateWarn {
   border-color: var(--warn-border);
-  background: var(--warn-soft);
   color: var(--warn);
 }
 

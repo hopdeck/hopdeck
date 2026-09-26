@@ -7,10 +7,9 @@
   justify-content: space-between;
   gap: 16px;
   height: var(--topbar-height);
-  padding: 0 16px 0 20px;
+  padding: 0 12px 0 14px;
   border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  backdrop-filter: saturate(180%) blur(10px);
+  background: var(--surface);
 }
 
 .brand {
@@ -23,11 +22,7 @@
 .logo {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: var(--accent-contrast);
+  color: var(--accent);
 }
 
 .logo svg {
@@ -36,18 +31,15 @@
 }
 
 .name {
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .version {
-  padding: 1px 7px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text-muted);
+  color: var(--text-subtle);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .controls {

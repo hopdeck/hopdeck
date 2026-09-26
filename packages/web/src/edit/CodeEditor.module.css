@@ -1,7 +1,7 @@
 /* The textarea and the coloured copy must share every metric, or they drift apart. */
 .editor {
-  --code-font: 13px/1.6 var(--font-mono);
-  --code-pad: 12px;
+  --code-font: 12.5px/1.55 var(--font-mono);
+  --code-pad: 10px;
 
   display: flex;
   max-height: 70vh;

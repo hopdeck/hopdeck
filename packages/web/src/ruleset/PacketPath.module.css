@@ -1,19 +1,19 @@
 .view {
   display: grid;
-  gap: 16px;
+  gap: 10px;
 }
 
 .controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 16px;
+  gap: 8px 12px;
 }
 
 /* A vertical pipeline: a line runs down the left through every step. */
 .pipeline {
   position: relative;
   display: grid;
-  gap: 14px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -24,8 +24,8 @@
   position: absolute;
   top: 18px;
   bottom: 18px;
-  left: 21px;
-  width: 2px;
+  left: 17px;
+  width: 1px;
   background: var(--border-strong);
 }
 
@@ -34,21 +34,22 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: fit-content;
-  padding: 7px 14px 7px 12px;
+  padding: 4px 10px 4px 8px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: 500;
+  font-family: var(--font-mono);
 }
 
 .endpoint svg,
 .decision svg {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   color: var(--accent);
 }
 
@@ -62,22 +63,23 @@
 }
 
 .hook {
-  padding: 10px 16px;
+  padding: 5px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--surface-muted);
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: 700;
+  font-family: var(--font-mono);
 }
 
 .empty {
-  padding: 12px 16px;
+  padding: 6px 12px;
   color: var(--text-subtle);
   font-size: var(--text-sm);
 }
 
 .chains {
   margin: 0;
-  padding: 6px;
+  padding: 0;
   list-style: none;
 }
 
@@ -85,18 +87,18 @@
   display: grid;
   grid-template-columns: 22px minmax(90px, 150px) minmax(0, 1fr) auto auto 16px;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
-  padding: 9px 10px;
+  padding: 4px 12px;
   border: 0;
-  border-radius: var(--radius);
+  border-radius: 0;
   background: transparent;
   text-align: left;
-  transition: background-color 120ms;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
 }
 
 .chain:hover {
-  background: var(--surface-muted);
+  background: var(--surface-hover);
 }
 
 .order {
@@ -110,7 +112,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
 }
 
 .tieIcon {
@@ -132,7 +135,8 @@
   align-items: center;
   gap: 6px;
   color: var(--text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
 }
 
 .chainName {
@@ -140,7 +144,8 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 10px;
-  font-weight: 600;
+  font-weight: 700;
+  font-family: var(--font-mono);
 }
 
 .note {
@@ -158,6 +163,7 @@
   color: var(--text-subtle);
   font-size: var(--text-xs);
   white-space: nowrap;
+  font-family: var(--font-mono);
 }
 
 .chevron {
@@ -170,9 +176,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 16px 12px;
+  margin: 0;
   color: var(--warn);
   font-size: var(--text-xs);
+  padding: 5px 12px;
 }
 
 .tieNote svg {

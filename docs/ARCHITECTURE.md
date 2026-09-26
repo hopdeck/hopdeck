@@ -37,7 +37,7 @@ easier. It manages the local machine and remote hosts over SSH.
 | Privileges | Root login, or sudo: passwordless, or a password typed in the panel | See [Talking to hosts](#talking-to-hosts) |
 | polkit | Not used (decided 2026-09-25) | Plain `pkexec` asks for the password on every nft call. Doing it properly needs a root-owned helper and a polkit action installed on the machine, and the lighter alternative (one pkexec per session) hands the panel an unrestricted root channel. It would help only the local host in a graphical session; sudo covers every case. |
 | UI languages | English and Polish | One JSON file per language; adding one needs no code changes |
-| Styling | Plain CSS with design tokens, light and dark theme, system fonts | No UI framework to trust or update; the CSP blocks external fonts anyway |
+| Styling | Plain CSS with design tokens, light and dark theme, system fonts; the look of a network tool: dense, hairlines instead of cards, 2 px corners, no shadows, monospace for data, one signal colour (amber) | No UI framework to trust or update; the CSP blocks external fonts anyway. Dense and plain like Wireshark or htop, not a generic dashboard |
 | Managed hosts | Debian 11+ (nft 0.9.8), RHEL 9+ | Admin machine: Linux; macOS likely works; Windows later |
 | License | GPL-3.0-or-later | |
 

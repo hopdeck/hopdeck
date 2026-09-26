@@ -1,7 +1,7 @@
 .panel {
   display: grid;
-  gap: 14px;
-  padding: 18px 20px;
+  gap: 10px;
+  padding: 10px 12px;
 }
 
 .title {
@@ -63,12 +63,12 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid var(--danger-border);
   border-radius: var(--radius);
-  background: var(--danger-soft);
   font-size: var(--text-sm);
   font-weight: 500;
+  border-left: 3px solid var(--danger);
 }
 
 .confirm input {

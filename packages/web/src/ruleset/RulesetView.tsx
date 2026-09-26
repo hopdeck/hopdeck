@@ -73,7 +73,7 @@ export function RulesetView({ state, actions, live }: { state: RulesetState; act
           )}
         </p>
         {actions !== undefined && model !== undefined && (
-          <button type="button" className="btn btn-sm btn-primary" onClick={actions.onCreate}>
+          <button type="button" className="btn btn-sm" onClick={actions.onCreate}>
             <PlusIcon />
             {t('newTable.button')}
           </button>

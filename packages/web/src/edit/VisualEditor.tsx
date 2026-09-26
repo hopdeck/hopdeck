@@ -156,7 +156,8 @@ export function VisualEditor({ family, chains, sets, counters, counterOf, errorR
                 </select>
               </label>
             )}
-            <button type="button" className="btn btn-sm btn-primary" onClick={() => setEditing({ chain: chainIndex, row: 'new' })}>
+            <button type="button" className="btn btn-sm" onClick={() => setEditing({ chain: chainIndex, row: 'new' })}>
+              <PlusIcon />
               {t('editor.addRule')}
             </button>
             <button type="button" className="btn btn-ghost btn-sm btn-icon btn-danger" title={t('editor.deleteChain')} aria-label={t('editor.deleteChain')}
