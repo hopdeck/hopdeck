@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import type { DiffLine } from '@hopdeck/core';
 import { useI18n } from '../../i18n/I18nProvider.tsx';
 import { collapseDiff } from './collapse.ts';

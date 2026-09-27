@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { useI18n } from './I18nProvider.tsx';
 import { languageName } from './locales.ts';
 

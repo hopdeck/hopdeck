@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { MANAGED_COMMENT, nftName } from './changes.ts';
 import { parseSetBlock } from './set-elements.ts';
 import type { Family } from './nft-json.ts';

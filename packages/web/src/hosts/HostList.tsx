@@ -1,8 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import type { HostSummary } from '@hopdeck/core';
 import { HostKindIcon, PlusIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import styles from './HostList.module.css';
 import { hostStatus, hostSubtitle } from './status.ts';
+import { COPYRIGHT, LICENSE_URL } from '../legal.ts';
 
 interface HostListProps {
   hosts: readonly HostSummary[];
@@ -55,6 +59,16 @@ export function HostList({ hosts, selectedId, connecting, onSelect, onAdd }: Hos
         <PlusIcon />
         {t('hosts.add')}
       </button>
+      {/* The Appropriate Legal Notices of GPL-3.0: authors, licence, no warranty. */}
+      <footer className={styles.legal}>
+        <span>{COPYRIGHT}</span>
+        <span>
+          {t('legal.license')}{' '}
+          <a href={LICENSE_URL} target="_blank" rel="noopener noreferrer">
+            {t('legal.licenseLink')}
+          </a>
+        </span>
+      </footer>
     </nav>
   );
 }

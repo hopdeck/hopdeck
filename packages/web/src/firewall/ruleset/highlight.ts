@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 export type TokenKind = 'plain' | 'keyword' | 'accept' | 'drop' | 'jump' | 'string' | 'number' | 'ref' | 'comment';
 
 export interface Token {

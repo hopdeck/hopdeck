@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { LOCALES, MESSAGES, SOURCE_LOCALE, type MessageKey } from './locales.ts';
 import { createTranslator, pickLocale, type Vars } from './translate.ts';

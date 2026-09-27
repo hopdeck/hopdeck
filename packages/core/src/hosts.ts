@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 /** Shapes of the hosts API, shared by the server and the UI. */
 
 import type { DiffLine } from './diff.ts';

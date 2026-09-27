@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { describe, expect, it } from 'vitest';
 import { historyFingerprints, parseHostSettings, restoreChanges, tableFileName, type HistoryVersionDetail } from './history.ts';
 import { tableKey } from './keys.ts';

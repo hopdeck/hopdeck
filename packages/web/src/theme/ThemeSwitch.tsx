@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { useEffect, useState } from 'react';
 import { MonitorIcon, MoonIcon, SunIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';

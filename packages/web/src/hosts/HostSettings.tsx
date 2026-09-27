@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { HISTORY_MAX_BYTES, HISTORY_MIN_VERSIONS, type HistoryState } from '@hopdeck/core';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api.ts';

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import type { HostKey, HostKeyCheck } from '@hopdeck/core';
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { appendFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';

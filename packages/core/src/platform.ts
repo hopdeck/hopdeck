@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 /**
  * What sets hosts apart for hopdeck: where its files go, and how each module
  * may change the host. See docs/ARCHITECTURE.md, "Platforms".

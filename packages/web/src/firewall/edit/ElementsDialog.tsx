@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { elementParts, elementProblem, splitList, type Family, type SetBlock, type TableChange } from '@hopdeck/core';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ColumnHeader, Fit } from '../../components/ColumnHeader.tsx';

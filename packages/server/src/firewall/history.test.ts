@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { platform, type Executor, type Platform } from '@hopdeck/core';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';

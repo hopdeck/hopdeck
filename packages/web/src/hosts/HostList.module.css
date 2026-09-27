@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Copyright (C) 2026 Mateusz T (Tenir) */
+
 .sidebar {
   position: sticky;
   top: var(--topbar-height);
@@ -135,4 +138,22 @@
     border-right: 0;
     border-bottom: 1px solid var(--border);
   }
+}
+
+/* Authors and licence, at the foot of the list. */
+.legal {
+  display: grid;
+  gap: 2px;
+  margin-top: auto;
+  padding: 10px 12px;
+  color: var(--text-subtle);
+  font-size: var(--text-xs);
+}
+
+.legal a {
+  color: inherit;
+}
+
+.legal a:hover {
+  color: var(--text);
 }

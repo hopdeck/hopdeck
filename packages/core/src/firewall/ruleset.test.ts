@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { describe, expect, it } from 'vitest';
 import basic from '../../test/fixtures/basic.json' with { type: 'json' };
 import { findTable, parseRuleset, RulesetParseError } from './ruleset.ts';

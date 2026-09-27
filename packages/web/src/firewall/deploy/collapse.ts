@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import type { DiffLine } from '@hopdeck/core';
 
 export type DiffBlock = { kind: 'line'; line: DiffLine } | { kind: 'gap'; count: number };

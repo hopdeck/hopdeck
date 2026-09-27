@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Mateusz T (Tenir)
+
 # Loads an .nft file into a throwaway network namespace and writes what nft
 # prints for it, next to the input file:
 #   NAME.json     nft -j list ruleset, pretty-printed

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import type { ExecOptions, ExecResult, Executor } from '@hopdeck/core';
 
 /** Answers a command with a result, or with an error to throw. */

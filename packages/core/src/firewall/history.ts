@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import type { DeploymentTable, HostErrorCode, TableChange } from '../hosts.ts';
 import { isManaged, tableText } from './changes.ts';
 import { tableKey } from './keys.ts';

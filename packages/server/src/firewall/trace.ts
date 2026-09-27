@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { randomBytes, randomUUID } from 'node:crypto';
 import { replaceTableScript, TRACE_TABLE_PREFIX, traceFilterProblem, traceTable, type TraceFilter, type TraceView } from '@hopdeck/core';
 import { rollbackUnavailableReason, startWatchdog, watchdogCommand, type DeployTarget } from './deploy.ts';

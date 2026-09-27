@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import type { Ruleset } from './firewall/ruleset.ts';
 
 export interface ExecOptions {

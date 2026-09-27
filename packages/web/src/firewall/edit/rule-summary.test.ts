@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { emptyRule } from '@hopdeck/core';
 import { describe, expect, it } from 'vitest';
 import { ruleColumns } from './rule-summary.ts';

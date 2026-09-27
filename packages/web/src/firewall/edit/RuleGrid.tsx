@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import type { RuleForm } from '@hopdeck/core';
 import { Fragment, type ReactNode } from 'react';
 import { ColumnHeader, Fit } from '../../components/ColumnHeader.tsx';

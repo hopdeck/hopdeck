@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { RulesetParseError } from '@hopdeck/core';
 import { ApiError } from '../api.ts';
 import { errorText } from '../errors.ts';

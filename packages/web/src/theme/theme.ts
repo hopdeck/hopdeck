@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 export type ThemeChoice = 'system' | 'light' | 'dark';
 
 export const THEME_CHOICES: readonly ThemeChoice[] = ['system', 'light', 'dark'];

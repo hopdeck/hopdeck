@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { chainKey, hasPath, packetPath, type HookStage, type PathKind, type Traffic } from '@hopdeck/core';
 import { Fragment, useState } from 'react';
 import { Callout } from '../../components/Callout.tsx';

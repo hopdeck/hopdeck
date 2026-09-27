@@ -1,10 +1,20 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { demoRuleset, ensureControlDir, generateToken, HostManager, Sandbox, startServer } from '@hopdeck/server';
 import pkg from '../package.json' with { type: 'json' };
+
+// GPL-3.0's notice for programs that talk to a terminal; copies must keep it.
+const NOTICE = `hopdeck  Copyright (C) 2026 Mateusz T (Tenir)
+This program comes with ABSOLUTELY NO WARRANTY. It is free software, and you
+are welcome to redistribute it under the terms of the GNU GPL, version 3 or
+later: https://www.gnu.org/licenses/gpl-3.0.html
+`;
 
 const HELP = `Usage: hopdeck [options]
 
@@ -34,7 +44,7 @@ const { values } = parseArgs({
 });
 
 if (values.help) {
-  process.stdout.write(HELP);
+  process.stdout.write(`${HELP}\n${NOTICE}`);
   process.exit(0);
 }
 
@@ -90,7 +100,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 
 // The token goes in the fragment, which browsers never send to the server.
 const uiOrigin = values.dev ? DEV_UI_ORIGINS[0] : `http://127.0.0.1:${server.port}`;
-process.stdout.write(`hopdeck ${pkg.version} is running at:\n\n  ${uiOrigin}/#token=${token}\n\n`);
+process.stdout.write(`${NOTICE}\nhopdeck ${pkg.version} is running at:\n\n  ${uiOrigin}/#token=${token}\n\n`);
 
 function fail(message: string): never {
   process.stderr.write(`hopdeck: ${message}\n`);

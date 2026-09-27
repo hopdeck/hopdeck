@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { describe, expect, it } from 'vitest';
 import { isManaged, nftName, replaceTableScript, userComment, withManagedComment } from './changes.ts';
 import { diffLines, hasChanges } from '../diff.ts';

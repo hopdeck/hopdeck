@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { blockKey, ruleKey, tableKey } from './keys.ts';
 import type { Json } from './nft-json.ts';
 import { TRACE_TABLE_PREFIX } from './trace.ts';

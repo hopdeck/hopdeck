@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Copyright (C) 2026 Mateusz T (Tenir) */
+
 /*
  * Design tokens and shared primitives. theme.ts sets <html data-theme> to the
  * resolved theme, so the CSS only knows "light" and "dark". Fonts come from the

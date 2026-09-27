@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { LanguageSelect } from '../i18n/LanguageSelect.tsx';
 import { ThemeSwitch } from '../theme/ThemeSwitch.tsx';
 import { LogoIcon } from './icons.tsx';

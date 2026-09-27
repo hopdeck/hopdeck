@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import type { Executor, HostFacts } from '@hopdeck/core';
 import { HostError } from './errors.ts';
 

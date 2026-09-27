@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import type { HostSummary } from '@hopdeck/core';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.ts';

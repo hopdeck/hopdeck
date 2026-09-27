@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 

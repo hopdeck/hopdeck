@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { editSetBlock, elementProblem, newSetBlock, setSpecOf, splitList, type EditableBlock, type SetSpec } from '@hopdeck/core';
 import { useEffect, useRef, useState } from 'react';
 import { Segmented } from '../../components/Segmented.tsx';

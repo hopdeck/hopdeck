@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Mateusz T (Tenir)
+
 # Starts a Debian 13 container that plays a remote firewall for hopdeck, with
 # systemd, sshd, nftables and one account per privilege case. Its nftables
 # ruleset lives in the container's own network namespace, never the real one.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 export interface DiffLine {
   kind: 'same' | 'add' | 'remove';
   text: string;

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 /**
  * Packet tracing: nft marks packets with `meta nftrace set 1`, and
  * `nft -a monitor trace` prints one line per chain and rule they pass. nft

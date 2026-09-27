@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 /**
  * Types for the libnftables JSON format, as printed by `nft -j list ruleset`
  * and accepted by `nft -j -f`. See libnftables-json(5).

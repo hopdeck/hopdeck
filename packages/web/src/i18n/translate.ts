@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 /**
  * Minimal i18n without dependencies. Locale files are flat JSON objects in the
  * i18next v4 JSON format, so translation platforms such as Weblate can read

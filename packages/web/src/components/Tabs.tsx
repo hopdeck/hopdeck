@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { Fragment, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import styles from './Tabs.module.css';
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import type { ReactNode } from 'react';
 
 export type CalloutTone = 'info' | 'ok' | 'warn' | 'danger';

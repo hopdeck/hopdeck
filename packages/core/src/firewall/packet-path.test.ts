@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { describe, expect, it } from 'vitest';
 import foreignJson from '../../test/fixtures/foreign.json' with { type: 'json' };
 import { hasPath, packetPath, type HookStage } from './packet-path.ts';

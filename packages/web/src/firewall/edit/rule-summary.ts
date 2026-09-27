@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { renderLimit, type Limit, type RuleAction, type RuleForm, type TcpFlags } from '@hopdeck/core';
 
 /** A rule in the columns of the rules grid, as short nft-like text. */

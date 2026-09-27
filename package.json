@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "license": "GPL-3.0-or-later",
+  "author": { "name": "Mateusz T (Tenir)" },
   "packageManager": "pnpm@12.6.0",
   "engines": {
     "node": ">=24"

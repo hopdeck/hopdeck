@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import type { NftTable } from './nft-json.ts';
 
 /** The comment that marks a table as managed by hopdeck; see docs/ARCHITECTURE.md, "Ownership". */

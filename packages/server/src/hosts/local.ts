@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import type { ExecOptions, ExecResult, Executor } from '@hopdeck/core';
 import { DEFAULT_TIMEOUT_MS, runProcess } from './process.ts';
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { useRef, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import { clampWidth, MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH } from './column-widths.ts';

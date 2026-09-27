@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import type { HostFacts, HostStatus, HostSummary } from '@hopdeck/core';
 import { describe, expect, it } from 'vitest';
 import { hostStatus } from './status.ts';

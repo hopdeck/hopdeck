@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { groupTrace, TRACE_PROTOCOLS, type HostKind, type TraceEvent, type TraceFilter, type TracedPacket, type TraceView } from '@hopdeck/core';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { api } from '../../api.ts';

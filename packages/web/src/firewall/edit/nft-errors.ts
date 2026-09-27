@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 /**
  * Lines of the edited definition that nft complained about. nft names lines of
  * change.nft, which starts with two lines of its own ("table X {}" and

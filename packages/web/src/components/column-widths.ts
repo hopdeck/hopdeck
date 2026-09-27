@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { useCallback, useSyncExternalStore } from 'react';
 
 /** Column widths in pixels, by column id; a column without one fits its content. */

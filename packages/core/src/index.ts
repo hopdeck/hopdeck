@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 export * from './firewall/nft-json.ts';
 export * from './firewall/ruleset.ts';
 export * from './host.ts';

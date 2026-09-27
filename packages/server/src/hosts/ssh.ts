@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
 import { createHash } from 'node:crypto';
 import { chmod, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
