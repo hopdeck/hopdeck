@@ -1,8 +1,10 @@
 import {
   isManaged,
+  normalizedTable,
   parseRuleset,
   platform,
   replaceTableScript,
+  tableFileName,
   type Executor,
   type Family,
   type HostFacts,
@@ -40,10 +42,9 @@ export interface PersistTarget {
   facts: HostFacts;
 }
 
-/** File of a table in the boot directory; characters outside [A-Za-z0-9_.-] are %-escaped. */
+/** File of a table in the boot directory. */
 export function tableFile(directory: string, family: Family, name: string): string {
-  const safe = name.replace(/[^A-Za-z0-9_.-]/g, (char) => `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`);
-  return `${directory}/${family}-${safe}.nft`;
+  return `${directory}/${tableFileName(family, name)}`;
 }
 
 /**
@@ -51,11 +52,7 @@ export function tableFile(directory: string, family: Family, name: string): stri
  * counters at zero and expiring elements given their full timeout again.
  */
 export function bootDefinition(family: Family, name: string, listing: string): string {
-  const definition = listing
-    .replace(/packets \d+ bytes \d+/g, 'packets 0 bytes 0')
-    .replace(/ used \d+ \w*bytes/g, '')
-    .replace(/ expires [\w.]+/g, '');
-  return `${HEADER}${replaceTableScript(family, name, definition)}`;
+  return `${HEADER}${replaceTableScript(family, name, normalizedTable(listing))}`;
 }
 
 /** Whether saving is possible at all, and how things stand on the host. */

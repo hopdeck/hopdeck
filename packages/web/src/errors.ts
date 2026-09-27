@@ -42,6 +42,7 @@ const TEXTS = new Map<string, ErrorText>([
   ['trace-unavailable', { title: 'error.trace-unavailable.title', hint: 'error.trace-unavailable.hint' }],
   ['trace-not-found', { title: 'error.trace-not-found.title', hint: 'error.trace-not-found.hint' }],
   ['platform-read-only', { title: 'error.platform-read-only.title' }],
+  ['version-not-found', { title: 'error.version-not-found.title', hint: 'error.version-not-found.hint' }],
   ['ui-error', { title: 'error.ui-error.title', hint: 'error.ui-error.hint' }],
 ]);
 

@@ -43,8 +43,12 @@ export function liveState(json: unknown, readAt: string): LiveState {
  * Per table, a hash of its definition without counter values, quota use,
  * expiry and set elements: those change on their own. hopdeck's tracing tables
  * are left out, since they come and go while it traces.
+ *
+ * With `handles: false` the hash is of the content alone: the same after the
+ * table is loaded again, e.g. at boot, which gives every object a new handle.
  */
-export function tableFingerprints(json: unknown): Record<string, string> {
+export function tableFingerprints(json: unknown, options: { handles?: boolean } = {}): Record<string, string> {
+  const handles = options.handles ?? true;
   const texts = new Map<string, string[]>();
   for (const item of nftItems(json)) {
     const [kind, body] = entry(item);
@@ -53,15 +57,16 @@ export function tableFingerprints(json: unknown): Record<string, string> {
     if (typeof table !== 'string' || table.startsWith(TRACE_TABLE_PREFIX)) continue;
     const key = tableKey(String(body['family']), table);
     const list = texts.get(key) ?? [];
-    list.push(JSON.stringify({ [kind]: stable(kind, body) }));
+    list.push(JSON.stringify({ [kind]: stable(kind, body, handles) }));
     texts.set(key, list);
   }
   return Object.fromEntries([...texts].map(([key, list]) => [key, fnv1a(list.join('\n'))]));
 }
 
 /** A copy without the values that change on their own. */
-function stable(kind: string, body: JsonObject): Json {
+function stable(kind: string, body: JsonObject, handles: boolean): Json {
   const copy: JsonObject = { ...body };
+  if (!handles) delete copy['handle'];
   if (kind === 'counter') {
     delete copy['packets'];
     delete copy['bytes'];

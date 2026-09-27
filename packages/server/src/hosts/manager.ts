@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 import type {
   DeploymentView,
+  HistoryState,
+  HistoryVersionDetail,
+  HostSettings,
+  Platform,
   Executor,
   HostErrorCode,
   HostKeyCheck,
@@ -20,6 +25,8 @@ import type {
 import { liveState, platform } from '@hopdeck/core';
 import { HostError } from './errors.ts';
 import { Deployments, type DeployLogEntry, type DeployTarget } from '../firewall/deploy.ts';
+import { History, type HistoryTarget } from '../firewall/history.ts';
+import { journal } from './journal.ts';
 import { Traces, type TraceOptions } from '../firewall/trace.ts';
 import { collectFacts } from './facts.ts';
 import { HostKeys } from './host-keys.ts';
@@ -54,8 +61,10 @@ export interface HostManagerOptions {
   controlDir: string;
   /** An ssh config file used instead of ~/.ssh/config. */
   sshConfigFile?: string | undefined;
-  /** Executor of the sandbox host, when one runs. */
-  sandbox?: Executor;
+  /** The sandbox host, when one runs: its executor, and where it keeps hopdeck's files (Sandbox.directory). */
+  sandbox?: { executor: Executor; directory: string };
+  /** Who runs hopdeck, and on which computer; recorded as the author of changes. Defaults to this process's user and machine. */
+  operator?: { user: string; computer: string };
   /** Replaces the SSH executor, for tests; `shared: false` asks for a connection that shares nothing. */
   createSshExecutor?: (destination: string, options?: { shared: boolean }) => Executor;
   /** Seconds until a host rolls back an unconfirmed change. */
@@ -80,18 +89,25 @@ export class HostManager {
   readonly #hostKeys: HostKeys;
   readonly #deployments: Deployments;
   readonly #traces = new Traces();
+  readonly #history: History;
 
   private constructor(options: HostManagerOptions) {
     this.#options = options;
     this.#hostKeys = options.hostKeys ?? new HostKeys({ configFile: options.sshConfigFile });
+    const entryOf = (hostId: string) => {
+      const entry = this.#entries.get(hostId);
+      if (entry === undefined) throw new Error(`host ${hostId} is gone`);
+      return entry;
+    };
     this.#deployments = new Deployments({
       ...(options.rollbackSeconds !== undefined && { seconds: options.rollbackSeconds }),
       log: (entry) => this.#logChange(entry),
-      afterConfirm: (view) => {
-        const entry = this.#entries.get(view.hostId);
-        if (entry === undefined) throw new Error(`host ${view.hostId} is gone`);
-        return persistTables(this.#persistTarget(entry), view.tables);
-      },
+      afterConfirm: (view) => persistTables(this.#persistTarget(entryOf(view.hostId)), view.tables),
+      record: (view) => this.#history.record(this.#historyTarget(entryOf(view.hostId)), view),
+    });
+    this.#history = new History({
+      operator: options.operator ?? { user: userInfo().username, computer: hostname() },
+      busy: (hostId) => this.#deployments.busy(hostId),
     });
   }
 
@@ -99,7 +115,7 @@ export class HostManager {
     const manager = new HostManager(options);
     manager.#put({ id: 'local', kind: 'local', name: 'localhost', executor: new LocalExecutor(), status: { state: 'new' }, manualOverride: false });
     if (options.sandbox !== undefined) {
-      manager.#put({ id: 'sandbox', kind: 'sandbox', name: 'sandbox', executor: options.sandbox, status: { state: 'new' }, manualOverride: false });
+      manager.#put({ id: 'sandbox', kind: 'sandbox', name: 'sandbox', executor: options.sandbox.executor, status: { state: 'new' }, manualOverride: false });
     }
     for (const host of await readInventory(options.configDir)) {
       manager.#put(manager.#sshEntry(host));
@@ -143,6 +159,7 @@ export class HostManager {
   async connect(id: string): Promise<HostSummary | undefined> {
     const entry = this.#entries.get(id);
     if (entry === undefined) return undefined;
+    this.#history.reset(id);
     try {
       const facts = await collectFacts(entry.executor);
       const privilege = await detectPrivilege(entry.executor, facts);
@@ -191,11 +208,17 @@ export class HostManager {
     return summary(entry);
   }
 
-  /** Checks changes and stages them on the host; nothing changes until apply. */
-  async prepareDeployment(id: string, changes: readonly TableChange[]): Promise<DeploymentView | undefined> {
+  /**
+   * Checks changes and stages them on the host; nothing changes until apply.
+   * Whatever changed the managed tables since the last version goes into the
+   * history first, so the change is recorded against what it really changed.
+   */
+  async prepareDeployment(id: string, changes: readonly TableChange[], options: { restoredFrom?: number } = {}): Promise<DeploymentView | undefined> {
     const entry = this.#entries.get(id);
     if (entry === undefined) return undefined;
-    return this.#deployments.prepare(this.#target(entry), changes);
+    const target = this.#target(entry);
+    if (target.platform.firewall !== 'read-only') await this.#observe(entry, await this.#readJson(entry));
+    return this.#deployments.prepare(target, changes, options);
   }
 
   async deployment(id: string, action: 'get' | 'apply' | 'confirm' | 'rollback' | 'discard'): Promise<DeploymentView | undefined> {
@@ -266,6 +289,38 @@ export class HostManager {
     return { status: await persistenceStatus(target), ...(result && { result }) };
   }
 
+  /** The history of the managed tables on a host, newest first. */
+  async history(id: string): Promise<HistoryState | undefined> {
+    const entry = this.#entries.get(id);
+    return entry === undefined ? undefined : this.#history.state(this.#historyTarget(entry));
+  }
+
+  /** One version with its tables; undefined for an unknown host or version. */
+  async historyVersion(id: string, version: number): Promise<HistoryVersionDetail | undefined> {
+    const entry = this.#entries.get(id);
+    return entry === undefined ? undefined : this.#history.version(this.#historyTarget(entry), version);
+  }
+
+  /** Saves settings on the host itself, where every admin shares them. */
+  async saveSettings(id: string, settings: HostSettings): Promise<HistoryState | undefined> {
+    const entry = this.#entries.get(id);
+    return entry === undefined ? undefined : this.#history.saveSettings(this.#historyTarget(entry), settings);
+  }
+
+  /** Where hopdeck keeps its files on the host, and what it may change there. */
+  #platform(entry: Entry): Platform {
+    const status = entry.status as Extract<HostStatus, { state: 'connected' }>;
+    if (entry.kind !== 'sandbox' || this.#options.sandbox === undefined) return platform(status.facts.platform);
+    const { directory } = this.#options.sandbox;
+    return { ...platform('linux'), configDir: `${directory}/etc/hopdeck`, stateDir: `${directory}/var/lib/hopdeck` };
+  }
+
+  #historyTarget(entry: Entry): HistoryTarget {
+    const access = this.#access(entry);
+    const status = entry.status as Extract<HostStatus, { state: 'connected' }>;
+    return { hostId: entry.id, kind: entry.kind, executor: entry.executor, access, platform: this.#platform(entry), login: status.facts.user };
+  }
+
   #persistTarget(entry: Entry): PersistTarget {
     const access = this.#access(entry);
     const status = entry.status as Extract<HostStatus, { state: 'connected' }>;
@@ -281,7 +336,7 @@ export class HostManager {
       kind: entry.kind,
       executor: entry.executor,
       access,
-      platform: platform(status.facts.platform),
+      platform: this.#platform(entry),
       systemd: status.facts.systemd,
       manualOverride: entry.manualOverride,
       freshExecutor: entry.kind === 'ssh' ? this.#freshExecutor(entry.destination!) : undefined,
@@ -300,12 +355,17 @@ export class HostManager {
     );
   }
 
-  /** One JSON line per event in changes.log next to hosts.json. */
+  /** One JSON line per event in changes.log next to hosts.json, and a line in the host's system log. */
   async #logChange(entry: DeployLogEntry): Promise<void> {
     const host = this.#entries.get(entry.host);
     const line = { time: new Date().toISOString(), ...entry, destination: host?.destination ?? host?.name };
     await mkdir(this.#options.configDir, { recursive: true, mode: 0o700 });
     await appendFile(join(this.#options.configDir, 'changes.log'), `${JSON.stringify(line)}\n`, { mode: 0o600 });
+    // The sandbox shares this machine's system log, which is not its own.
+    if (host === undefined || host.kind === 'sandbox') return;
+    const override = entry.manualOverride ? ' with Manual override' : '';
+    const detail = entry.detail === undefined ? '' : `: ${entry.detail}`;
+    await journal(host.executor, `deployment ${entry.deployment} ${entry.event}${override}: ${entry.tables.join(', ')}${detail}`);
   }
 
   /** Reads the key an SSH host presents and what known_hosts says about it. */
@@ -347,13 +407,8 @@ export class HostManager {
       throw new HostError('command-failed', listing.stderr.trim() || `nft exited with code ${listing.exitCode}`);
     }
 
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(json.stdout);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      throw new HostError('command-failed', `nft -j printed something that is not JSON (${reason}): ${json.stdout.slice(0, 300)}`);
-    }
+    const parsed = parseJson(json.stdout);
+    await this.#observe(entry, parsed);
     return { json: parsed, listing: listing.stdout, readAt: new Date().toISOString() };
   }
 
@@ -361,16 +416,21 @@ export class HostManager {
   async live(id: string): Promise<LiveState | undefined> {
     const entry = this.#entries.get(id);
     if (entry === undefined) return undefined;
+    const parsed = await this.#readJson(entry);
+    await this.#observe(entry, parsed);
+    return liveState(parsed, new Date().toISOString());
+  }
+
+  /** `nft -j list ruleset`, parsed. */
+  async #readJson(entry: Entry): Promise<unknown> {
     const json = await runNft(this.#access(entry), ['-j', 'list', 'ruleset']);
     if (json.exitCode !== 0) throw new HostError('command-failed', json.stderr.trim() || `nft exited with code ${json.exitCode}`);
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(json.stdout);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      throw new HostError('command-failed', `nft -j printed something that is not JSON (${reason}): ${json.stdout.slice(0, 300)}`);
-    }
-    return liveState(parsed, new Date().toISOString());
+    return parseJson(json.stdout);
+  }
+
+  /** Every look at the ruleset may find a change made outside hopdeck; see History.observe(). */
+  async #observe(entry: Entry, json: unknown): Promise<void> {
+    if (this.#platform(entry).firewall !== 'read-only') await this.#history.observe(this.#historyTarget(entry), json);
   }
 
   /** How to run nft as root on a connected host; throws when that is not possible yet. */
@@ -417,6 +477,15 @@ function summary(entry: Entry): HostSummary {
   return destination === undefined
     ? { id, kind, name, status, manualOverride }
     : { id, kind, name, destination, status, manualOverride };
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new HostError('command-failed', `nft -j printed something that is not JSON (${reason}): ${text.slice(0, 300)}`);
+  }
 }
 
 function toStatusError(error: unknown): { code: HostErrorCode | 'unknown'; detail: string } {

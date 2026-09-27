@@ -24,10 +24,12 @@ interface DeploymentDialogProps {
   hostName: string;
   /** Opens the dialog and plans these changes; undefined keeps it closed. */
   changes: TableChange[] | undefined;
+  /** The history version the changes put back, for the record. */
+  restoredFrom?: number | undefined;
   onClose(result: DeploymentResult): void;
 }
 
-const ACTIONS: Record<DeploymentView['tables'][number]['action'], MessageKey> = {
+export const ACTIONS: Record<DeploymentView['tables'][number]['action'], MessageKey> = {
   adopt: 'deploy.action.adopt',
   create: 'deploy.action.create',
   replace: 'deploy.action.replace',
@@ -36,7 +38,7 @@ const ACTIONS: Record<DeploymentView['tables'][number]['action'], MessageKey> = 
 };
 
 /** Plan, review, apply, then keep or roll back one change. */
-export function DeploymentDialog({ hostId, hostName, changes, onClose }: DeploymentDialogProps) {
+export function DeploymentDialog({ hostId, hostName, changes, restoredFrom, onClose }: DeploymentDialogProps) {
   const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
   const [view, setView] = useState<DeploymentView>();
@@ -68,7 +70,7 @@ export function DeploymentDialog({ hostId, hostName, changes, onClose }: Deploym
       setView(undefined);
       setError(undefined);
       element.showModal();
-      void run(() => api.post(`/hosts/${encodeURIComponent(hostId)}/deployments`, { changes }));
+      void run(() => api.post(`/hosts/${encodeURIComponent(hostId)}/deployments`, { changes, ...(restoredFrom !== undefined && { restoredFrom }) }));
     } else if (!open && element.open) {
       element.close();
     }
@@ -118,6 +120,7 @@ export function DeploymentDialog({ hostId, hostName, changes, onClose }: Deploym
           </h2>
           <span className={styles.host}>{hostName}</span>
         </header>
+        {restoredFrom !== undefined && <p className={styles.restoring}>{t('deploy.restoring', { version: restoredFrom })}</p>}
 
         {view === undefined && busy && (
           <p className={styles.progress} role="status">
@@ -259,6 +262,18 @@ function Persisted({ result }: { result: NonNullable<DeploymentView['persisted']
   );
 }
 
+/** Where the kept change went in the host's history. */
+function Recorded({ recorded }: { recorded: NonNullable<DeploymentView['recorded']> }) {
+  const { t } = useI18n();
+  if (recorded.version !== undefined) return <p className={styles.recorded}>{t('deploy.recorded', { version: recorded.version })}</p>;
+  if (recorded.problem === undefined) return null;
+  return (
+    <Callout tone="warn" icon={<AlertIcon />} title={t('deploy.notRecorded')} role="alert">
+      <pre className="details">{recorded.problem.detail}</pre>
+    </Callout>
+  );
+}
+
 function Outcome({ view }: { view: DeploymentView }) {
   const { t } = useI18n();
   if (view.state === 'confirmed') {
@@ -266,6 +281,7 @@ function Outcome({ view }: { view: DeploymentView }) {
       <>
         <Callout tone="ok" icon={<CheckIcon />} title={t('deploy.confirmed')} />
         {view.persisted !== undefined && <Persisted result={view.persisted} />}
+        {view.recorded !== undefined && <Recorded recorded={view.recorded} />}
       </>
     );
   }

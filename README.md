@@ -14,9 +14,11 @@ only easier:
   tables it manages.
 - A packet path view (hooks and priorities across all tables), packet tracing
   and live counters.
+- A history of every change, kept on each host: who made it, from where and
+  with which SSH key, changes made outside hopdeck, and a way back to any
+  version.
 
-Planned: a change history kept on each host, OpenWrt through UCI, and more
-network tools, such as a topology view.
+Planned: OpenWrt through UCI, and more network tools, such as a topology view.
 
 **Status:** early development, not released yet.
 

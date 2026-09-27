@@ -56,26 +56,56 @@ export async function stageFile(target: StagingTarget, staging: Staging, name: s
 }
 
 /**
+ * Shell function for root: `copy SOURCE SHA256 DESTINATION` puts the source in
+ * place only when its SHA-256 is the one given, so a file the login user swapped
+ * in after hopdeck wrote it fails the check and nothing is written.
+ */
+export const VERIFIED_COPY = `copy() {
+	cp -- "$1" "$3.hopdeck-new" || return 1
+	if ! echo "$2  $3.hopdeck-new" | sha256sum -c >/dev/null 2>&1; then
+		rm -f "$3.hopdeck-new"
+		echo "the file changed while it was copied; nothing was written" >&2
+		return 1
+	fi
+	mv -f "$3.hopdeck-new" "$3"
+}`;
+
+export function sha256(content: string): string {
+  return createHash('sha256').update(content).digest('hex');
+}
+
+/** Writes each content to a private temporary file of the login user, for root to copy; see VERIFIED_COPY. */
+export async function userTemporaries(target: StagingTarget, contents: readonly string[]): Promise<string[]> {
+  const paths: string[] = [];
+  try {
+    for (const content of contents) {
+      const made = await target.executor.exec(['sh', '-c', 'umask 077; f=$(mktemp "${TMPDIR:-/tmp}/hopdeck-copy.XXXXXX") && cat > "$f" && echo "$f"'], {
+        stdin: content,
+      });
+      if (made.exitCode !== 0) throw new HostError('command-failed', made.stderr.trim());
+      paths.push(made.stdout.trim());
+    }
+  } catch (error) {
+    await removeTemporaries(target, paths).catch(() => undefined);
+    throw error;
+  }
+  return paths;
+}
+
+export async function removeTemporaries(target: StagingTarget, paths: readonly string[]): Promise<void> {
+  if (paths.length > 0) await target.executor.exec(['rm', '-f', '--', ...paths]);
+}
+
+/**
  * Puts content into a file only root can change: the login user writes a
  * private temporary file, root copies it and checks the copy's SHA-256 before
  * it takes the file's place. A file swapped in between fails the check.
  */
 export async function copyAsRoot(target: StagingTarget, content: string, path: string, mode = '600'): Promise<void> {
-  const temporary = await target.executor.exec(['sh', '-c', 'umask 077; f=$(mktemp "${TMPDIR:-/tmp}/hopdeck-copy.XXXXXX") && cat > "$f" && echo "$f"'], { stdin: content });
-  if (temporary.exitCode !== 0) throw new HostError('command-failed', temporary.stderr.trim());
-  const source = temporary.stdout.trim();
-  const sha256 = createHash('sha256').update(content).digest('hex');
-  const copy = [
-    'set -e',
-    'umask 077',
-    'mkdir -p "$(dirname "$2")"',
-    'cp -- "$1" "$2.hopdeck-new"',
-    'if ! echo "$3  $2.hopdeck-new" | sha256sum -c >/dev/null 2>&1; then rm -f "$2.hopdeck-new"; echo "the file changed while it was copied; nothing was written" >&2; exit 1; fi',
-    'chmod "$4" "$2.hopdeck-new"',
-    'mv -f "$2.hopdeck-new" "$2"',
-  ].join('\n');
-  const copied = await runAsRoot(target.access, ['sh', '-c', copy, 'sh', source, path, sha256, mode]);
-  await target.executor.exec(['rm', '-f', '--', source]);
+  const [source] = await userTemporaries(target, [content]);
+  const copy = [VERIFIED_COPY, 'set -e', 'umask 077', 'mkdir -p "$(dirname "$2")"', 'copy "$1" "$3" "$2"', 'chmod "$4" "$2"'].join('\n');
+  const copied = await runAsRoot(target.access, ['sh', '-c', copy, 'sh', source!, path, sha256(content), mode]);
+  await removeTemporaries(target, [source!]);
   if (copied.exitCode !== 0) throw new HostError('command-failed', copied.stderr.trim() || `copying to ${path} failed with code ${copied.exitCode}`);
 }
 

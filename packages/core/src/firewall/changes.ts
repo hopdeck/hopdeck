@@ -53,6 +53,15 @@ export function nftName(name: string): string {
   return /^[A-Za-z_][A-Za-z0-9_./-]*$/.test(name) ? name : JSON.stringify(name);
 }
 
+/** One table's block out of `nft list ruleset`, as `nft list table` would print it. */
+export function tableText(ruleset: string, family: string, name: string): string | undefined {
+  const lines = ruleset.split('\n');
+  const start = lines.indexOf(`table ${family} ${nftName(name)} {`);
+  if (start === -1) return undefined;
+  const end = lines.indexOf('}', start);
+  return end === -1 ? undefined : `${lines.slice(start, end + 1).join('\n')}\n`;
+}
+
 /**
  * nft input that replaces a table in one transaction, whether it exists or not:
  * create it empty (a no-op if it exists), delete it, define it anew. Unlike

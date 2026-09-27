@@ -62,7 +62,7 @@ const hosts = await HostManager.open({
   configDir,
   controlDir: await ensureControlDir(),
   sshConfigFile: sshConfig ? resolve(sshConfig) : undefined,
-  ...(sandbox && { sandbox: sandbox.executor }),
+  ...(sandbox && { sandbox: { executor: sandbox.executor, directory: sandbox.directory } }),
 });
 
 // `pnpm dev` sets HOPDECK_TOKEN so the browser session survives --watch restarts.

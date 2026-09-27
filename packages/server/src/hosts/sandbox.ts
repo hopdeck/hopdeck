@@ -1,5 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { ExecOptions, ExecResult, Executor } from '@hopdeck/core';
 import { HostError } from './errors.ts';
 import { collectFacts } from './facts.ts';
@@ -13,13 +15,20 @@ import { DEFAULT_TIMEOUT_MS, runProcess } from './process.ts';
  * A keep-alive process holds the namespaces open. It reads its standard input
  * from hopdeck, so when hopdeck exits, even by crashing, the input closes, the process
  * ends and the namespaces disappear.
+ *
+ * The file system is the machine's own, so what hopdeck keeps on a host (the
+ * history, settings) goes to a temporary directory instead, removed with the
+ * sandbox.
  */
 export class Sandbox {
   readonly executor: Executor;
+  /** Stands in for / where hopdeck keeps its files on a host. */
+  readonly directory: string;
   readonly #keeper: ChildProcessWithoutNullStreams;
 
-  private constructor(keeper: ChildProcessWithoutNullStreams, timeoutMs: number) {
+  private constructor(keeper: ChildProcessWithoutNullStreams, timeoutMs: number, directory: string) {
     this.#keeper = keeper;
+    this.directory = directory;
     this.executor = new SandboxExecutor(keeper.pid!, timeoutMs);
   }
 
@@ -33,7 +42,7 @@ export class Sandbox {
       keeper.once('error', reject);
       keeper.once('exit', () => reject(new Error(`cannot create sandbox: ${stderr.trim() || 'unshare exited'}`)));
     });
-    const sandbox = new Sandbox(keeper, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    const sandbox = new Sandbox(keeper, options.timeoutMs ?? DEFAULT_TIMEOUT_MS, await mkdtemp(join(tmpdir(), 'hopdeck-sandbox-')));
     // Loopback lets the demo carry traffic to trace; the namespace has no other interface.
     await sandbox.executor.exec(['sh', '-c', 'PATH="$PATH:/usr/sbin:/sbin"; ip link set lo up']).catch(() => undefined);
     return sandbox;
@@ -54,6 +63,7 @@ export class Sandbox {
   }
 
   async dispose(): Promise<void> {
+    await rm(this.directory, { recursive: true, force: true });
     if (this.#keeper.exitCode !== null || this.#keeper.signalCode !== null) return;
     const exited = new Promise((resolve) => this.#keeper.once('exit', resolve));
     this.#keeper.stdin.end();

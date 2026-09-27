@@ -267,7 +267,65 @@ A change is a list of table operations: adopt, replace (or create), delete.
    Saving needs root: with sudo for nft only, the UI explains why it cannot.
    Tested with a real restart of the Debian test host.
 
-Every step is logged as a JSON line in `changes.log` next to `hosts.json`.
+Every step is logged as a JSON line in `changes.log` next to `hosts.json`,
+and on the host with `logger -t hopdeck`. A kept change also becomes a version
+in the host's [history](#history).
+
+## History
+
+Each host keeps the history of the tables hopdeck manages
+([`history.ts`](../packages/server/src/firewall/history.ts)), so every admin who
+connects sees the same one, from whichever computer.
+
+- **Versions.** A version is the managed tables at one moment, as nft lists
+  them with counters at zero and without expiry, one `.nft` file each, plus a
+  `meta.json`: when, what kind, who, which deployment, and what the change
+  touched (including tables changed with Manual override, which have no file).
+  Kinds:
+  - *change*: made with hopdeck and kept; written right after the boot files;
+  - *outside*: the managed tables differ from the newest version, so something
+    else changed them;
+  - *baseline*: the managed tables as hopdeck first found them.
+
+  A restore is a change that names the version it put back. Versions are never
+  rewritten.
+- **On disk.** `<stateDir>/firewall/history/000042/` (see [Platforms](#platforms)),
+  i.e. `/var/lib/hopdeck/firewall/history` on Linux: root's, mode 700, readable
+  on the host with `ls` and `diff -r`. Files get there through the same checked
+  copy as boot files. `mkdir` claims a version's number, so two panels writing
+  at once get different ones, and `meta.json` is written last: a directory
+  without it is incomplete and not shown.
+- **Outside changes** are noticed whenever hopdeck looks at the ruleset anyway:
+  reading it, live polling, planning a change. It compares a fingerprint of the
+  managed tables' content with the newest version's: without handles (a table
+  loaded again, e.g. at boot, gets new ones), counters, quota use, expiry and
+  set elements (sets fill themselves). A difference becomes an outside version,
+  noticed by whoever's hopdeck looked. Limits: changes between two looks merge
+  into one; one undone before a look leaves no trace; element changes alone go
+  unnoticed; who made it is unknown. While hopdeck itself changes the host
+  (applying, awaiting confirmation) it records nothing, but another admin's
+  hopdeck may record that pending change as an outside one. Recording
+  everything would need something running on the host all the time, an agent.
+- **Author:** `user@computer` of whoever ran hopdeck, as that hopdeck reports
+  it; then what the host saw: the login, the SSH connection's address and port
+  (`SSH_CONNECTION`), and sshd's log line for that connection ("Accepted
+  publickey for root from 10.0.0.5 port 51234 ssh2: ED25519 SHA256:…"), from the
+  journal or `/var/log/auth.log` / `/var/log/secure`, looked up once per
+  connection. A login user who can edit their shell's startup files could change
+  `SSH_CONNECTION`, and so which log line is found; the history is as
+  trustworthy as root on the host.
+- **Size limit** in `/etc/hopdeck/settings.json` on the host
+  (`history.maxBytes`: 10 MiB by default, 1 MiB to 10 GiB), so every admin
+  shares it; the host's Settings tab edits it. After each write the oldest
+  versions go while `du` counts more than the limit, but the newest 10 always
+  stay.
+- **Restoring** builds ordinary changes (replace the tables that differ, delete
+  managed tables the version lacks) that go through the usual review, apply
+  and rollback; one table can be put back alone.
+- **No history** where root is out of reach (sudo for nft only), on read-only
+  platforms, and on hosts without managed tables and without a history yet:
+  looking at a host does not start one. The sandbox keeps its history in its
+  temporary directory.
 
 ## Local panel security
 
@@ -406,7 +464,9 @@ The npm supply chain is a real risk for a tool with this access.
    Next: targeted rule changes.
 4. **Monitoring** (done, 2026-09-26): packet tracing, live counters and
    noticing changes made on the host by others.
-5. **Model B** (project layer).
+5. **History** (done, 2026-09-27): versions kept on each host with author,
+   outside changes and restore; host settings; the platform layer.
+6. **Model B** (project layer).
 
 Text mode comes before forms on purpose: it gives full power immediately, and
 forms add convenience without ever limiting what can be done.

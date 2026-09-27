@@ -13,6 +13,7 @@ import {
   replaceTableScript,
   restoreElementsScript,
   tableOwner,
+  tableText,
   withManagedComment,
   type DeploymentTable,
   type DeploymentView,
@@ -61,6 +62,8 @@ export interface DeploymentsOptions {
   log?: (entry: DeployLogEntry) => void | Promise<void>;
   /** Saves a kept change for boot. */
   afterConfirm?: (view: DeploymentView, target: DeployTarget) => Promise<PersistResult>;
+  /** Then records it in the host's history. */
+  record?: (view: DeploymentView, target: DeployTarget) => Promise<NonNullable<DeploymentView['recorded']>>;
 }
 
 /** A table as it is on the host now. */
@@ -117,15 +120,25 @@ export class Deployments {
   readonly #seconds: number;
   readonly #log: DeploymentsOptions['log'];
   readonly #afterConfirm: DeploymentsOptions['afterConfirm'];
+  readonly #recordKept: DeploymentsOptions['record'];
+  /** Hosts with an apply, confirmation or rollback under way, and how many. */
+  readonly #working = new Map<string, number>();
 
   constructor(options: DeploymentsOptions = {}) {
     this.#seconds = options.seconds ?? 60;
     this.#log = options.log;
     this.#afterConfirm = options.afterConfirm;
+    this.#recordKept = options.record;
   }
 
   hostOf(id: string): string | undefined {
     return this.#deployments.get(id)?.view.hostId;
+  }
+
+  /** Whether hopdeck is changing the host just now, or waits for a change there to be kept or undone. */
+  busy(hostId: string): boolean {
+    if ((this.#working.get(hostId) ?? 0) > 0) return true;
+    return [...this.#deployments.values()].some(({ view }) => view.hostId === hostId && view.state === 'awaiting-confirmation');
   }
 
   get(id: string): DeploymentView | undefined {
@@ -133,7 +146,7 @@ export class Deployments {
   }
 
   /** Checks the changes against ownership rules and nft -c, and stages files on the host. Nothing changes yet. */
-  async prepare(target: DeployTarget, changes: readonly TableChange[]): Promise<DeploymentView> {
+  async prepare(target: DeployTarget, changes: readonly TableChange[], options: { restoredFrom?: number } = {}): Promise<DeploymentView> {
     const readOnly = firewallReadOnly(target.platform);
     if (readOnly !== undefined) throw new HostError('platform-read-only', readOnly);
     if (changes.length === 0) throw new HostError('invalid-definition', 'no changes');
@@ -178,6 +191,7 @@ export class Deployments {
         directory,
       },
       manualOverride: target.manualOverride,
+      ...(options.restoredFrom !== undefined && { restoredFrom: options.restoredFrom }),
     };
     this.#deployments.set(view.id, { view, staging, createdAt: Date.now(), watchdogCommand: watchdog?.argv });
     return view;
@@ -188,7 +202,11 @@ export class Deployments {
    * connection. If new connections fail, the change is undone at once through
    * the connection that still works.
    */
-  async apply(id: string, target: DeployTarget): Promise<DeploymentView> {
+  apply(id: string, target: DeployTarget): Promise<DeploymentView> {
+    return this.#during(target.hostId, () => this.#apply(id, target));
+  }
+
+  async #apply(id: string, target: DeployTarget): Promise<DeploymentView> {
     const deployment = this.#require(id, 'planned');
     const { view } = deployment;
     const dir = view.safety.directory;
@@ -253,7 +271,11 @@ export class Deployments {
   }
 
   /** Keeps the change: the watchdog stands down. Close to the deadline, hopdeck waits to report what really happened. */
-  async confirm(id: string, target: DeployTarget): Promise<DeploymentView> {
+  confirm(id: string, target: DeployTarget): Promise<DeploymentView> {
+    return this.#during(target.hostId, () => this.#confirm(id, target));
+  }
+
+  async #confirm(id: string, target: DeployTarget): Promise<DeploymentView> {
     const { view, staging } = this.#require(id, 'awaiting-confirmation');
     const remaining = Date.parse(view.deadline!) - Date.now();
     await disarm(target, staging);
@@ -266,11 +288,16 @@ export class Deployments {
     delete view.deadline;
     await this.#record(view, 'confirmed');
     if (this.#afterConfirm !== undefined) view.persisted = await this.#afterConfirm(view, target);
+    if (this.#recordKept !== undefined) view.recorded = await this.#recordKept(view, target);
     return view;
   }
 
   /** Restores the tables now, before the deadline. */
-  async rollback(id: string, target: DeployTarget): Promise<DeploymentView> {
+  rollback(id: string, target: DeployTarget): Promise<DeploymentView> {
+    return this.#during(target.hostId, () => this.#rollback(id, target));
+  }
+
+  async #rollback(id: string, target: DeployTarget): Promise<DeploymentView> {
     const { view, staging } = this.#require(id, 'awaiting-confirmation');
     const undone = await runNft(target.access, ['-f', `${staging.dir}/rollback.nft`]);
     if (undone.exitCode !== 0) {
@@ -295,6 +322,17 @@ export class Deployments {
     const { view, staging } = this.#require(id, 'planned', 'invalid');
     this.#deployments.delete(id);
     if (view.state === 'planned') await removeStaging(target, staging);
+  }
+
+  async #during<T>(hostId: string, task: () => Promise<T>): Promise<T> {
+    this.#working.set(hostId, (this.#working.get(hostId) ?? 0) + 1);
+    try {
+      return await task();
+    } finally {
+      const left = (this.#working.get(hostId) ?? 1) - 1;
+      if (left === 0) this.#working.delete(hostId);
+      else this.#working.set(hostId, left);
+    }
   }
 
   #require(id: string, ...states: DeploymentView['state'][]): Deployment {
@@ -484,15 +522,6 @@ export async function readTable(access: NftAccess, family: Family, name: string)
   const text = tableText(listing.stdout, family, name);
   if (text === undefined) throw new HostError('command-failed', `nft printed no table ${family} ${name}, though its JSON has one`);
   return { node, listing: parseListing(text), text };
-}
-
-/** One table's block out of `nft list ruleset`, as `nft list table` would print it. */
-export function tableText(ruleset: string, family: Family, name: string): string | undefined {
-  const lines = ruleset.split('\n');
-  const start = lines.indexOf(`table ${family} ${nftName(name)} {`);
-  if (start === -1) return undefined;
-  const end = lines.indexOf('}', start);
-  return end === -1 ? undefined : `${lines.slice(start, end + 1).join('\n')}\n`;
 }
 
 /**

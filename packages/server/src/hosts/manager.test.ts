@@ -138,7 +138,7 @@ describe.skipIf(!USERNS)('HostManager with a sandbox', () => {
     const sandbox = await Sandbox.start();
     const configDir = await mkdtemp(join(tmpdir(), 'hopdeck-config-'));
     try {
-      const hosts = await HostManager.open({ configDir, controlDir: configDir, sandbox: sandbox.executor });
+      const hosts = await HostManager.open({ configDir, controlDir: configDir, sandbox: { executor: sandbox.executor, directory: sandbox.directory } });
       const connected = await hosts.connect('sandbox');
       expect(connected?.status).toMatchObject({ state: 'connected', privilege: { kind: 'root' } });
 

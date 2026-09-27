@@ -1,4 +1,4 @@
-import type { Family, TableChange, TraceFilter } from '@hopdeck/core';
+import { HISTORY_MAX_BYTES, validMaxBytes, type Family, type TableChange, type TraceFilter } from '@hopdeck/core';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HostError } from './hosts/errors.ts';
 import { HostStateError, InvalidHostError, type HostManager } from './hosts/manager.ts';
@@ -84,7 +84,42 @@ const ROUTES: Route[] = [
       const body = asObject(await readJson(req, 8 * 1024 * 1024));
       if (!Array.isArray(body['changes'])) throw new ApiError(400, 'invalid-body', 'changes must be a list');
       const changes = body['changes'].map(toChange);
-      return { status: 201, body: { deployment: found(await ctx.hosts.prepareDeployment(id!, changes)) } };
+      const restoredFrom = body['restoredFrom'];
+      if (restoredFrom !== undefined && !(typeof restoredFrom === 'number' && Number.isInteger(restoredFrom) && restoredFrom > 0)) {
+        throw new ApiError(400, 'invalid-body', 'restoredFrom must be a version number');
+      }
+      const options = restoredFrom === undefined ? {} : { restoredFrom };
+      return { status: 201, body: { deployment: found(await ctx.hosts.prepareDeployment(id!, changes, options)) } };
+    },
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/history$/,
+    async handle(_req, [id], ctx) {
+      return { body: { history: found(await ctx.hosts.history(id!)) } };
+    },
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/history\/(\d{1,9})$/,
+    async handle(_req, [id, version], ctx) {
+      found(ctx.hosts.get(id!));
+      const detail = await ctx.hosts.historyVersion(id!, Number(version));
+      if (detail === undefined) throw new ApiError(404, 'version-not-found');
+      return { body: { version: detail } };
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/hosts\/([^/]+)\/settings$/,
+    async handle(req, [id], ctx) {
+      const body = asObject(await readJson(req));
+      const history = body['history'];
+      const maxBytes = typeof history === 'object' && history !== null ? (history as Record<string, unknown>)['maxBytes'] : undefined;
+      if (!validMaxBytes(maxBytes)) {
+        throw new ApiError(400, 'invalid-body', `history.maxBytes must be a whole number of bytes from ${HISTORY_MAX_BYTES.min} to ${HISTORY_MAX_BYTES.max}`);
+      }
+      return { body: { history: found(await ctx.hosts.saveSettings(id!, { history: { maxBytes } })) } };
     },
   },
   {

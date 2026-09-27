@@ -58,4 +58,14 @@ describe('tableFingerprints', () => {
     items(json).find((item) => item['quota'])!['quota']!['bytes'] = 1;
     expect(tableFingerprints(json)[filter]).not.toBe(before[filter]);
   });
+
+  it('can leave handles out, so a table loaded again keeps its hash', () => {
+    const json = copy(basicJson);
+    for (const item of items(json)) {
+      const body = Object.values(item)[0] as Record<string, unknown>;
+      if (typeof body['handle'] === 'number') body['handle'] += 100;
+    }
+    expect(tableFingerprints(json)[filter]).not.toBe(before[filter]);
+    expect(tableFingerprints(json, { handles: false })).toEqual(tableFingerprints(basicJson, { handles: false }));
+  });
 });

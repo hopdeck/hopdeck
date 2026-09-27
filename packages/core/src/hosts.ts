@@ -173,8 +173,12 @@ export interface DeploymentView {
   /** Why a change failed or was rolled back, with the raw message. */
   outcome?: { reason: 'nft-error' | 'fresh-connection-failed' | 'timeout' | 'user'; detail: string };
   manualOverride: boolean;
+  /** The history version this change puts back. */
+  restoredFrom?: number;
   /** What was saved for boot once the change was kept. */
   persisted?: PersistResult;
+  /** The history version the kept change became, or why it did not. */
+  recorded?: { version?: number; problem?: { code: HostErrorCode | 'unknown'; detail: string } };
 }
 
 /** Saving kept changes for boot; see docs/ARCHITECTURE.md, "Persisting". */

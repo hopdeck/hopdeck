@@ -29,6 +29,8 @@ import { NewTableDialog } from '../firewall/edit/NewTableDialog.tsx';
 import { liveSource, newTableSource, type NewTableSpec } from '../firewall/edit/table-model.ts';
 import { TableEditor, type EditorDraft, type EditorMode, type EditorProblem } from '../firewall/edit/TableEditor.tsx';
 import { PersistencePanel } from '../firewall/deploy/PersistencePanel.tsx';
+import { HistoryPanel } from '../firewall/history/HistoryPanel.tsx';
+import { HostSettings } from './HostSettings.tsx';
 import { HostKeyPanel } from './HostKeyPanel.tsx';
 import { ManualOverrideBanner, ManualOverrideButton } from './ManualOverride.tsx';
 import styles from './HostView.module.css';
@@ -95,6 +97,8 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   const [scrollTarget, setScrollTarget] = useState<string>();
   // Changes being planned and applied in the deployment dialog.
   const [changes, setChanges] = useState<TableChange[]>();
+  // The history version those changes put back, when they come from the history.
+  const [restoredFrom, setRestoredFrom] = useState<number>();
   // The table open in the editor, which takes the place of the rules view.
   const [editing, setEditing] = useState<Editing>();
   const [creating, setCreating] = useState(false);
@@ -303,8 +307,25 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                 />
               ),
             },
+            {
+              id: 'history',
+              group: t('tabs.group.firewall'),
+              label: t('tabs.history'),
+              content: (
+                <HistoryPanel
+                  hostId={host.id}
+                  model={ruleset.model}
+                  canRestore={!readOnly}
+                  onRestore={(restore, version) => {
+                    setRestoredFrom(version);
+                    setChanges(restore);
+                  }}
+                />
+              ),
+            },
             { id: 'text', group: t('tabs.group.firewall'), label: t('tabs.text'), content: <Listing state={ruleset} /> },
             { id: 'system', group: t('tabs.group.host'), label: t('tabs.system'), content: <Facts facts={status.facts} /> },
+            { id: 'settings', group: t('tabs.group.host'), label: t('tabs.settings'), content: <HostSettings hostId={host.id} /> },
           ]}
         />
       )}
@@ -322,8 +343,10 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
         hostId={host.id}
         hostName={host.name}
         changes={changes}
+        restoredFrom={restoredFrom}
         onClose={(result) => {
           setChanges(undefined);
+          setRestoredFrom(undefined);
           if (result.changed) ruleset.reload();
           if (editing?.sent === undefined) return;
           const sent = editing.sent;
