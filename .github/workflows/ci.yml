@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Mateusz T (Tenir)
 
-# Every push: types, tests (the sandbox ones included), the UI build, and the
-# tests against a Debian 13 test host. Every Monday, and by hand before a
-# release: the tests against every test system. Only GitHub's own actions are
+# Every push: types, tests (the sandbox ones included), the UI build, the
+# executable, and the tests against a Debian 13 test host. Every Monday, and
+# by hand before a release: the tests against every test system. Only GitHub's own actions are
 # used, pinned by commit; see "Dependency policy" in docs/ARCHITECTURE.md.
 name: CI
 
@@ -49,6 +49,26 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+
+  # hopdeck as one executable file, started and asked for its UI and API by
+  # the build itself; kept for two weeks to try out.
+  executable:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Install pnpm, the version package.json names
+        run: npm install -g "$(node -p 'require("./package.json").packageManager')"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:sea
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hopdeck-linux-x64
+          path: dist/hopdeck-*-linux-x64/
+          retention-days: 14
 
   # Which test systems this run tests: Debian 13 on pushes, all on Mondays,
   # the ones asked for by hand.

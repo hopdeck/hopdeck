@@ -437,6 +437,29 @@ root ([`staging.ts`](../packages/server/src/hosts/staging.ts)).
   or over its time, is killed and its pipes closed, so a program it started
   cannot keep writing.
 
+## Distribution
+
+hopdeck ships as one executable file, a Node.js single executable application
+([`packages/cli/scripts/build-sea.ts`](../packages/cli/scripts/build-sea.ts)):
+
+- The server is bundled into one ES module by Vite (already the UI's build
+  tool), with only Node.js's own modules left outside. The UI's files, the
+  sandbox's demo ruleset and the licenses are assets of the executable;
+  `web-files.ts` reads them from there, or from the source tree when hopdeck
+  runs from source.
+- It is built on Node.js 26, whose `--build-sea` writes the executable itself
+  and accepts an ES module with top-level await as the entry. Node.js 24 needs
+  `postject` from npm to inject the script; this way no package from npm goes
+  into the build. The official Node.js release is downloaded once and used
+  only if its SHA-256 is the one pinned in the script.
+- The executable prints the licenses of Node.js and of the packages bundled
+  into the UI (`--licenses`), as their licenses require; Vite collects the
+  latter.
+- The build ends by starting the executable and asking it for its UI and its
+  API. CI builds it on every push.
+
+Development and the tests stay on Node.js 24.
+
 ## Dependency policy
 
 The npm supply chain is a real risk for a tool with this access.
@@ -610,8 +633,8 @@ different ways of reading and changing a host.
   share this machine's kernel, so the kernels of Debian 11 (5.10) and RHEL 9
   (5.14) are untested; a virtual machine would tell.
 - **Windows as the admin machine:** its OpenSSH has no ControlMaster.
-- **Distribution:** npm package, Node single executable, distribution packages,
-  or a desktop wrapper.
+- **Distribution, beyond the executable:** distribution packages (.deb, .rpm),
+  macOS, Windows.
 - **Local state:** the host inventory format and how long snapshots are kept.
 - **Sandbox for users:** should the sandbox become a regular feature, and should
   it copy the interfaces of a real host (as dummy interfaces)?

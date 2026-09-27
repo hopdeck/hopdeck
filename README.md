@@ -24,6 +24,24 @@ Planned: OpenWrt through UCI, and more network tools, such as a topology view.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
 
+## One executable
+
+hopdeck can be built as a single file that runs without Node.js or anything
+else installed (Linux, x64 or arm64, glibc 2.28 or later: Debian 10, RHEL 8,
+Ubuntu 20.04 and newer):
+
+```sh
+pnpm build:sea
+dist/hopdeck-VERSION-linux-x64/hopdeck --sandbox
+```
+
+It holds the server, the web UI and Node.js itself (about 145 MB), and prints
+its version with `--version` and the licenses of all it contains with
+`--licenses`. On the machine it runs on, hopdeck still uses the system's `ssh`,
+`ssh-keygen`, `ssh-add` and `ssh-agent`, and for the sandbox `unshare`,
+`nsenter` and `nft`. CI builds one on every push (the `hopdeck-linux-x64`
+artifact of a run).
+
 ## Development
 
 You need Node.js 24 and pnpm 12 (`npm install -g pnpm@12`).

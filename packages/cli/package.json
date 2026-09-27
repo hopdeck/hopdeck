@@ -10,9 +10,13 @@
   },
   "scripts": {
     "dev": "node --watch src/main.ts --dev --sandbox",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "build:sea": "node scripts/build-sea.ts"
   },
   "dependencies": {
     "@hopdeck/server": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^8.3.0"
   }
 }

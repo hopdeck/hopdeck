@@ -9,6 +9,7 @@ import type { ExecOptions, ExecResult, Executor } from '@hopdeck/core';
 import { HostError } from './errors.ts';
 import { collectFacts } from './facts.ts';
 import { DEFAULT_TIMEOUT_MS, runProcess } from './process.ts';
+import { embedded } from '../web-files.ts';
 
 /**
  * A private user and network namespace with its own, initially empty, nftables
@@ -87,9 +88,13 @@ export class Sandbox {
 }
 
 /** A small but realistic firewall to explore in the sandbox. */
-export function demoRuleset(): Promise<string> {
-  return readFile(new URL('./sandbox-demo.nft', import.meta.url), 'utf8');
+export async function demoRuleset(): Promise<string> {
+  // Built into hopdeck as one executable, the file is an asset of it.
+  return embedded(DEMO_ASSET)?.toString('utf8') ?? readFile(new URL(`./${DEMO_ASSET}`, import.meta.url), 'utf8');
 }
+
+/** The demo ruleset's file, next to this one, and its name among the executable's assets. */
+export const DEMO_ASSET = 'sandbox-demo.nft';
 
 class SandboxExecutor implements Executor {
   readonly host = 'sandbox';

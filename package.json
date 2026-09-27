@@ -14,6 +14,7 @@
     "dev:test-hosts": "dev/test-host/panel.sh",
     "start": "node packages/cli/src/main.ts",
     "build": "pnpm -r build",
+    "build:sea": "pnpm --filter @hopdeck/cli build:sea",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "test:watch": "vitest",

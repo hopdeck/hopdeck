@@ -2,11 +2,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
+import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { demoRuleset, ensureControlDir, generateToken, HostManager, Sandbox, startServer } from '@hopdeck/server';
+import {
+  demoRuleset,
+  embedded,
+  ensureControlDir,
+  generateToken,
+  HostManager,
+  inExecutable,
+  Sandbox,
+  startServer,
+  webFilesIn,
+  webFilesInExecutable,
+} from '@hopdeck/server';
 import pkg from '../package.json' with { type: 'json' };
 
 // GPL-3.0's notice for programs that talk to a terminal; copies must keep it.
@@ -25,6 +37,8 @@ Options:
       --sandbox      add a sandbox host: a private network namespace with a
                      demo firewall, needs no root and never touches the real one
       --dev          serve the API only; the UI comes from the Vite dev server
+      --licenses     print the licenses of hopdeck and of what it contains
+  -v, --version      print the version
   -h, --help         show this help
 
 Environment:
@@ -39,12 +53,22 @@ const { values } = parseArgs({
     port: { type: 'string', short: 'p', default: '7400' },
     sandbox: { type: 'boolean', default: false },
     dev: { type: 'boolean', default: false },
+    licenses: { type: 'boolean', default: false },
+    version: { type: 'boolean', short: 'v', default: false },
     help: { type: 'boolean', short: 'h', default: false },
   },
 });
 
 if (values.help) {
   process.stdout.write(`${HELP}\n${NOTICE}`);
+  process.exit(0);
+}
+if (values.version) {
+  process.stdout.write(`${pkg.version}\n`);
+  process.exit(0);
+}
+if (values.licenses) {
+  process.stdout.write(await licenses());
   process.exit(0);
 }
 
@@ -86,7 +110,7 @@ const server = await startServer({
   port,
   token,
   extraOrigins: values.dev ? DEV_UI_ORIGINS : [],
-  webRoot: values.dev ? undefined : fileURLToPath(new URL('../../web/dist/', import.meta.url)),
+  web: values.dev ? undefined : inExecutable() ? webFilesInExecutable() : webFilesIn(fileURLToPath(new URL('../../web/dist/', import.meta.url))),
   version: pkg.version,
   hosts,
 });
@@ -102,6 +126,13 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 const uiOrigin = values.dev ? DEV_UI_ORIGINS[0] : `http://127.0.0.1:${server.port}`;
 process.stdout.write(`${NOTICE}\nhopdeck ${pkg.version} is running at:\n\n  ${uiOrigin}/#token=${token}\n\n`);
 if (sshConfig) process.stdout.write(`SSH hosts come from ${sshConfig} (HOPDECK_SSH_CONFIG), not ~/.ssh/config.\n\n`);
+
+/** GPL-3.0 for hopdeck, and in the executable, those of Node.js and of the UI's packages. */
+async function licenses(): Promise<string> {
+  const own = embedded('LICENSE')?.toString('utf8') ?? (await readFile(new URL('../../../LICENSE', import.meta.url), 'utf8'));
+  const others = embedded('THIRD-PARTY-LICENSES.md')?.toString('utf8');
+  return others === undefined ? own : `${own}\n\n${others}`;
+}
 
 function fail(message: string): never {
   process.stderr.write(`hopdeck: ${message}\n`);

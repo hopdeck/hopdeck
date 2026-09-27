@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { HostManager } from './hosts/manager.ts';
 import { startServer, type RunningServer } from './server.ts';
+import { webFilesIn } from './web-files.ts';
 
 describe('startServer', () => {
   let webRoot: string;
@@ -20,7 +21,7 @@ describe('startServer', () => {
     await writeFile(join(webRoot, 'index.html'), '<!doctype html><title>hopdeck</title>');
     await writeFile(join(webRoot, 'assets', 'app.js'), 'console.log(1)');
     const hosts = await HostManager.open({ configDir: join(webRoot, 'config'), controlDir: webRoot });
-    server = await startServer({ port: 0, token: 'test-token', webRoot, version: '0.0.0-test', hosts });
+    server = await startServer({ port: 0, token: 'test-token', web: webFilesIn(webRoot), version: '0.0.0-test', hosts });
     base = `http://127.0.0.1:${server.port}`;
   });
 
