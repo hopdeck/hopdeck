@@ -20,27 +20,37 @@ only easier:
 
 Planned: OpenWrt through UCI, and more network tools, such as a topology view.
 
-**Status:** early development, not released yet.
+**Status:** 0.1.0, the first release: usable, and early. See
+[CHANGELOG.md](CHANGELOG.md).
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
 
-## One executable
+## Install
 
-hopdeck can be built as a single file that runs without Node.js or anything
-else installed (Linux, x64 or arm64, glibc 2.28 or later: Debian 10, RHEL 8,
-Ubuntu 20.04 and newer):
+hopdeck is one executable file; it brings its own Node.js. It runs on Linux,
+x64 or arm64, with glibc 2.28 or later (Debian 10, RHEL 8, Ubuntu 20.04 and
+newer) and one system library, libatomic: many installs have it, minimal ones
+do not. Without it, starting hopdeck says `libatomic.so.1: cannot open shared
+object file`; install it with `apt install libatomic1` (Debian, Ubuntu) or
+`dnf install libatomic` (RHEL, AlmaLinux, Fedora).
+
+Download the archive for your machine and `SHA256SUMS` from the
+[releases](https://github.com/hopdeck/hopdeck/releases), then:
 
 ```sh
-pnpm build:sea
-dist/hopdeck-VERSION-linux-x64/hopdeck --sandbox
+sha256sum -c --ignore-missing SHA256SUMS
+tar xf hopdeck-0.1.0-linux-x64.tar.xz
+hopdeck-0.1.0-linux-x64/hopdeck
 ```
 
-It holds the server, the web UI and Node.js itself (about 145 MB), and prints
-its version with `--version` and the licenses of all it contains with
-`--licenses`. On the machine it runs on, hopdeck still uses the system's `ssh`,
-`ssh-keygen`, `ssh-add` and `ssh-agent`, and for the sandbox `unshare`,
-`nsenter` and `nft`. CI builds one on every push (the `hopdeck-linux-x64`
-artifact of a run).
+It prints the address of the panel; open it in a browser on the same
+machine. `hopdeck --sandbox` adds a host with a demo firewall to try things
+on, `hopdeck --help` lists the options, and `hopdeck --licenses` the licenses
+of all it contains.
+
+For SSH hosts it uses the system's OpenSSH client (`ssh`, `ssh-keygen`,
+`ssh-add`, `ssh-agent`) and your `~/.ssh/config`. A managed host needs `nft`,
+and root or sudo.
 
 ## Development
 
@@ -57,6 +67,12 @@ pnpm build && pnpm start   # serve the built UI from the backend
 `hopdeck --sandbox` (used by `pnpm dev`) adds a sandbox host: a private network
 namespace with a demo firewall. It needs no root and never touches the real
 firewall, so everything can be tried safely.
+
+`pnpm build:sea` builds the executable for this machine into `dist/`
+(`--target linux-x64 --target linux-arm64` for both, `--archive` to pack them
+with their sums). The build starts each executable and checks its UI, API and
+licenses; for another architecture it needs QEMU (`--qemu`). CI builds and
+checks both on every push, and a tag `vVERSION` makes a release of them.
 
 ### Test hosts
 

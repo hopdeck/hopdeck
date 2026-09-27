@@ -50,11 +50,12 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
-  # hopdeck as one executable file, started and asked for its UI and API by
-  # the build itself; kept for two weeks to try out.
+  # hopdeck as one executable file for x64 and arm64, each started and asked
+  # for its UI, API and licenses by the build itself, arm64 under QEMU; kept
+  # for two weeks to try out.
   executable:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -62,12 +63,18 @@ jobs:
           node-version: 24
       - name: Install pnpm, the version package.json names
         run: npm install -g "$(node -p 'require("./package.json").packageManager')"
+      - name: Install QEMU and arm64's libraries, to run the arm64 executable
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-user-static libc6-arm64-cross libstdc++6-arm64-cross libatomic1-arm64-cross
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build:sea
+      - run: pnpm build:sea --target linux-x64 --target linux-arm64 --archive --check-all --qemu
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: hopdeck-linux-x64
-          path: dist/hopdeck-*-linux-x64/
+          name: hopdeck-linux
+          path: |
+            dist/*.tar.xz
+            dist/SHA256SUMS
           retention-days: 14
 
   # Which test systems this run tests: Debian 13 on pushes, all on Mondays,

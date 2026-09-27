@@ -112,8 +112,13 @@ export interface SshKeyInfo {
 
 /** The keys for one host, and which agent holds unlocked ones. */
 export interface SshKeysView {
-  /** session: the agent of the user's login session; hopdeck: hopdeck's own, gone when hopdeck stops. */
-  agent: 'session' | 'hopdeck';
+  /**
+   * session: the agent of the user's login session; hopdeck: hopdeck's own,
+   * gone when hopdeck stops; none: neither, so keys cannot be unlocked here.
+   */
+  agent: 'session' | 'hopdeck' | 'none';
+  /** Only for "none": why hopdeck's own agent did not start, the raw message. */
+  agentError?: string;
   keys: SshKeyInfo[];
 }
 

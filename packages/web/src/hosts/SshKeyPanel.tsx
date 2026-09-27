@@ -75,7 +75,14 @@ export function SshKeyPanel({ hostId, onUnlocked }: { hostId: string; onUnlocked
               <Key key={key.file} sshKey={key} view={view} path={path} onUnlocked={onUnlocked} />
             ))}
           </ul>
-          <p className={styles.agent}>{t(view.agent === 'session' ? 'sshKeys.agent.session' : 'sshKeys.agent.hopdeck')}</p>
+          {view.agent === 'none' ? (
+            <div>
+              <p className={styles.text}>{t('sshKeys.agent.none')}</p>
+              {view.agentError !== undefined && <pre className="details">{view.agentError}</pre>}
+            </div>
+          ) : (
+            <p className={styles.agent}>{t(view.agent === 'session' ? 'sshKeys.agent.session' : 'sshKeys.agent.hopdeck')}</p>
+          )}
           <KeySetup path={path} keys={view.keys} onWorks={onUnlocked} />
         </>
       )}
@@ -125,7 +132,7 @@ function Key({ sshKey, view, path, onUnlocked }: { sshKey: SshKeyInfo; view: Ssh
         {sshKey.comment !== '' && <span className={styles.comment}>{sshKey.comment}</span>}
         <span className={`${styles.state} ${styles[`state-${sshKey.loaded ? 'loaded' : sshKey.encrypted ? 'locked' : 'open'}`]}`}>{t(state)}</span>
       </div>
-      {sshKey.encrypted && !sshKey.loaded && (
+      {sshKey.encrypted && !sshKey.loaded && view.agent !== 'none' && (
         <form className={styles.unlock} onSubmit={(event) => void unlock(event)}>
           <label className={styles.field}>
             <span>{t('sshKeys.passphrase')}</span>

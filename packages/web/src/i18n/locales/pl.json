@@ -707,6 +707,7 @@
   "sshKeys.unlock": "Odblokuj i połącz",
   "sshKeys.agent.session": "Odblokowane klucze trafiają do ssh-agenta twojej sesji, więc ssh w terminalu też może ich używać.",
   "sshKeys.agent.hopdeck": "W twojej sesji nie działa ssh-agent, więc hopdeck uruchamia własnego; klucze, które trzyma, znikają po zamknięciu hopdecka.",
+  "sshKeys.agent.none": "W twojej sesji nie działa ssh-agent, a hopdeck nie mógł uruchomić własnego, więc klucza z hasłem nie da się tu odblokować. Zainstaluj ssh-agent z klienta OpenSSH albo odblokuj klucz w terminalu (ssh-add) przed uruchomieniem hopdecka.",
   "error.wrong-passphrase.title": "To hasło nie otwiera klucza",
   "error.wrong-passphrase.hint": "Nic nie trafiło do agenta. Spróbuj jeszcze raz.",
   "keySetup.title": "Klucza jeszcze nie ma na hoście?",

@@ -6,7 +6,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { HostError } from './errors.ts';
 import { runProcess } from './process.ts';
 
@@ -31,17 +31,27 @@ export class SshKeys {
   readonly #options: SshKeysOptions;
   #socket: string | undefined;
   #kind: SshKeysView['agent'] = 'session';
+  /** Why there is no agent, when there is none. */
+  #unavailable: string | undefined;
   #agent: ChildProcessWithoutNullStreams | undefined;
 
   constructor(options: SshKeysOptions) {
     this.#options = options;
   }
 
-  /** Finds the session's agent, or starts hopdeck's own. */
+  /**
+   * Finds the session's agent, or starts hopdeck's own. Without either,
+   * hopdeck still runs: keys without a passphrase work, and unlocking says why
+   * it cannot.
+   */
   async start(): Promise<void> {
     const session = process.env['SSH_AUTH_SOCK'];
     if (this.#options.sessionAgent !== false && session && (await reachable(session))) {
       this.#socket = session;
+      return;
+    }
+    if (!onPath('ssh-agent')) {
+      this.#none('ssh-agent is not installed (it comes with the OpenSSH client)');
       return;
     }
     // One per hopdeck process: another one, say a second panel, has its own.
@@ -52,9 +62,19 @@ export class SshKeys {
     const keeper = spawn('sh', ['-c', 'ssh-agent -D -a "$1" >/dev/null 2>&1 & agent=$!; cat >/dev/null; kill "$agent"', 'sh', socket], { stdio: 'pipe' });
     this.#agent = keeper;
     for (let attempt = 0; attempt < 50 && !existsSync(socket); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 50));
-    if (!existsSync(socket)) throw new HostError('spawn-failed', `ssh-agent did not start at ${socket}`);
+    if (!existsSync(socket)) {
+      keeper.stdin.end();
+      this.#agent = undefined;
+      this.#none(`ssh-agent did not start at ${socket}`);
+      return;
+    }
     this.#socket = socket;
     this.#kind = 'hopdeck';
+  }
+
+  #none(reason: string): void {
+    this.#kind = 'none';
+    this.#unavailable = reason;
   }
 
   /** What ssh needs to use this agent. */
@@ -65,11 +85,11 @@ export class SshKeys {
   /** The keys ssh would offer the destination, with what they need. */
   async list(destination: string): Promise<SshKeysView> {
     const files = await this.#identityFiles(destination);
-    const loaded = await this.#loaded();
+    const loaded = this.#kind === 'none' ? new Set<string>() : await this.#loaded();
     const keys: SshKeyInfo[] = [];
     for (const file of files) keys.push({ file, ...(await describe(file)), loaded: false });
     for (const key of keys) key.loaded = loaded.has(key.fingerprint);
-    return { agent: this.#kind, keys };
+    return { agent: this.#kind, ...(this.#unavailable !== undefined && { agentError: this.#unavailable }), keys };
   }
 
   /**
@@ -78,6 +98,7 @@ export class SshKeys {
    */
   async unlock(destination: string, file: string, passphrase: string, seconds: number | undefined): Promise<SshKeysView> {
     await this.#offered(destination, file);
+    if (this.#unavailable !== undefined) throw new HostError('spawn-failed', `no ssh-agent can hold the key: ${this.#unavailable}`);
     if (seconds !== undefined && !(Number.isInteger(seconds) && seconds > 0 && seconds <= MAX_KEY_LIFETIME)) {
       throw new HostError('command-failed', `a key's lifetime must be 1 to ${MAX_KEY_LIFETIME} seconds`);
     }
@@ -114,8 +135,10 @@ export class SshKeys {
     const key = { file, ...(await describe(file)), loaded: false };
     const candidates: string[] = [];
     if (existsSync(`${file}.pub`)) candidates.push((await readFile(`${file}.pub`, 'utf8')).trim());
-    const listed = await runProcess('ssh-add', ['-L'], { timeoutMs: 10_000, env: this.env });
-    if (listed.exitCode === 0) candidates.push(...listed.stdout.split('\n').filter(Boolean));
+    if (this.#kind !== 'none') {
+      const listed = await runProcess('ssh-add', ['-L'], { timeoutMs: 10_000, env: this.env });
+      if (listed.exitCode === 0) candidates.push(...listed.stdout.split('\n').filter(Boolean));
+    }
     const opened = await runProcess('ssh-keygen', ['-y', '-P', '', '-f', file], { timeoutMs: 5_000 });
     if (opened.exitCode === 0) candidates.push(opened.stdout.trim());
     for (const candidate of candidates) {
@@ -158,6 +181,11 @@ export class SshKeys {
     const listed = await runProcess('ssh-add', ['-l'], { timeoutMs: 10_000, env: this.env });
     return new Set(listed.stdout.split('\n').map((line) => line.split(' ')[1] ?? '').filter(Boolean));
   }
+}
+
+/** Whether a program is in one of PATH's directories. */
+function onPath(program: string): boolean {
+  return (process.env['PATH'] ?? '').split(delimiter).some((dir) => dir !== '' && existsSync(join(dir, program)));
 }
 
 async function reachable(socket: string): Promise<boolean> {

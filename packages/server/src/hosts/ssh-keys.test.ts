@@ -56,6 +56,22 @@ describe('SshKeys with hopdeck\'s own agent', () => {
     expect(listed).toContain('locked key');
   });
 
+  it('runs without an agent when there is none to be had, and says why unlocking cannot work', async () => {
+    const path = process.env['PATH'];
+    // A PATH without ssh-agent, as on a system with no OpenSSH client.
+    process.env['PATH'] = join(dir, 'empty');
+    const without = new SshKeys({ configFile: join(dir, 'config'), runtimeDir: dir, sessionAgent: false });
+    try {
+      await without.start();
+    } finally {
+      process.env['PATH'] = path;
+    }
+    expect(without.env).toEqual({});
+    expect(await without.list('fw1')).toMatchObject({ agent: 'none', agentError: expect.stringMatching(/ssh-agent is not installed/) });
+    await expect(without.unlock('fw1', join(dir, 'locked'), 'right passphrase', 60)).rejects.toMatchObject({ code: 'spawn-failed' });
+    await without.close();
+  });
+
   it('refuses a key ssh would not offer the host, and a lifetime out of range', async () => {
     await expect(keys.unlock('fw1', join(dir, 'other'), '', 60)).rejects.toThrow(/not a key ssh offers fw1/);
     await expect(keys.unlock('fw1', join(dir, 'open'), '', 0)).rejects.toThrow(/lifetime/);

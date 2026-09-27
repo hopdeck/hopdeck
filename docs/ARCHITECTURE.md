@@ -455,8 +455,15 @@ hopdeck ships as one executable file, a Node.js single executable application
 - The executable prints the licenses of Node.js and of the packages bundled
   into the UI (`--licenses`), as their licenses require; Vite collects the
   latter.
-- The build ends by starting the executable and asking it for its UI and its
-  API. CI builds it on every push.
+- The cost of Node.js 26: its official Linux builds need libatomic, which
+  minimal systems lack; Node.js 24's do not. One common system library for
+  users was judged better than a tool from npm writing into the executable.
+- It is built for Linux x64 and arm64 on any machine: `--build-sea` takes the
+  target's Node.js as the executable to write into.
+- The build ends by starting the executable and asking it for its UI, API and
+  licenses, another architecture's under QEMU. CI builds and checks both on
+  every push; a tag `vVERSION` publishes them as a GitHub release
+  ([`release.yml`](../.github/workflows/release.yml)).
 
 Development and the tests stay on Node.js 24.
 

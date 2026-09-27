@@ -59,18 +59,9 @@ const { values } = parseArgs({
   },
 });
 
-if (values.help) {
-  process.stdout.write(`${HELP}\n${NOTICE}`);
-  process.exit(0);
-}
-if (values.version) {
-  process.stdout.write(`${pkg.version}\n`);
-  process.exit(0);
-}
-if (values.licenses) {
-  process.stdout.write(await licenses());
-  process.exit(0);
-}
+if (values.help) await print(`${HELP}\n${NOTICE}`);
+if (values.version) await print(`${pkg.version}\n`);
+if (values.licenses) await print(await licenses());
 
 const port = Number(values.port);
 if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -126,6 +117,15 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 const uiOrigin = values.dev ? DEV_UI_ORIGINS[0] : `http://127.0.0.1:${server.port}`;
 process.stdout.write(`${NOTICE}\nhopdeck ${pkg.version} is running at:\n\n  ${uiOrigin}/#token=${token}\n\n`);
 if (sshConfig) process.stdout.write(`SSH hosts come from ${sshConfig} (HOPDECK_SSH_CONFIG), not ~/.ssh/config.\n\n`);
+
+/**
+ * Prints and exits once all of it is written: into a pipe, exiting at once
+ * would cut it off after 64 KiB, and the licenses are longer.
+ */
+async function print(text: string): Promise<never> {
+  await new Promise<void>((resolve, reject) => process.stdout.write(text, (error) => (error ? reject(error) : resolve())));
+  process.exit(0);
+}
 
 /** GPL-3.0 for hopdeck, and in the executable, those of Node.js and of the UI's packages. */
 async function licenses(): Promise<string> {
