@@ -12,6 +12,8 @@ import {
   refreshUntouched,
   replaceTableScript,
   restoreElementsScript,
+  ruleCommands,
+  stripHandles,
   tableOwner,
   tableText,
   withManagedComment,
@@ -72,10 +74,14 @@ export interface CurrentTable {
   listing: Listing;
   /** `nft list table` output: loadable nft input without handles. */
   text: string;
+  /** The same with handles, as `nft -a list table` prints it. */
+  annotated: string;
 }
 
 interface Deployment {
   view: DeploymentView;
+  /** Tables changed rule by rule, as they were with handles: those handles must still be there at apply. */
+  annotated: Map<string, string>;
   staging: Staging;
   createdAt: number;
   /** How the watchdog was started, to know what "unavailable" meant. */
@@ -152,22 +158,40 @@ export class Deployments {
     if (changes.length === 0) throw new HostError('invalid-definition', 'no changes');
     const seen = new Set<string>();
     const tables: DeploymentTable[] = [];
+    const annotated = new Map<string, string>();
     for (const change of changes) {
       const label = `${change.family} ${change.table}`;
       if (seen.has(label)) throw new HostError('invalid-definition', `${label} is changed twice`);
       seen.add(label);
-      tables.push(planTable(change, await readTable(target.access, change.family, change.table), target.manualOverride));
+      const current = await readTable(target.access, change.family, change.table);
+      const table = planTable(change, current, target.manualOverride);
+      if (table.inPlace !== undefined) annotated.set(label, current!.annotated);
+      tables.push(table);
     }
 
     const staging = await makeStaging(target);
     const directory = staging.dir;
-    const change = tables.map((table) => table.script).join('');
     const rollback = tables.map((table) => table.rollback).join('');
-    await stageFile(target, staging, 'change.nft', change);
     await stageFile(target, staging, 'rollback.nft', rollback);
     await stageFile(target, staging, 'watchdog.sh', WATCHDOG);
 
-    const checkChange = await runNft(target.access, ['-c', '-f', `${directory}/change.nft`]);
+    // nft checks every definition whole first, so its messages name lines of
+    // the definitions, which is what the editor shows.
+    const whole = (table: DeploymentTable) => (table.inPlace === undefined ? table.script : replaceTableScript(table.family, table.name, table.after));
+    let checkChange = await this.#check(target, staging, 'change.nft', tables.map(whole).join(''));
+    if (checkChange.exitCode === 0 && annotated.size > 0) {
+      const byRule = await this.#check(target, staging, 'change.nft', tables.map((table) => table.script).join(''));
+      if (byRule.exitCode !== 0) {
+        // Valid whole but not rule by rule, e.g. the table changed a moment ago: replace it whole after all.
+        for (const table of tables) {
+          if (table.inPlace === undefined) continue;
+          table.script = whole(table);
+          delete table.inPlace;
+        }
+        annotated.clear();
+        checkChange = await this.#check(target, staging, 'change.nft', tables.map(whole).join(''));
+      }
+    }
     const checkRollback = await runNft(target.access, ['-c', '-f', `${directory}/rollback.nft`]);
     const validation =
       checkChange.exitCode !== 0
@@ -193,8 +217,14 @@ export class Deployments {
       manualOverride: target.manualOverride,
       ...(options.restoredFrom !== undefined && { restoredFrom: options.restoredFrom }),
     };
-    this.#deployments.set(view.id, { view, staging, createdAt: Date.now(), watchdogCommand: watchdog?.argv });
+    this.#deployments.set(view.id, { view, annotated, staging, createdAt: Date.now(), watchdogCommand: watchdog?.argv });
     return view;
+  }
+
+  /** Stages nft input under `name` and checks it with `nft -c`. */
+  async #check(target: DeployTarget, staging: Staging, name: string, script: string) {
+    await stageFile(target, staging, name, script);
+    return runNft(target.access, ['-c', '-f', `${staging.dir}/${name}`]);
   }
 
   /**
@@ -217,10 +247,14 @@ export class Deployments {
       const now = await readTable(target.access, table.family, table.name);
       // Elements change in place and may come and go on their own (timeouts,
       // rules that add them); only the set's declaration has to stay the same.
+      // Rule by rule, the handles the commands name must be the same too.
+      const annotated = deployment.annotated.get(`${table.family} ${table.name}`);
       const unchanged =
-        table.set === undefined
-          ? comparable(now?.text) === comparable(table.before)
-          : declaration(now?.text, table) === declaration(table.before, table) && declaration(table.before, table) !== undefined;
+        table.set !== undefined
+          ? declaration(now?.text, table) === declaration(table.before, table) && declaration(table.before, table) !== undefined
+          : annotated !== undefined
+            ? comparable(now?.annotated) === comparable(annotated)
+            : comparable(now?.text) === comparable(table.before);
       if (!unchanged) {
         throw new HostError('ruleset-changed', `${table.family} ${table.name} changed after this plan was made; prepare it again`);
       }
@@ -402,6 +436,8 @@ export function planTable(change: TableChange, current: CurrentTable | undefined
       // Tables hopdeck creates or manages keep the marker, so it cannot be lost by accident.
       const after = current === undefined || managed ? withManagedComment(definition) : definition;
       const before = current?.text;
+      const byRule = current === undefined ? undefined : ruleCommands(family, name, current.annotated, after);
+      const { script, rollback } = scripts(family, name, before, after);
       return {
         family,
         name,
@@ -409,7 +445,9 @@ export function planTable(change: TableChange, current: CurrentTable | undefined
         before,
         after,
         diff: diffLines(before ?? '', after),
-        ...scripts(family, name, before, after),
+        script: byRule?.script ?? script,
+        rollback,
+        ...(byRule !== undefined && { inPlace: { added: byRule.added, removed: byRule.removed, replaced: byRule.replaced } }),
       };
     }
     case 'delete': {
@@ -517,11 +555,15 @@ export async function readTable(access: NftAccess, family: Family, name: string)
   if (json.exitCode !== 0) throw new HostError('command-failed', json.stderr.trim() || `nft exited with code ${json.exitCode}`);
   const node = parseRuleset(JSON.parse(json.stdout)).tables.find((table) => table.table.family === family && table.table.name === name);
   if (node === undefined) return undefined;
-  const listing = await runNft(access, ['list', 'ruleset']);
+  const listing = await runNft(access, ['-a', 'list', 'ruleset']);
   if (listing.exitCode !== 0) throw new HostError('command-failed', listing.stderr.trim() || `nft exited with code ${listing.exitCode}`);
-  const text = tableText(listing.stdout, family, name);
+  // The same lines with and without handles: find the table in one, cut it out of both.
+  const plain = stripHandles(listing.stdout);
+  const text = tableText(plain, family, name);
   if (text === undefined) throw new HostError('command-failed', `nft printed no table ${family} ${name}, though its JSON has one`);
-  return { node, listing: parseListing(text), text };
+  const start = plain.split('\n').indexOf(text.split('\n')[0]!);
+  const annotated = `${listing.stdout.split('\n').slice(start, start + text.split('\n').length - 1).join('\n')}\n`;
+  return { node, listing: parseListing(annotated), text, annotated };
 }
 
 /**

@@ -619,5 +619,14 @@
   "error.version-not-found.hint": "It may have been removed to keep the history within its size limit.",
   "table.resize": "Width of the {{column}} column",
   "table.fitted": "fits the content",
-  "table.resizeHint": "Drag to change the width, or use the arrow keys. Double-click to fit the content again."
+  "table.resizeHint": "Drag to change the width, or use the arrow keys. Double-click to fit the content again.",
+  "deploy.inPlace": "Rule by rule: {{changes}}. The other rules keep their handles, counters and limits; a rollback puts back the whole table.",
+  "deploy.inPlace.added_one": "{{count}} rule added",
+  "deploy.inPlace.added_other": "{{count}} rules added",
+  "deploy.inPlace.replaced_one": "{{count}} rule changed",
+  "deploy.inPlace.replaced_other": "{{count}} rules changed",
+  "deploy.inPlace.removed_one": "{{count}} rule removed",
+  "deploy.inPlace.removed_other": "{{count}} rules removed",
+  "deploy.inPlace.nothing": "No rule changes; the table stays as it is.",
+  "deploy.wholeTable": "The whole table is replaced in one transaction, because more than its rules changes (a chain, its policy, a set or the table itself). Rules copied unchanged keep their counter values as read; changed rules count from zero."
 }

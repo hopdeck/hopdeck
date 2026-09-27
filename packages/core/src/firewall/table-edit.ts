@@ -38,8 +38,23 @@ export interface EditableTable {
 const HANDLE = / # handle \d+$/;
 const BLOCK = /^\t(set|map|flowtable|counter|quota|limit|ct helper|ct timeout|ct expectation|synproxy|secmark|tunnel) (.+?) \{(?: # handle \d+)?$/;
 
+/** What nft prints in a chain before its rules, when there are no handles to tell rules apart. */
+const CHAIN_HEADER = /^\t\t(type |comment "|devices = |policy |flags )/;
+
 /** Reads a table out of `nft -a list ruleset` (or `nft -a list table`); undefined if it is not there. */
 export function editableTable(listing: string, family: Family, name: string): EditableTable | undefined {
+  return parseTable(listing, family, name, true);
+}
+
+/**
+ * Reads a table definition without handles, as an editor sends it: in a chain,
+ * the lines nft prints before rules are its header, every other line a rule.
+ */
+export function definitionTable(definition: string, family: Family, name: string): EditableTable | undefined {
+  return parseTable(definition, family, name, false);
+}
+
+function parseTable(listing: string, family: Family, name: string, handles: boolean): EditableTable | undefined {
   const lines = listing.split('\n');
   const opening = `table ${family} ${nftName(name)} {`;
   const start = lines.findIndex((line) => line.replace(HANDLE, '') === opening);
@@ -72,7 +87,8 @@ export function editableTable(listing: string, family: Family, name: string): Ed
       }
       const handle = / # handle (\d+)$/.exec(line);
       if (handle !== null) chain.rules.push({ handle: Number(handle[1]), text: line.replace(HANDLE, '').slice(2) });
-      else chain.header.push(line);
+      else if (handles || (chain.rules.length === 0 && CHAIN_HEADER.test(line))) chain.header.push(line);
+      else chain.rules.push({ handle: undefined, text: line.slice(2) });
       continue;
     }
     const chainStart = /^\tchain (.+?) \{(?: # handle \d+)?$/.exec(line);

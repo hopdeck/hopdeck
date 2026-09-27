@@ -659,5 +659,20 @@
   "error.version-not-found.hint": "Mogła zostać usunięta, żeby historia zmieściła się w limicie rozmiaru.",
   "table.resize": "Szerokość kolumny {{column}}",
   "table.fitted": "dopasowana do treści",
-  "table.resizeHint": "Przeciągnij albo użyj strzałek, żeby zmienić szerokość. Dwuklik dopasowuje ją z powrotem do treści."
+  "table.resizeHint": "Przeciągnij albo użyj strzałek, żeby zmienić szerokość. Dwuklik dopasowuje ją z powrotem do treści.",
+  "deploy.inPlace": "Reguła po regule: {{changes}}. Pozostałe reguły zachowują uchwyty, liczniki i stan limitów; wycofanie przywraca całą tabelę.",
+  "deploy.inPlace.added_one": "{{count}} reguła dodana",
+  "deploy.inPlace.added_few": "{{count}} reguły dodane",
+  "deploy.inPlace.added_many": "{{count}} reguł dodanych",
+  "deploy.inPlace.added_other": "{{count}} reguły dodanej",
+  "deploy.inPlace.replaced_one": "{{count}} reguła zmieniona",
+  "deploy.inPlace.replaced_few": "{{count}} reguły zmienione",
+  "deploy.inPlace.replaced_many": "{{count}} reguł zmienionych",
+  "deploy.inPlace.replaced_other": "{{count}} reguły zmienionej",
+  "deploy.inPlace.removed_one": "{{count}} reguła usunięta",
+  "deploy.inPlace.removed_few": "{{count}} reguły usunięte",
+  "deploy.inPlace.removed_many": "{{count}} reguł usuniętych",
+  "deploy.inPlace.removed_other": "{{count}} reguły usuniętej",
+  "deploy.inPlace.nothing": "Żadna reguła się nie zmienia; tabela zostaje bez zmian.",
+  "deploy.wholeTable": "Cała tabela jest podmieniana w jednej transakcji, bo zmienia się coś więcej niż reguły (łańcuch, jego polityka, zestaw albo sama tabela). Reguły przepisane bez zmian zachowują odczytane wartości liczników; zmienione liczą od zera."
 }

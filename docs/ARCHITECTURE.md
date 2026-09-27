@@ -199,8 +199,9 @@ disappears with it.
   names, or a known tool's table name (firewalld, fail2ban, libvirt, ...).
 - Tables written by iptables-nft contain `xt` expressions that nft cannot
   recreate. They are always read-only.
-- There are two ways to change a managed table:
-  - **Replace the whole table** in one transaction. Both editors do this.
+- There are three ways to change a managed table:
+  - **Replace the whole table** in one transaction, when more than rules
+    changes.
     Lines the editor did not touch go back exactly as nft printed them, so
     unchanged rules keep their counter values (`counter packets N bytes M`);
     edited rules start counting from zero. The editor also sends the table as
@@ -213,8 +214,19 @@ disappears with it.
     the elements as nft listed them, with timeouts, expiry, counters and
     comments. Between review and apply only the set's declaration must stay
     the same, since elements come and go on their own.
-  - **Targeted rule changes by handle** (later), for rules whose counters
-    must survive an edit of the table.
+  - **Rule by rule** (`ruleCommands` in core): when an edited table differs
+    from the host's only in rules (chains, their type and policy, sets, maps,
+    objects and the table's comment all the same, counter values aside), the
+    change is planned as commands on those rules by handle: `replace rule`
+    where a rule changed in its place, `delete rule`, `insert rule` before the
+    next unchanged rule and `add rule` at the end. The rules left alone keep
+    their handles, counters and limit state. nft checks the whole definition
+    first, so its messages still name lines the editor shows, then the
+    commands; if only the commands fail (the table changed a moment ago), the
+    table is replaced whole after all. At apply the handles must still be
+    those of the plan. The rollback puts back the whole table, as for a
+    replacement. The review says which way a table is changed, and shows the
+    commands.
 
 ## Applying changes
 
@@ -460,8 +472,8 @@ The npm supply chain is a real risk for a tool with this access.
 3. **Structured rule forms** and live set/map element editing. This is where
    "easier" starts. Done so far: the visual rules grid and the rule dialog,
    creating tables (empty, or from a host firewall template), adding or
-   deleting chains, sets and maps, and editing set and map elements in place.
-   Next: targeted rule changes.
+   deleting chains, sets and maps, editing set and map elements in place, and
+   changing rules one by one (done, 2026-09-27).
 4. **Monitoring** (done, 2026-09-26): packet tracing, live counters and
    noticing changes made on the host by others.
 5. **History** (done, 2026-09-27): versions kept on each host with author,

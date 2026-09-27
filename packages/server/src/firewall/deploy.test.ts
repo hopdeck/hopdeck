@@ -9,10 +9,11 @@ import { FakeExecutor } from '../testing/fake-executor.ts';
 
 const MINE = 'table inet mine {\n\tchain input {\n\t\ttype filter hook input priority filter; policy accept;\n\t}\n}\n';
 
-function current(text: string, comment?: string): CurrentTable {
+/** A table as readTable() gives it; `annotated` is the listing with handles, when the test needs one. */
+function current(text: string, comment?: string, annotated = text): CurrentTable {
   const table = { family: 'inet' as const, name: 'mine', handle: 1, ...(comment !== undefined && { comment }) };
   const node = parseRuleset({ nftables: [{ table }] }).tables[0]!;
-  return { node, listing: parseListing(text), text };
+  return { node, listing: parseListing(annotated), text, annotated };
 }
 
 describe('planTable', () => {
@@ -28,6 +29,18 @@ describe('planTable', () => {
     expect(planTable(replace, current(MINE), true).after).toBe(MINE);
     expect(planTable(replace, current(MINE, 'managed by hopdeck'), false).after).toContain('comment "managed by hopdeck"');
     expect(planTable(replace, undefined, false)).toMatchObject({ action: 'create', before: undefined });
+  });
+
+  it('changes only the rules that differ when nothing else does, and still rolls back the whole table', () => {
+    const text = 'table inet mine {\n\tcomment "managed by hopdeck"\n\tchain input {\n\t\ttype filter hook input priority filter; policy accept;\n\t\ttcp dport 22 accept\n\t}\n}\n';
+    const annotated = text.replace('mine {', 'mine { # handle 1').replace('input {', 'input { # handle 2').replace('dport 22 accept', 'dport 22 accept # handle 3');
+    const definition = text.replace('dport 22 accept', 'dport 22 accept\n\t\ttcp dport 80 accept');
+    const plan = planTable({ kind: 'replace', family: 'inet', table: 'mine', definition }, current(text, 'managed by hopdeck', annotated), false);
+    expect(plan).toMatchObject({ action: 'replace', inPlace: { added: 1, removed: 0, replaced: 0 }, script: 'add rule inet mine input tcp dport 80 accept\n' });
+    expect(plan.rollback).toBe(`table inet mine {}\ndelete table inet mine\n${text}`);
+    const policy = planTable({ kind: 'replace', family: 'inet', table: 'mine', definition: definition.replace('policy accept', 'policy drop') }, current(text, 'managed by hopdeck', annotated), false);
+    expect(policy.inPlace).toBeUndefined();
+    expect(policy.script).toContain('delete table inet mine');
   });
 
   it('changes elements of a set in place, and can put them back', () => {
@@ -168,6 +181,27 @@ describe.skipIf(NFT === undefined || !USERNS)('Deployments in a sandbox', { time
     expect(await table()).toContain('tcp dport 22 accept');
     expect(await deployments.rollback(plan.id, target)).toMatchObject({ state: 'rolled-back', outcome: { reason: 'user' } });
     expect(await table()).toBe(before);
+  });
+
+  it('changes rule by rule: the rules left alone keep their handles and counters', async () => {
+    const rules = 'table inet rules {\n\tcomment "managed by hopdeck"\n\tchain input {\n\t\ttype filter hook input priority 10; policy accept;\n\t\ticmp type echo-request counter accept\n\t\ttcp dport 22 accept\n\t\ttcp dport 80 accept\n\t}\n}\n';
+    await executor.exec([nft, '-f', '-'], { stdin: rules });
+    await executor.exec(['ping', '-c', '2', '-W', '1', '127.0.0.1']);
+    const before = (await readTable(target.access, 'inet', 'rules'))!;
+    const counted = / {2}icmp type echo-request counter packets (\d+) bytes \d+ accept # handle (\d+)/.exec(before.annotated.replace(/\t/g, '  '));
+    expect(Number(counted?.[1])).toBeGreaterThan(0);
+
+    const definition = before.text.replace('tcp dport 80 accept', 'tcp dport 443 accept').replace('tcp dport 22 accept', 'tcp dport 22 accept\n\t\ttcp dport 8080 accept');
+    const plan = await deployments.prepare(target, [{ kind: 'replace', family: 'inet', table: 'rules', definition }]);
+    expect(plan.tables[0]).toMatchObject({ action: 'replace', inPlace: { added: 1, removed: 0, replaced: 1 } });
+    await deployments.apply(plan.id, target);
+    await deployments.confirm(plan.id, target);
+
+    const after = (await readTable(target.access, 'inet', 'rules'))!;
+    // The counting rule was left alone: same handle, and it went on counting.
+    expect(after.annotated).toMatch(new RegExp(`icmp type echo-request counter packets ${counted![1]} bytes \\d+ accept # handle ${counted![2]}`));
+    expect(after.text).toContain('tcp dport 22 accept\n\t\ttcp dport 8080 accept\n\t\ttcp dport 443 accept');
+    await executor.exec([nft, 'delete', 'table', 'inet', 'rules']);
   });
 
   it('rolls back on its own when nobody confirms', async () => {

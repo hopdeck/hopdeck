@@ -148,6 +148,12 @@ export interface DeploymentTable {
   /** The nft input that makes the change, and the one that undoes it. */
   script: string;
   rollback: string;
+  /**
+   * The change touches only rules, so it is made rule by rule: the other rules
+   * keep their handles, counters and limit state. The rollback still puts the
+   * whole table back. Absent when the table is replaced whole.
+   */
+  inPlace?: { added: number; removed: number; replaced: number };
 }
 
 export interface DeploymentView {

@@ -141,6 +141,8 @@ export function DeploymentDialog({ hostId, hostName, changes, restoredFrom, onCl
                   </span>
                 </h3>
                 <DiffView diff={table.diff} />
+                {table.inPlace !== undefined && <InPlace table={table} />}
+                {table.action === 'replace' && table.inPlace === undefined && <p className={styles.method}>{t('deploy.wholeTable')}</p>}
                 {table.action === 'elements' && (
                   <details className={styles.commands}>
                     <summary>{t('deploy.commands')}</summary>
@@ -258,6 +260,27 @@ function Persisted({ result }: { result: NonNullable<DeploymentView['persisted']
           <pre className="details">{result.problem.detail}</pre>
         </Callout>
       )}
+    </>
+  );
+}
+
+/** A table changed rule by rule: what changes, and the commands that do it. */
+function InPlace({ table }: { table: DeploymentView['tables'][number] }) {
+  const { t } = useI18n();
+  const { added, removed, replaced } = table.inPlace!;
+  const changes = [
+    ...(added > 0 ? [t('deploy.inPlace.added', { count: added })] : []),
+    ...(replaced > 0 ? [t('deploy.inPlace.replaced', { count: replaced })] : []),
+    ...(removed > 0 ? [t('deploy.inPlace.removed', { count: removed })] : []),
+  ];
+  if (changes.length === 0) return <p className={styles.method}>{t('deploy.inPlace.nothing')}</p>;
+  return (
+    <>
+      <p className={styles.method}>{t('deploy.inPlace', { changes: changes.join(', ') })}</p>
+      <details className={styles.commands}>
+        <summary>{t('deploy.commands')}</summary>
+        <NftCode text={table.script.trimEnd()} block />
+      </details>
     </>
   );
 }
