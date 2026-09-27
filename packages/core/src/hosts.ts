@@ -39,7 +39,8 @@ export type HostErrorCode =
   | 'include-rejected'
   | 'invalid-filter'
   | 'trace-unavailable'
-  | 'platform-read-only';
+  | 'platform-read-only'
+  | 'wrong-passphrase';
 
 export interface HostFacts {
   uid: number;
@@ -90,6 +91,28 @@ export interface HostKeyCheck {
   presented: HostKey;
   /** Keys that known_hosts files already hold for this name; any that differ from `presented` mean the key changed. */
   known: (HostKey & { file: string })[];
+}
+
+/** A private key ssh would offer a host, as hopdeck found it on this machine. */
+export interface SshKeyInfo {
+  /** Its path. */
+  file: string;
+  /** e.g. "ED25519". */
+  type: string;
+  /** "SHA256:…", as ssh-keygen -l prints it. */
+  fingerprint: string;
+  comment: string;
+  /** It needs its passphrase before ssh can use it. */
+  encrypted: boolean;
+  /** It is in the agent already. */
+  loaded: boolean;
+}
+
+/** The keys for one host, and which agent holds unlocked ones. */
+export interface SshKeysView {
+  /** session: the agent of the user's login session; hopdeck: hopdeck's own, gone when hopdeck stops. */
+  agent: 'session' | 'hopdeck';
+  keys: SshKeyInfo[];
 }
 
 /** The live ruleset as nft prints it; the UI parses it with parseRuleset() and parseListing(). */

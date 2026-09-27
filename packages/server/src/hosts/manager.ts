@@ -20,6 +20,7 @@ import type {
   PersistenceStatus,
   PersistResult,
   RulesetSnapshot,
+  SshKeysView,
   TableChange,
   LiveState,
   TraceFilter,
@@ -37,6 +38,7 @@ import { addInclude, enableService, persistenceStatus, persistTables, saveAll, t
 import { LocalExecutor } from './local.ts';
 import { detectPrivilege, runNft, type NftAccess } from './privilege.ts';
 import { isValidDestination, SshExecutor } from './ssh.ts';
+import { SshKeys } from './ssh-keys.ts';
 
 interface Entry {
   id: string;
@@ -76,6 +78,8 @@ export interface HostManagerOptions {
   rollbackSeconds?: number;
   /** Replaces host key handling, for tests. */
   hostKeys?: HostKeys;
+  /** Replaces the keys and agent ssh uses, for tests; started by open(). */
+  sshKeys?: SshKeys;
 }
 
 /** Bad input for a new host: an invalid or duplicate destination, a name too long. */
@@ -95,9 +99,11 @@ export class HostManager {
   readonly #deployments: Deployments;
   readonly #traces = new Traces();
   readonly #history: History;
+  readonly #sshKeys: SshKeys;
 
   private constructor(options: HostManagerOptions) {
     this.#options = options;
+    this.#sshKeys = options.sshKeys ?? new SshKeys({ configFile: options.sshConfigFile, runtimeDir: options.controlDir });
     this.#hostKeys = options.hostKeys ?? new HostKeys({ configFile: options.sshConfigFile });
     const entryOf = (hostId: string) => {
       const entry = this.#entries.get(hostId);
@@ -118,6 +124,8 @@ export class HostManager {
 
   static async open(options: HostManagerOptions): Promise<HostManager> {
     const manager = new HostManager(options);
+    // Before any ssh runs: it has to know which agent to ask for keys.
+    await manager.#sshKeys.start();
     manager.#put({ id: 'local', kind: 'local', name: 'localhost', executor: new LocalExecutor(), status: { state: 'new' }, manualOverride: false });
     if (options.sandbox !== undefined) {
       manager.#put({ id: 'sandbox', kind: 'sandbox', name: 'sandbox', executor: options.sandbox.executor, status: { state: 'new' }, manualOverride: false });
@@ -355,6 +363,7 @@ export class HostManager {
         destination,
         controlDir: this.#options.controlDir,
         configFile: this.#options.sshConfigFile,
+        env: this.#sshKeys.env,
         shareConnection: false,
       })
     );
@@ -371,6 +380,23 @@ export class HostManager {
     const override = entry.manualOverride ? ' with Manual override' : '';
     const detail = entry.detail === undefined ? '' : `: ${entry.detail}`;
     await journal(host.executor, `deployment ${entry.deployment} ${entry.event}${override}: ${entry.tables.join(', ')}${detail}`);
+  }
+
+  /** The private keys ssh would offer an SSH host, and which of them need a passphrase. */
+  async sshKeys(id: string): Promise<SshKeysView | undefined> {
+    const entry = this.#entries.get(id);
+    return entry === undefined ? undefined : this.#sshKeys.list(this.#destination(entry));
+  }
+
+  /** Puts a key into the agent with its passphrase, for `seconds` or as long as the agent runs; the passphrase is kept nowhere. */
+  async unlockSshKey(id: string, file: string, passphrase: string, seconds: number | undefined): Promise<SshKeysView | undefined> {
+    const entry = this.#entries.get(id);
+    return entry === undefined ? undefined : this.#sshKeys.unlock(this.#destination(entry), file, passphrase, seconds);
+  }
+
+  /** Ends what hopdeck started for its hosts: its own ssh-agent, if any. */
+  async close(): Promise<void> {
+    await this.#sshKeys.close();
   }
 
   /** Reads the key an SSH host presents and what known_hosts says about it. */
@@ -484,6 +510,7 @@ export class HostManager {
         destination: host.destination,
         controlDir: this.#options.controlDir,
         configFile: this.#options.sshConfigFile,
+        env: this.#sshKeys.env,
       });
     return {
       id: host.id,

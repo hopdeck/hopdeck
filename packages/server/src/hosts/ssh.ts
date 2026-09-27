@@ -17,6 +17,8 @@ export interface SshExecutorOptions {
   controlDir: string;
   /** Replaces ~/.ssh/config (ssh -F), e.g. to reach a test host without touching the user's setup. */
   configFile?: string | undefined;
+  /** Variables for ssh, e.g. the SSH_AUTH_SOCK of hopdeck's own agent. */
+  env?: Readonly<Record<string, string>> | undefined;
   /** Defaults to "ssh" from PATH. */
   sshPath?: string;
   timeoutMs?: number;
@@ -39,6 +41,7 @@ export class SshExecutor implements Executor {
   readonly #sshPath: string;
   readonly #timeoutMs: number;
   readonly #configFile: string | undefined;
+  readonly #env: Readonly<Record<string, string>> | undefined;
 
   constructor(options: SshExecutorOptions) {
     if (!isValidDestination(options.destination)) {
@@ -52,6 +55,7 @@ export class SshExecutor implements Executor {
     this.#sshPath = options.sshPath ?? 'ssh';
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.#configFile = options.configFile;
+    this.#env = options.env;
     this.#sshArgs = [
       ...(options.configFile !== undefined ? ['-F', options.configFile] : []),
       '-T',
@@ -71,7 +75,7 @@ export class SshExecutor implements Executor {
   async exec(argv: readonly string[], options: ExecOptions = {}): Promise<ExecResult> {
     if (argv.length === 0) throw new Error('empty command');
     const args = [...this.#sshArgs, '--', this.host, shellCommand(argv)];
-    const result = await runProcess(this.#sshPath, args, { stdin: options.stdin, timeoutMs: this.#timeoutMs });
+    const result = await runProcess(this.#sshPath, args, { stdin: options.stdin, timeoutMs: this.#timeoutMs, env: this.#env });
     const failure = result.exitCode === 255 ? sshFailure(result.stderr) : undefined;
     if (failure === undefined) return result;
     // With a config file of its own, ssh does not read ~/.ssh/config: say so, or a

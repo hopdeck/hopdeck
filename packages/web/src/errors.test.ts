@@ -33,6 +33,7 @@ const HOST_ERROR_CODES = {
   'invalid-filter': true,
   'trace-unavailable': true,
   'platform-read-only': true,
+  'wrong-passphrase': true,
 } satisfies Record<HostErrorCode, true>;
 
 describe('errorText', () => {

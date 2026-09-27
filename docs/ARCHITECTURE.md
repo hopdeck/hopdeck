@@ -102,6 +102,16 @@ rules out interactive prompts. An unknown host key makes the connection fail:
 the panel then shows the key's fingerprint, and adds it to `known_hosts` only
 after the user confirms. Keys are never accepted automatically.
 
+**Keys with a passphrase** (`hosts/ssh-keys.ts`). When a host refuses the
+login, the panel lists the keys ssh offers it (`ssh -G`) and whether each
+needs a passphrase. Given one, hopdeck runs `ssh-add` with a one-shot askpass
+helper that gets the passphrase from its environment (never a file) and fails
+the second time, so a wrong passphrase ends at once. The key goes to the
+agent for as long as the user chooses (15 minutes to 24 hours, or no limit),
+and hopdeck keeps the passphrase nowhere. It uses the login session's agent,
+so the terminal's ssh sees the key too; without one it runs its own, tied to
+hopdeck's input so that it ends with hopdeck, even after a crash.
+
 **Host keys** (`hosts/host-keys.ts`). `ssh -G` gives the host's effective
 settings (known_hosts files, host name form, hashing). To read the key the
 server presents, hopdeck runs ssh with every authentication method off and a

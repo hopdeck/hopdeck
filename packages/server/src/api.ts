@@ -6,6 +6,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HostError } from './hosts/errors.ts';
 import { HostStateError, InvalidHostError, type HostManager } from './hosts/manager.ts';
 import { ApiError, readJson, sendError, sendJson } from './http.ts';
+import { MAX_KEY_LIFETIME } from './hosts/ssh-keys.ts';
 import { SECURITY_HEADERS } from './security.ts';
 
 export interface ApiContext {
@@ -223,6 +224,27 @@ const ROUTES: Route[] = [
     },
   },
   {
+    method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/ssh-keys$/,
+    async handle(_req, [id], ctx) {
+      return { body: { keys: found(await ctx.hosts.sshKeys(id!)) } };
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/hosts\/([^/]+)\/ssh-keys\/unlock$/,
+    async handle(req, [id], ctx) {
+      const body = asObject(await readJson(req));
+      const file = requiredString(body, 'file', 4096);
+      const passphrase = requiredString(body, 'passphrase', 1024);
+      const seconds = body['seconds'];
+      if (seconds !== null && !(typeof seconds === 'number' && Number.isInteger(seconds) && seconds > 0 && seconds <= MAX_KEY_LIFETIME)) {
+        throw new ApiError(400, 'invalid-body', `seconds must be null or a whole number from 1 to ${MAX_KEY_LIFETIME}`);
+      }
+      return { body: { keys: found(await ctx.hosts.unlockSshKey(id!, file, passphrase, seconds ?? undefined)) } };
+    },
+  },
+  {
     method: 'POST',
     pattern: /^\/api\/hosts\/([^/]+)\/sudo-password$/,
     async handle(req, [id], ctx) {
@@ -265,6 +287,7 @@ function toApiError(error: unknown): ApiError {
 function hostErrorStatus(error: HostError): number {
   switch (error.code) {
     case 'wrong-password':
+    case 'wrong-passphrase':
       return 400;
     case 'password-required':
     case 'no-privileges':

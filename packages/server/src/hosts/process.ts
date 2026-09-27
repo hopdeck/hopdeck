@@ -19,6 +19,8 @@ export interface RunOptions {
   timeoutMs: number;
   /** Defaults to MAX_OUTPUT_BYTES. */
   maxOutputBytes?: number;
+  /** Variables set on top of this process's environment. */
+  env?: Readonly<Record<string, string>> | undefined;
 }
 
 /**
@@ -27,7 +29,7 @@ export interface RunOptions {
  */
 export function runProcess(file: string, args: readonly string[], options: RunOptions): Promise<ExecResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(file, args, { stdio: 'pipe' });
+    const child = spawn(file, args, { stdio: 'pipe', ...(options.env !== undefined && { env: { ...process.env, ...options.env } }) });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     const sizes = { stdout: 0, stderr: 0 };

@@ -36,6 +36,7 @@ import { HistoryPanel } from '../firewall/history/HistoryPanel.tsx';
 import { HostSettings } from './HostSettings.tsx';
 import { UsageMeter } from './UsageMeter.tsx';
 import { HostKeyPanel } from './HostKeyPanel.tsx';
+import { SshKeyPanel } from './SshKeyPanel.tsx';
 import { ManualOverrideBanner, ManualOverrideButton } from './ManualOverride.tsx';
 import styles from './HostView.module.css';
 import { hostSubtitle } from './status.ts';
@@ -206,6 +207,10 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
 
       {status.state === 'error' && host.kind === 'ssh' && ['ssh-host-key', 'ssh-host-key-changed'].includes(status.error.code) && (
         <HostKeyPanel hostId={host.id} changed={status.error.code === 'ssh-host-key-changed'} onTrusted={onUpdate} />
+      )}
+
+      {status.state === 'error' && host.kind === 'ssh' && status.error.code === 'ssh-auth' && (
+        <SshKeyPanel hostId={host.id} onUnlocked={onConnect} />
       )}
 
       {status.state === 'connected' && !readable && (

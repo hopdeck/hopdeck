@@ -93,7 +93,7 @@ const server = await startServer({
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, async () => {
-    await Promise.allSettled([server.close(), sandbox?.dispose()]);
+    await Promise.allSettled([server.close(), sandbox?.dispose(), hosts.close()]);
     process.exit(0);
   });
 }
