@@ -630,5 +630,13 @@
   "deploy.inPlace.nothing": "No rule changes; the table stays as it is.",
   "deploy.wholeTable": "The whole table is replaced in one transaction, because more than its rules changes (a chain, its policy, a set or the table itself). Rules copied unchanged keep their counter values as read; changed rules count from zero.",
   "legal.license": "Free software under the GNU GPL, version 3 or later, with no warranty.",
-  "legal.licenseLink": "Licence"
+  "legal.licenseLink": "Licence",
+  "usage.label": "Load on the host",
+  "usage.cpu": "CPU",
+  "usage.ram": "RAM",
+  "usage.cpuHint_one": "{{count}} thread: 100% is one fully busy thread, {{max}}% all of them.",
+  "usage.cpuHint_other": "{{count}} threads: 100% is one fully busy thread, {{max}}% all of them.",
+  "usage.ramHint": "Memory in use, as free counts it: the total less what is available.",
+  "usage.unavailable": "CPU and RAM unavailable",
+  "usage.stale": "Not updated"
 }

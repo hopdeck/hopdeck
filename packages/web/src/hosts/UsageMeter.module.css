@@ -1,0 +1,77 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Copyright (C) 2026 Mateusz T (Tenir) */
+
+/* Sits at the right of the host's header, before its buttons. */
+.meter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 4px 18px;
+  margin-left: auto;
+}
+
+.stat {
+  display: grid;
+  gap: 2px;
+  min-width: 72px;
+}
+
+.label {
+  color: var(--text-subtle);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.value {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.extra {
+  color: var(--text-muted);
+}
+
+.bar {
+  height: 2px;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  background: var(--text-subtle);
+  transition: width 0.4s ease;
+}
+
+.high {
+  background: var(--warn);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill {
+    transition: none;
+  }
+}
+
+.stale,
+.error {
+  margin: 0;
+  color: var(--warn);
+  font-size: var(--text-xs);
+}
+
+.error {
+  margin-left: auto;
+}
+
+.detail {
+  font-family: var(--font-mono);
+}

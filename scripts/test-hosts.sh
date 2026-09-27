@@ -13,7 +13,18 @@ repo=$(cd "$(dirname "$0")/.." && pwd)
 systems=${*:-debian11 debian12 debian13 alma9 alma10 alpine openwrt}
 logs="$repo/.dev/test-host/logs"
 mkdir -p "$logs"
-tests="packages/server/src/hosts/host-keys.test.ts packages/server/src/firewall"
+
+# One run at a time: two would start and remove the same containers under each
+# other. up.sh and down.sh refuse to work by hand while the lock is there.
+lock="$repo/.dev/test-host/run.lock"
+if ! mkdir "$lock" 2>/dev/null; then
+	echo "another test run is going on (pid $(cat "$lock/pid" 2>/dev/null || echo unknown)); if it is not, remove $lock" >&2
+	exit 2
+fi
+echo $$ >"$lock/pid"
+trap 'rm -rf "$lock"' EXIT INT TERM
+export HOPDECK_TEST_RUN=$$
+tests="packages/server/src/hosts/host-keys.test.ts packages/server/src/hosts/usage.test.ts packages/server/src/firewall"
 summary=""
 failed=0
 

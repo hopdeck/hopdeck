@@ -134,6 +134,13 @@ const ROUTES: Route[] = [
   },
   {
     method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/usage$/,
+    async handle(_req, [id], ctx) {
+      return { body: { usage: found(await ctx.hosts.usage(id!)) } };
+    },
+  },
+  {
+    method: 'GET',
     pattern: /^\/api\/hosts\/([^/]+)\/persistence$/,
     async handle(_req, [id], ctx) {
       return { body: { persistence: found(await ctx.hosts.persistence(id!)) } };

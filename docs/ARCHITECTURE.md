@@ -455,6 +455,12 @@ The npm supply chain is a real risk for a tool with this access.
     the lines; `-a` gives rule handles.
   - The sandbox brings up `lo` and can send test traffic, so tracing can be
     tried there.
+- **Host load** (done): the host's header shows CPU as top shows a process
+  (100% per fully busy thread, up to 100% times the threads) and memory in
+  use as free counts it (total less MemAvailable), with the share of it. The
+  panel reads /proc/stat and /proc/meminfo every 3 seconds while the host is
+  open and the browser tab visible; CPU is the change since the reading
+  before. Any account can read them, so no root is needed.
 - **Live data** (done): while the rules are in view, the panel reads the
   host every 2, 5 or 15 seconds (or not at all), pausing while the browser
   tab is hidden. One `nft -j list ruleset` per look, reduced on the server to

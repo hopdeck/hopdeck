@@ -25,7 +25,7 @@ import type {
   TraceFilter,
   TraceView,
 } from '@hopdeck/core';
-import { liveState, platform } from '@hopdeck/core';
+import { cpuPercent, liveState, parseUsage, platform, USAGE_COMMAND, type CpuSample, type HostUsage } from '@hopdeck/core';
 import { HostError } from './errors.ts';
 import { Deployments, type DeployLogEntry, type DeployTarget } from '../firewall/deploy.ts';
 import { History, type HistoryTarget } from '../firewall/history.ts';
@@ -48,6 +48,8 @@ interface Entry {
   password?: string;
   /** Lifts the ownership rule; kept in memory only, so it ends with the session. */
   manualOverride: boolean;
+  /** The last CPU reading, so the next one measures the time in between. */
+  cpu?: CpuSample & { at: number };
 }
 
 /** What hosts.json stores: SSH hosts only; localhost and the sandbox are built in. */
@@ -434,6 +436,37 @@ export class HostManager {
   /** Every look at the ruleset may find a change made outside hopdeck; see History.observe(). */
   async #observe(entry: Entry, json: unknown): Promise<void> {
     if (this.#platform(entry).firewall !== 'read-only') await this.#history.observe(this.#historyTarget(entry), json);
+  }
+
+  /**
+   * CPU and memory use. CPU is measured since the previous reading; the first
+   * one, or one after a long pause, reads twice a moment apart. No root needed.
+   */
+  async usage(id: string): Promise<HostUsage | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    if (entry.status.state !== 'connected') throw new HostStateError(`${entry.name} is not connected; connect to it first`);
+    const read = async () => {
+      const result = await entry.executor.exec(['sh', '-c', USAGE_COMMAND]);
+      if (result.exitCode !== 0) throw new HostError('command-failed', result.stderr.trim() || `reading /proc failed with code ${result.exitCode}`);
+      try {
+        return { ...parseUsage(result.stdout), at: Date.now() };
+      } catch (error) {
+        throw new HostError('command-failed', error instanceof Error ? error.message : String(error));
+      }
+    };
+    let previous = entry.cpu;
+    if (previous === undefined || Date.now() - previous.at > 60_000) {
+      previous = { ...(await read()).cpu, at: Date.now() };
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    const now = await read();
+    entry.cpu = { ...now.cpu, at: now.at };
+    return {
+      readAt: new Date(now.at).toISOString(),
+      cpu: { percent: Math.round(cpuPercent(previous, now.cpu)), threads: now.cpu.threads },
+      memory: now.memory,
+    };
   }
 
   /** How to run nft as root on a connected host; throws when that is not possible yet. */

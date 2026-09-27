@@ -34,6 +34,7 @@ import { TableEditor, type EditorDraft, type EditorMode, type EditorProblem } fr
 import { PersistencePanel } from '../firewall/deploy/PersistencePanel.tsx';
 import { HistoryPanel } from '../firewall/history/HistoryPanel.tsx';
 import { HostSettings } from './HostSettings.tsx';
+import { UsageMeter } from './UsageMeter.tsx';
 import { HostKeyPanel } from './HostKeyPanel.tsx';
 import { ManualOverrideBanner, ManualOverrideButton } from './ManualOverride.tsx';
 import styles from './HostView.module.css';
@@ -165,6 +166,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
             </p>
           </div>
         </div>
+        <UsageMeter hostId={host.id} active={status.state === 'connected'} />
         <div className={styles.actions}>
           <button type="button" className="btn" onClick={onConnect} disabled={connecting}>
             {connecting ? <span className="spinner" aria-hidden="true" /> : <RefreshIcon />}

@@ -18,6 +18,13 @@
 #   pnpm test:host                  the tests, including those that need it
 set -eu
 
+# While scripts/test-hosts.sh runs, it alone starts and removes test hosts.
+lock="$(cd "$(dirname "$0")/../.." && pwd)/.dev/test-host/run.lock"
+if [ -d "$lock" ] && [ "${HOPDECK_TEST_RUN:-}" != "$(cat "$lock/pid" 2>/dev/null)" ]; then
+	echo "a test run is going on (scripts/test-hosts.sh, pid $(cat "$lock/pid" 2>/dev/null || echo unknown)); wait for it to finish" >&2
+	exit 2
+fi
+
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
 system=${1:-debian13}

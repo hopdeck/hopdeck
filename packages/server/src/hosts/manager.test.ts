@@ -4,7 +4,7 @@
 import { parseListing, parseRuleset, ruleKey } from '@hopdeck/core';
 import { spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
-import { release, tmpdir } from 'node:os';
+import { availableParallelism, release, tmpdir, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DEBIAN_FACTS, FakeExecutor, failed, ok, type Script } from '../testing/fake-executor.ts';
@@ -64,6 +64,20 @@ describe('HostManager', () => {
   it('connects to localhost', async () => {
     const connected = await (await open()).connect('local');
     expect(connected?.status).toMatchObject({ state: 'connected', facts: { kernel: release() } });
+  });
+
+  it('reads CPU and memory use without root, measuring CPU between readings', async () => {
+    const hosts = await open();
+    await expect(hosts.usage('local')).rejects.toThrow(/not connected/);
+    await hosts.connect('local');
+    const first = (await hosts.usage('local'))!;
+    expect(first.cpu.threads).toBe(availableParallelism());
+    expect(first.cpu.percent).toBeGreaterThanOrEqual(0);
+    expect(first.cpu.percent).toBeLessThanOrEqual(first.cpu.threads * 100);
+    expect(first.memory.total).toBe(Math.floor(totalmem() / 1024) * 1024);
+    expect(first.memory.used).toBeGreaterThan(0);
+    expect(first.memory.used).toBeLessThan(first.memory.total);
+    expect((await hosts.usage('local'))!.cpu.threads).toBe(first.cpu.threads);
   });
 
   it('turns connection failures into an error status', async () => {
