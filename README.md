@@ -50,8 +50,8 @@ no sudo). SYSTEM is one of `debian11`, `debian12`, `debian13` (the default),
 and `openwrt` (procd, dropbear, fw4; root only).
 
 `pnpm dev:test-host` starts hopdeck with the Debian 13 hosts, and
-`pnpm dev:test-hosts` with those of every running system (or of the systems
-named after `--`), each as "SYSTEM: account".
+`pnpm dev:test-hosts [SYSTEM...]` with those of the systems named, or of every
+running one, each as "SYSTEM: account".
 `pnpm test:host` runs the tests including the ones that need a host; set
 `HOPDECK_TEST_HOST_DIR=.dev/test-host/SYSTEM` for another system.
 `pnpm test:hosts` starts each system in turn, runs those tests against it and

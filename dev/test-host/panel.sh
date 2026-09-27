@@ -17,6 +17,7 @@ repo=$(cd "$here/../.." && pwd)
 keys="$repo/.dev/test-host"
 panel="$keys/panel"
 
+[ "${1:-}" != -- ] || shift
 if [ "$#" -eq 0 ]; then
 	set -- $(podman ps --format '{{.Names}}' | sed -n 's/^hopdeck-test-//p' | sort)
 fi
