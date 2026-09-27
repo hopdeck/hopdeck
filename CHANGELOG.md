@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.1.1 (2026-09-28)
+
+### Fixed
+
+- A host that stops accepting the login, say because an SSH key unlocked for
+  a limited time left the agent, is no longer asked to log in every few
+  seconds: sshd (PerSourcePenalties) and fail2ban answer that by shutting
+  this machine's address out. hopdeck tries once, then waits for a
+  reconnect, and shows the key panel so the key can be unlocked again; the
+  rules are read again once it is.
+- A port already in use ended hopdeck with Node.js's error message.
+- Error hints in the rules showed "{{destination}}" instead of the host.
+
+### Changed
+
+- Without `--port`, hopdeck takes the first free port from 7400 to 7419, and
+  says which ports were taken and by what: another hopdeck (with its address)
+  or another program. `--port` (or `HOPDECK_PORT`) still means that port.
+- `pnpm dev` picks free ports for the API and the UI.
+
 ## 0.1.0 (2026-09-27)
 
 The first release: a local web panel for nftables on the machine it runs on
