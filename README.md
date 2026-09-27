@@ -39,20 +39,108 @@ Download the archive for your machine and `SHA256SUMS` from the
 
 ```sh
 sha256sum -c --ignore-missing SHA256SUMS
-tar xf hopdeck-0.1.0-linux-x64.tar.xz
-hopdeck-0.1.0-linux-x64/hopdeck
+tar xf hopdeck-0.1.1-linux-x64.tar.xz
+hopdeck-0.1.1-linux-x64/hopdeck
 ```
 
 It prints the address of the panel; open it in a browser on the same
 machine. It listens on 127.0.0.1 only, on port 7400, or the next free one up
 to 7419 when that is taken (it says by what: another hopdeck, with its
-address, or another program); `--port` picks one. `hopdeck --sandbox` adds a host with a demo firewall to try things
-on, `hopdeck --help` lists the options, and `hopdeck --licenses` the licenses
-of all it contains.
+address, or another program); `--port` picks one. `hopdeck --sandbox` adds a
+host with a demo firewall to try things on, `hopdeck --help` lists the
+options, and `hopdeck --licenses` the licenses of all it contains.
 
 For SSH hosts it uses the system's OpenSSH client (`ssh`, `ssh-keygen`,
 `ssh-add`, `ssh-agent`) and your `~/.ssh/config`. A managed host needs `nft`,
 and root or sudo.
+
+### Windows
+
+From version 0.2, hopdeck also runs on Windows 10 and 11 (x64 and arm64), as
+`hopdeck.exe`. It uses Windows' own OpenSSH client, built in since Windows 10
+version 1809: if `ssh -V` in PowerShell finds nothing, add it under Settings,
+Apps, Optional features, "OpenSSH Client".
+
+`hopdeck.exe` is not signed with a code signing certificate, so the first
+time Windows SmartScreen says "Windows protected your PC", with an unknown
+publisher. Check that the file is the released one, then start it anyway with
+"More info" and "Run anyway". In PowerShell, this prints the SHA-256 to find
+in `SHA256SUMS`:
+
+```powershell
+Get-FileHash hopdeck-0.2.0-win-x64.zip -Algorithm SHA256
+```
+
+Rather not run a program without a signature? Run hopdeck from its source
+with Node.js, or build the executable yourself: see below. SmartScreen only
+warns about files downloaded from the internet, so it says nothing about an
+executable you build yourself.
+
+## From source
+
+All of hopdeck is in this repository: you can run it with Node.js instead of
+the executable, or build the executable yourself from it. Each release has a
+tag, `v0.1.1` for example; use the latest one from the
+[releases](https://github.com/hopdeck/hopdeck/releases).
+
+### On Linux
+
+You need Node.js 24 or later from [nodejs.org](https://nodejs.org) (the
+Node.js of many distributions is older), git, and the OpenSSH client. Then:
+
+```sh
+git clone --branch v0.1.1 https://github.com/hopdeck/hopdeck.git
+cd hopdeck
+npm install -g pnpm@12            # with sudo, if Node.js is installed system-wide
+pnpm install --frozen-lockfile
+pnpm build                        # the web UI
+pnpm start                        # the panel; options follow, e.g. pnpm start --sandbox
+```
+
+To build the executable instead, after `pnpm install`:
+
+```sh
+pnpm build:sea
+dist/hopdeck-0.1.1-linux-x64/hopdeck
+```
+
+The build downloads the official Node.js release the executable is made of
+from nodejs.org, and uses it only if its SHA-256 is the one written in
+[`packages/cli/scripts/build-sea.ts`](packages/cli/scripts/build-sea.ts); it
+needs `tar` and `xz`, and libatomic, as the executable does (see Install).
+
+### On Windows (from version 0.2)
+
+You need Node.js 24 or later and Git, from [nodejs.org](https://nodejs.org)
+and [git-scm.com](https://git-scm.com), or in PowerShell:
+
+```powershell
+winget install OpenJS.NodeJS.LTS
+winget install Git.Git
+```
+
+Then, in a new PowerShell window:
+
+```powershell
+git clone --branch v0.2.0 https://github.com/hopdeck/hopdeck.git
+cd hopdeck
+npm install -g pnpm@12
+pnpm install --frozen-lockfile
+pnpm build
+pnpm start
+```
+
+If PowerShell refuses to run `pnpm` ("running scripts is disabled on this
+system"), allow scripts signed or made on this computer for your account
+once, with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, or type
+`pnpm.cmd` instead of `pnpm`.
+
+To build the executable instead, after `pnpm install`:
+
+```powershell
+pnpm build:sea
+dist\hopdeck-0.2.0-win-x64\hopdeck.exe
+```
 
 ## Development
 
