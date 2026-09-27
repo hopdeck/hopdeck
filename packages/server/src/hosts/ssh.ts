@@ -38,6 +38,7 @@ export class SshExecutor implements Executor {
   readonly #sshArgs: readonly string[];
   readonly #sshPath: string;
   readonly #timeoutMs: number;
+  readonly #configFile: string | undefined;
 
   constructor(options: SshExecutorOptions) {
     if (!isValidDestination(options.destination)) {
@@ -50,6 +51,7 @@ export class SshExecutor implements Executor {
     this.host = options.destination;
     this.#sshPath = options.sshPath ?? 'ssh';
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.#configFile = options.configFile;
     this.#sshArgs = [
       ...(options.configFile !== undefined ? ['-F', options.configFile] : []),
       '-T',
@@ -71,8 +73,11 @@ export class SshExecutor implements Executor {
     const args = [...this.#sshArgs, '--', this.host, shellCommand(argv)];
     const result = await runProcess(this.#sshPath, args, { stdin: options.stdin, timeoutMs: this.#timeoutMs });
     const failure = result.exitCode === 255 ? sshFailure(result.stderr) : undefined;
-    if (failure !== undefined) throw new HostError(failure, result.stderr.trim());
-    return result;
+    if (failure === undefined) return result;
+    // With a config file of its own, ssh does not read ~/.ssh/config: say so, or a
+    // host that works in a terminal looks unknown for no reason.
+    const note = this.#configFile === undefined ? '' : `\n(ssh read ${this.#configFile}, not ~/.ssh/config: HOPDECK_SSH_CONFIG names it)`;
+    throw new HostError(failure, `${result.stderr.trim()}${note}`);
   }
 }
 

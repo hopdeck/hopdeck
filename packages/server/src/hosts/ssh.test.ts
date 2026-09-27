@@ -68,6 +68,16 @@ describe('SshExecutor', () => {
     expect(args.slice(0, 2)).toEqual(['-F', '/etc/hopdeck/ssh config']);
   });
 
+  it('names that file when ssh cannot reach a host, since ~/.ssh/config is not read then', async () => {
+    const failing = ['sh', '-c', 'echo "ssh: Could not resolve hostname fw1: Name or service not known" >&2; exit 255'];
+    const custom = new SshExecutor({ destination: 'fw1', controlDir: dir, sshPath, configFile: '/tmp/test ssh_config' });
+    await expect(custom.exec(failing)).rejects.toMatchObject({
+      code: 'ssh-connect',
+      detail: 'ssh: Could not resolve hostname fw1: Name or service not known\n(ssh read /tmp/test ssh_config, not ~/.ssh/config: HOPDECK_SSH_CONFIG names it)',
+    });
+    await expect(ssh.exec(failing)).rejects.toMatchObject({ detail: 'ssh: Could not resolve hostname fw1: Name or service not known' });
+  });
+
   it('refuses destinations that ssh would read as options', () => {
     for (const destination of ['-oProxyCommand=touch /tmp/pwned', '', 'a b']) {
       expect(() => new SshExecutor({ destination, controlDir: dir, sshPath })).toThrow(/invalid SSH destination/);

@@ -101,6 +101,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 // The token goes in the fragment, which browsers never send to the server.
 const uiOrigin = values.dev ? DEV_UI_ORIGINS[0] : `http://127.0.0.1:${server.port}`;
 process.stdout.write(`${NOTICE}\nhopdeck ${pkg.version} is running at:\n\n  ${uiOrigin}/#token=${token}\n\n`);
+if (sshConfig) process.stdout.write(`SSH hosts come from ${sshConfig} (HOPDECK_SSH_CONFIG), not ~/.ssh/config.\n\n`);
 
 function fail(message: string): never {
   process.stderr.write(`hopdeck: ${message}\n`);
