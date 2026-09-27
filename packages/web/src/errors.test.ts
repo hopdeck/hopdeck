@@ -34,6 +34,8 @@ const HOST_ERROR_CODES = {
   'trace-unavailable': true,
   'platform-read-only': true,
   'wrong-passphrase': true,
+  'login-password-rejected': true,
+  'password-login-disabled': true,
 } satisfies Record<HostErrorCode, true>;
 
 describe('errorText', () => {

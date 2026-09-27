@@ -7,6 +7,7 @@ import { api } from '../api.ts';
 import { ErrorCallout, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import type { MessageKey } from '../i18n/locales.ts';
+import { KeySetup } from './KeySetup.tsx';
 import styles from './SshKeyPanel.module.css';
 
 /** How long the agent keeps an unlocked key; "none" as long as the agent runs. */
@@ -34,7 +35,8 @@ function storedLifetime(): string {
 /**
  * The private keys ssh offers an SSH host that refused the login, and a way to
  * unlock one: its passphrase goes to ssh-add once, and the agent keeps the key
- * for as long as the user chose. hopdeck keeps the passphrase nowhere.
+ * for as long as the user chose. hopdeck keeps the passphrase nowhere. Below
+ * them, a way to put a key on the host.
  */
 export function SshKeyPanel({ hostId, onUnlocked }: { hostId: string; onUnlocked(): void }) {
   const { t } = useI18n();
@@ -74,6 +76,7 @@ export function SshKeyPanel({ hostId, onUnlocked }: { hostId: string; onUnlocked
             ))}
           </ul>
           <p className={styles.agent}>{t(view.agent === 'session' ? 'sshKeys.agent.session' : 'sshKeys.agent.hopdeck')}</p>
+          <KeySetup path={path} keys={view.keys} onWorks={onUnlocked} />
         </>
       )}
       {error !== undefined && <ErrorCallout error={error} />}

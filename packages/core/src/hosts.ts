@@ -40,7 +40,9 @@ export type HostErrorCode =
   | 'invalid-filter'
   | 'trace-unavailable'
   | 'platform-read-only'
-  | 'wrong-passphrase';
+  | 'wrong-passphrase'
+  | 'login-password-rejected'
+  | 'password-login-disabled';
 
 export interface HostFacts {
   uid: number;

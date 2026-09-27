@@ -7,6 +7,7 @@ export * from './host.ts';
 export * from './hosts.ts';
 export * from './platform.ts';
 export * from './usage.ts';
+export * from './key-login.ts';
 export * from './firewall/keys.ts';
 export * from './firewall/listing.ts';
 export * from './firewall/owners.ts';

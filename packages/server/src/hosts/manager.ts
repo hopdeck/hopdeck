@@ -17,6 +17,7 @@ import type {
   HostKind,
   HostStatus,
   HostSummary,
+  KeySetupResult,
   PersistenceStatus,
   PersistResult,
   RulesetSnapshot,
@@ -38,6 +39,7 @@ import { addInclude, enableService, persistenceStatus, persistTables, saveAll, t
 import { LocalExecutor } from './local.ts';
 import { detectPrivilege, runNft, type NftAccess } from './privilege.ts';
 import { isValidDestination, SshExecutor } from './ssh.ts';
+import { KeyLogin } from './key-login.ts';
 import { SshKeys } from './ssh-keys.ts';
 
 interface Entry {
@@ -100,10 +102,12 @@ export class HostManager {
   readonly #traces = new Traces();
   readonly #history: History;
   readonly #sshKeys: SshKeys;
+  readonly #keyLogin: KeyLogin;
 
   private constructor(options: HostManagerOptions) {
     this.#options = options;
     this.#sshKeys = options.sshKeys ?? new SshKeys({ configFile: options.sshConfigFile, runtimeDir: options.controlDir });
+    this.#keyLogin = new KeyLogin({ keys: this.#sshKeys, configFile: options.sshConfigFile });
     this.#hostKeys = options.hostKeys ?? new HostKeys({ configFile: options.sshConfigFile });
     const entryOf = (hostId: string) => {
       const entry = this.#entries.get(hostId);
@@ -392,6 +396,16 @@ export class HostManager {
   async unlockSshKey(id: string, file: string, passphrase: string, seconds: number | undefined): Promise<SshKeysView | undefined> {
     const entry = this.#entries.get(id);
     return entry === undefined ? undefined : this.#sshKeys.unlock(this.#destination(entry), file, passphrase, seconds);
+  }
+
+  /**
+   * Puts a key into the account's authorized_keys with one password login and
+   * checks that it gets in alone; with `allow`, first adds to sshd's
+   * configuration what lets keys in. The password is kept nowhere.
+   */
+  async setUpKeyLogin(id: string, file: string, password: string, allow: boolean): Promise<KeySetupResult | undefined> {
+    const entry = this.#entries.get(id);
+    return entry === undefined ? undefined : this.#keyLogin.setUp(this.#destination(entry), file, password, { allow });
   }
 
   /** Ends what hopdeck started for its hosts: its own ssh-agent, if any. */

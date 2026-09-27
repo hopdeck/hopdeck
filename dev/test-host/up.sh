@@ -41,7 +41,7 @@ alma10) file=rhel base=docker.io/library/almalinux:10 port=2220 ;;
 alpine) file=alpine base=docker.io/library/alpine:3.22 port=2231 init=openrc ;;
 openwrt)
 	file=openwrt base=docker.io/openwrt/rootfs:x86-64-openwrt-24.10 port=2241 init=procd platform=openwrt
-	accounts=root authorized=/etc/dropbear/authorized_keys
+	accounts=root authorized=
 	;;
 *)
 	echo "unknown system: $system (debian11, debian12, debian13, alma9, alma10, alpine, openwrt)" >&2
@@ -60,11 +60,19 @@ mkdir -p "$state/config"
 echo "Building the $system image (the first time takes a minute)..."
 podman build -q -t "$name" -f "$here/$file.Containerfile" --build-arg "BASE=$base" "$here" >/dev/null
 podman rm -f "$name" >/dev/null 2>&1 || true
+# The test key, read-only, in a file sshd reads for every account besides
+# their own authorized_keys, which the key setup tests write to.
+if [ -n "$authorized" ]; then set -- -v "$keys/id_ed25519.pub:$authorized:ro"; else set --; fi
 podman run -d --name "$name" \
 	--cap-add NET_ADMIN \
 	-p "127.0.0.1:$port:22" \
-	-v "$keys/id_ed25519.pub:$authorized:ro" \
+	"$@" \
 	"$name" >/dev/null
+# OpenWrt's dropbear reads root's keys from /etc/dropbear/authorized_keys only.
+if [ "$system" = openwrt ]; then
+	podman cp "$keys/id_ed25519.pub" "$name:/etc/dropbear/authorized_keys"
+	podman exec "$name" sh -c 'chown root:root /etc/dropbear/authorized_keys && chmod 600 /etc/dropbear/authorized_keys'
+fi
 
 # Until systemd has booted, /run/nologin keeps everyone but root out.
 if [ "$init" = systemd ]; then
@@ -134,5 +142,10 @@ Test host is up: $system in container $name, ssh on 127.0.0.1:$port.
   Log in by hand:     ssh -F .dev/test-host/$system/ssh_config hopdeck-test-root
   Run the tests:      HOPDECK_TEST_HOST=1 HOPDECK_TEST_HOST_DIR=.dev/test-host/$system pnpm vitest run --no-file-parallelism
   Stop it:            dev/test-host/down.sh $system
-Accounts: $accounts (admin: sudo, password hopdeck-test; nopass: sudo for nft without a password; plain: password hopdeck-test, no sudo).
 DONE
+if [ "$system" = openwrt ]; then
+	echo 'Accounts: root (password hopdeck-test, as the key setup needs one).'
+else
+	echo 'Accounts: root, admin (sudo, password hopdeck-test), nopass (sudo for nft without a password), plain (password hopdeck-test, no sudo).'
+	echo 'Only admin and plain may log in with their password, for the key setup.'
+fi

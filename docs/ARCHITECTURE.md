@@ -97,8 +97,9 @@ login shell, so every argument is single-quoted. The login shell must be
 POSIX-compatible (sh, bash, dash, zsh, ksh, ash); fish and csh are not
 supported.
 
-**SSH authentication.** Keys or ssh-agent only; no SSH passwords. `BatchMode`
-rules out interactive prompts. An unknown host key makes the connection fail:
+**SSH authentication.** Keys or ssh-agent only; hopdeck keeps no SSH
+passwords, and a password serves only to put a key on a host (below).
+`BatchMode` rules out interactive prompts. An unknown host key makes the connection fail:
 the panel then shows the key's fingerprint, and adds it to `known_hosts` only
 after the user confirms. Keys are never accepted automatically.
 
@@ -111,6 +112,38 @@ agent for as long as the user chooses (15 minutes to 24 hours, or no limit),
 and hopdeck keeps the passphrase nowhere. It uses the login session's agent,
 so the terminal's ssh sees the key too; without one it runs its own, tied to
 hopdeck's input so that it ends with hopdeck, even after a crash.
+
+**Putting a key on a host** (`hosts/key-login.ts`). For a host that has no
+key yet, the panel asks for the account's password once. hopdeck logs in with
+it alone (`PubkeyAuthentication=no`, one prompt, the same one-shot askpass,
+which answers no yes/no question, so a host key is never accepted with the
+password) and appends the public key to `~/.ssh/authorized_keys` as
+ssh-copy-id does: `mkdir`, `chmod go-w`, no duplicate, `restorecon` where
+SELinux has it. For root on OpenWrt's dropbear the file is
+`/etc/dropbear/authorized_keys`. A new connection with that key alone
+(`IdentitiesOnly`, `-v` to see which key the server accepted) then shows
+whether it gets in. A key with a passphrase is tried only once unlocked.
+
+If sshd refuses it, hopdeck reads what sshd uses for exactly this login,
+`sshd -T -C user=…,addr=…,laddr=…,lport=…`, so Match blocks count. That
+takes root: directly for root, `sudo -n` in the same login, or one more
+login with `sudo -S` and the same password, only when the key was refused.
+What keeps keys out is listed (`keyBlockers()` in core): keys off, an
+`AuthenticationMethods` without a key-only list, `PermitRootLogin no` for
+root, another `AuthorizedKeysFile`, a key type sshd does not accept, a home
+directory others may write to (StrictModes). hopdeck offers to change the
+first two only, and only by adding a way in: `PubkeyAuthentication yes`, and
+the existing `AuthenticationMethods` lists plus `publickey`. Passwords keep
+working; root login, key files and algorithms stay the admin's decision.
+
+On request it writes those lines to
+`/etc/ssh/sshd_config.d/00-hopdeck-keys.conf` (sshd uses the first value it
+reads, so the file comes early), keeping lines an earlier run put there. It
+runs `sshd -t`, then `sshd -T -C` for the same login, and reloads sshd
+(systemctl, rc-service, or SIGHUP from the pid file) only if sshd would use
+every line. Otherwise, as when a Match block sets the value, it puts back what
+was there and says what sshd uses instead. The password is kept nowhere; the
+panel holds it in the form until the key works, for that second step.
 
 **Host keys** (`hosts/host-keys.ts`). `ssh -G` gives the host's effective
 settings (known_hosts files, host name form, hashing). To read the key the

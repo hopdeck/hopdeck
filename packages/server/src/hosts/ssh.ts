@@ -78,11 +78,16 @@ export class SshExecutor implements Executor {
     const result = await runProcess(this.#sshPath, args, { stdin: options.stdin, timeoutMs: this.#timeoutMs, env: this.#env });
     const failure = result.exitCode === 255 ? sshFailure(result.stderr) : undefined;
     if (failure === undefined) return result;
-    // With a config file of its own, ssh does not read ~/.ssh/config: say so, or a
-    // host that works in a terminal looks unknown for no reason.
-    const note = this.#configFile === undefined ? '' : `\n(ssh read ${this.#configFile}, not ~/.ssh/config: HOPDECK_SSH_CONFIG names it)`;
-    throw new HostError(failure, `${result.stderr.trim()}${note}`);
+    throw new HostError(failure, `${result.stderr.trim()}${configNote(this.#configFile)}`);
   }
+}
+
+/**
+ * With a config file of its own, ssh does not read ~/.ssh/config: an error
+ * says so, or a host that works in a terminal looks unknown for no reason.
+ */
+export function configNote(configFile: string | undefined): string {
+  return configFile === undefined ? '' : `\n(ssh read ${configFile}, not ~/.ssh/config: HOPDECK_SSH_CONFIG names it)`;
 }
 
 /**

@@ -246,6 +246,16 @@ const ROUTES: Route[] = [
   },
   {
     method: 'POST',
+    pattern: /^\/api\/hosts\/([^/]+)\/ssh-keys\/setup$/,
+    async handle(req, [id], ctx) {
+      const body = asObject(await readJson(req));
+      const file = requiredString(body, 'file', 4096);
+      const password = requiredString(body, 'password', 1024);
+      return { body: { setup: found(await ctx.hosts.setUpKeyLogin(id!, file, password, body['allow'] === true)) } };
+    },
+  },
+  {
+    method: 'POST',
     pattern: /^\/api\/hosts\/([^/]+)\/sudo-password$/,
     async handle(req, [id], ctx) {
       const body = asObject(await readJson(req));
@@ -288,8 +298,10 @@ function hostErrorStatus(error: HostError): number {
   switch (error.code) {
     case 'wrong-password':
     case 'wrong-passphrase':
+    case 'login-password-rejected':
       return 400;
     case 'password-required':
+    case 'password-login-disabled':
     case 'no-privileges':
     case 'sudo-not-allowed':
     case 'known-hosts-unwritable':

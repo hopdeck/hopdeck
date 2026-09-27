@@ -117,3 +117,29 @@
 .field input {
   width: 240px;
 }
+
+.setup {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.subtitle {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.blockers {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.blockers li + li {
+  margin-top: 4px;
+}
+
+.allow {
+  display: grid;
+  gap: 6px;
+}

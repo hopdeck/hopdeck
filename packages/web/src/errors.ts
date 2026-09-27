@@ -46,6 +46,8 @@ const TEXTS = new Map<string, ErrorText>([
   ['trace-not-found', { title: 'error.trace-not-found.title', hint: 'error.trace-not-found.hint' }],
   ['platform-read-only', { title: 'error.platform-read-only.title' }],
   ['wrong-passphrase', { title: 'error.wrong-passphrase.title', hint: 'error.wrong-passphrase.hint' }],
+  ['login-password-rejected', { title: 'error.login-password-rejected.title', hint: 'error.login-password-rejected.hint' }],
+  ['password-login-disabled', { title: 'error.password-login-disabled.title', hint: 'error.password-login-disabled.hint' }],
   ['version-not-found', { title: 'error.version-not-found.title', hint: 'error.version-not-found.hint' }],
   ['ui-error', { title: 'error.ui-error.title', hint: 'error.ui-error.hint' }],
 ]);

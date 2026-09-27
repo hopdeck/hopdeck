@@ -47,7 +47,9 @@ firewall, so everything can be tried safely.
 one account per privilege case (root, sudo with a password, sudo without one,
 no sudo). SYSTEM is one of `debian11`, `debian12`, `debian13` (the default),
 `alma9`, `alma10` (RHEL-compatible), `alpine` (OpenRC and BusyBox, no systemd)
-and `openwrt` (procd, dropbear, fw4; root only).
+and `openwrt` (procd, dropbear, fw4; root only). Logins are by key; the
+accounts with a password (`admin` and `plain`, root on OpenWrt, all
+`hopdeck-test`) may also use it, for the key setup.
 
 `pnpm dev:test-host` starts hopdeck with the Debian 13 hosts, and
 `pnpm dev:test-hosts [SYSTEM...]` with those of the systems named, or of every
