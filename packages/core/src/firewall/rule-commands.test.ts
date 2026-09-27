@@ -81,5 +81,8 @@ describe('ruleCommands', () => {
     expect(ruleCommands('inet', 't', annotated, definition(RULES).replace('\tchain other {\n\t}\n', ''))).toBeUndefined();
     expect(ruleCommands('inet', 't', annotated, definition(RULES).replace('table inet t {\n', 'table inet t {\n\tcomment "managed by hopdeck"\n'))).toBeUndefined();
     expect(ruleCommands('inet', 'missing', annotated, definition(RULES))).toBeUndefined();
+    // On a command line ";" would start another command; in the table it only separates statements.
+    expect(ruleCommands('inet', 't', annotated, definition([...RULES, 'tcp dport 1 accept; tcp dport 2 accept']))).toBeUndefined();
+    expect(ruleCommands('inet', 't', annotated, definition([...RULES, 'accept comment "a; b"']))?.added).toBe(1);
   });
 });

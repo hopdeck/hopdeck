@@ -7,9 +7,18 @@ import { HostError } from './errors.ts';
 
 export const DEFAULT_TIMEOUT_MS = 30_000;
 
+/**
+ * Output kept per stream. A ruleset with large sets stays well below it; a
+ * host printing without end is stopped, so it cannot exhaust this machine's
+ * memory.
+ */
+export const MAX_OUTPUT_BYTES = 256 * 1024 * 1024;
+
 export interface RunOptions {
   stdin?: string | undefined;
   timeoutMs: number;
+  /** Defaults to MAX_OUTPUT_BYTES. */
+  maxOutputBytes?: number;
 }
 
 /**
@@ -21,21 +30,42 @@ export function runProcess(file: string, args: readonly string[], options: RunOp
     const child = spawn(file, args, { stdio: 'pipe' });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
+    const sizes = { stdout: 0, stderr: 0 };
+    const limit = options.maxOutputBytes ?? MAX_OUTPUT_BYTES;
     let timedOut = false;
+    let tooLong: string | undefined;
+    // Killing the program alone is not enough: a program it started may hold the
+    // pipes open and go on writing. With our ends closed, it gets SIGPIPE.
+    const stop = () => {
+      child.kill('SIGKILL');
+      child.stdout.destroy();
+      child.stderr.destroy();
+    };
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGKILL');
+      stop();
     }, options.timeoutMs);
+    const collect = (stream: 'stdout' | 'stderr', chunks: Buffer[]) => (chunk: Buffer) => {
+      sizes[stream] += chunk.length;
+      if (sizes[stream] > limit) {
+        tooLong ??= stream;
+        stop();
+        return;
+      }
+      chunks.push(chunk);
+    };
 
-    child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
-    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
+    child.stdout.on('data', collect('stdout', stdout));
+    child.stderr.on('data', collect('stderr', stderr));
     child.once('error', (error) => {
       clearTimeout(timer);
       reject(new HostError('spawn-failed', `${file}: ${error.message}`));
     });
     child.once('close', (code, signal) => {
       clearTimeout(timer);
-      if (timedOut) {
+      if (tooLong !== undefined) {
+        reject(new HostError('command-failed', `${file} printed more than ${limit} bytes on ${tooLong}, so it was stopped`));
+      } else if (timedOut) {
         reject(new HostError('timeout', `${file} timed out after ${options.timeoutMs} ms`));
       } else if (code === null) {
         reject(new HostError('command-failed', `${file} was killed by ${signal}`));

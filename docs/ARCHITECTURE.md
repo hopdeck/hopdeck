@@ -382,7 +382,15 @@ root ([`staging.ts`](../packages/server/src/hosts/staging.ts)).
 - Commands take their arguments as argv, never through a local shell; over
   SSH each argument is quoted. Values that go into nft input (table
   definitions, elements, trace filters) are checked first: one table block
-  without `include`, one element, values only.
+  whose braces stay open until its last line (a brace or ";" mid-line would
+  otherwise let the rest act on other tables), no `include` anywhere outside
+  strings (nft reads one after ";" inside a chain and prints the file in its
+  error), one element, values only. A table changed rule by rule passes the
+  same check whole first, and a rule with ";" outside a string is changed with
+  the whole table instead, since on a command line ";" starts another command.
+- What a host prints is capped at 256 MiB per stream; a command over the cap,
+  or over its time, is killed and its pipes closed, so a program it started
+  cannot keep writing.
 
 ## Dependency policy
 

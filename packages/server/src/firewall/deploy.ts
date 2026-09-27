@@ -529,7 +529,23 @@ export function checkDefinition(definition: string, family: Family, name: string
   if (code.at(-1) !== '}') throw invalid('the definition must end with the "}" that closes the table');
   const topLevel = code.slice(1, -1).filter((line) => !/^\s/.test(line));
   if (topLevel.length > 0) throw invalid(`everything inside the table must be indented; found "${topLevel[0]}"`);
-  if (code.some((line) => /^\s*include\s/.test(line))) throw invalid('include is not allowed: it would read files on the host as root');
+
+  // Lines are read as nft reads them: strings hold anything, # starts a comment,
+  // and ";" or a brace may end a statement or block in the middle of a line.
+  let depth = 0;
+  for (const [index, line] of code.entries()) {
+    if ((line.match(/"/g)?.length ?? 0) % 2 !== 0) throw invalid(`a string is not closed: "${line.trim()}"`);
+    const bare = line.replace(/"[^"]*"/g, '""').replace(/#.*$/, '');
+    if (/(^|[\s;{}])include\s*""/.test(bare)) throw invalid('include is not allowed: it would read files on the host as root');
+    for (const char of bare) {
+      if (char === '{') depth += 1;
+      if (char !== '}') continue;
+      depth -= 1;
+      // Anything after the table's closing brace would act outside it, on other tables.
+      if (depth <= 0 && index !== code.length - 1) throw invalid(`"${line.trim()}" closes the table before its end`);
+    }
+  }
+  if (depth !== 0) throw invalid('the braces of the definition do not match');
 }
 
 /**

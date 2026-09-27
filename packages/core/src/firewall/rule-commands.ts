@@ -41,6 +41,8 @@ export function ruleCommands(family: Family, name: string, annotated: string, de
     const old = chain.rules;
     if (old.some((rule) => rule.handle === undefined)) return undefined;
     const next = afterChains[index]!.rules.map((rule) => rule.text);
+    // In a block ";" only separates statements; on a command line it would start another command.
+    if (next.some((rule) => rule.replace(/"[^"]*"/g, '""').includes(';'))) return undefined;
     const target = `${table} ${nftName(chain.name)}`;
 
     // Walk a line diff of the rules; a hunk is a run of changes between unchanged rules.

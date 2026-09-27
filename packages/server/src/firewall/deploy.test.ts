@@ -119,6 +119,17 @@ describe('checkDefinition', () => {
     expect(check(`${MINE}flush ruleset\n`)).toThrow(/must end with/);
     expect(check(MINE.replace('\tchain input {', 'flush ruleset\n\tchain input {'))).toThrow(/must be indented/);
     expect(check(MINE.replace('\tchain input {', '\tinclude "/etc/shadow"\n\tchain input {'))).toThrow(/include is not allowed/);
+    // nft reads an include after ";" inside a chain too, and shows the file in its error.
+    expect(check(MINE.replace('policy accept;', 'policy accept;\n\t\ttcp dport 22 accept; include "/etc/shadow"'))).toThrow(/include is not allowed/);
+    // A brace in the middle of a line would close the table and let the rest act on other tables.
+    expect(check(MINE.replace('\t}\n}', '\t} ; } ; delete table inet other ; table inet mine {\n\t}\n}'))).toThrow(/closes the table before its end/);
+    expect(check(MINE.replace('\t}\n}', '}'))).toThrow(/braces of the definition do not match/);
+    expect(check(MINE.replace('policy accept;', 'policy accept;\n\t\taccept comment "open'))).toThrow(/string is not closed/);
+  });
+
+  it('lets strings and comments hold anything', () => {
+    expect(check(MINE.replace('policy accept;', 'policy accept;\n\t\taccept comment "} include" # { ; include "x"'))).not.toThrow();
+    expect(check(MINE.replace('policy accept;', 'policy accept;\n\t\tip saddr @include accept'))).not.toThrow();
   });
 });
 
