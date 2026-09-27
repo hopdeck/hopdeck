@@ -72,7 +72,7 @@ export function ColumnHeader({ label, width, onResize, className, children }: Co
       {width === undefined ? (
         children
       ) : (
-        <span className={styles.label} style={{ width }}>
+        <span className={styles.label} title={label}>
           {children}
         </span>
       )}

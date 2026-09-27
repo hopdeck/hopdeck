@@ -37,8 +37,15 @@
   outline: none;
 }
 
+/*
+ * In a column with a set width the header asks for no width of its own (the
+ * header cell's width decides) but fills the cell, so its text is cut short
+ * only when the column really is narrower.
+ */
 .label {
   display: block;
+  width: 0;
+  min-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
