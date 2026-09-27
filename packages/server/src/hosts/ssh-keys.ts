@@ -44,7 +44,8 @@ export class SshKeys {
       this.#socket = session;
       return;
     }
-    const socket = join(this.#options.runtimeDir, 'agent.sock');
+    // One per hopdeck process: another one, say a second panel, has its own.
+    const socket = join(this.#options.runtimeDir, `agent-${process.pid}.sock`);
     await rm(socket, { force: true });
     // The agent lives as long as its input stays open: when hopdeck exits,
     // even by crashing, cat ends and takes the agent and its keys with it.

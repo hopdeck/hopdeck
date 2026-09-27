@@ -30,8 +30,8 @@ describe('SshKeys with hopdeck\'s own agent', () => {
   });
 
   it('runs its own agent when asked not to use the session\'s, and ssh reaches it', async () => {
-    expect(keys.env['SSH_AUTH_SOCK']).toBe(join(dir, 'agent.sock'));
-    expect(existsSync(join(dir, 'agent.sock'))).toBe(true);
+    expect(keys.env['SSH_AUTH_SOCK']).toBe(join(dir, `agent-${process.pid}.sock`));
+    expect(existsSync(join(dir, `agent-${process.pid}.sock`))).toBe(true);
   });
 
   it('lists the keys ssh would offer the host, and which need a passphrase', async () => {
