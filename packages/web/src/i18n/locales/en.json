@@ -616,5 +616,8 @@
   "settings.historyUsage_other": "It takes {{size}} for {{count}} versions. Beyond the limit the oldest versions go; the last {{min}} always stay.",
   "settings.sharedNote": "Kept on the host in {{file}}, so everyone who manages this host shares these settings.",
   "error.version-not-found.title": "There is no such version in the history",
-  "error.version-not-found.hint": "It may have been removed to keep the history within its size limit."
+  "error.version-not-found.hint": "It may have been removed to keep the history within its size limit.",
+  "table.resize": "Width of the {{column}} column",
+  "table.fitted": "fits the content",
+  "table.resizeHint": "Drag to change the width, or use the arrow keys. Double-click to fit the content again."
 }

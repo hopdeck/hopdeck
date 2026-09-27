@@ -1,5 +1,7 @@
 import { elementParts, elementProblem, splitList, type Family, type SetBlock, type TableChange } from '@hopdeck/core';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ColumnHeader, Fit } from '../../components/ColumnHeader.tsx';
+import { useColumnWidths } from '../../components/column-widths.ts';
 import { CloseIcon, EditIcon, TrashIcon } from '../../components/icons.tsx';
 import { useI18n } from '../../i18n/I18nProvider.tsx';
 import styles from './Editor.module.css';
@@ -64,6 +66,21 @@ export function ElementsDialog({ family, table, set, chains, onReview, onClose }
   const query = search.trim().toLowerCase();
   const matching = existing.filter((item) => query === '' || item.element.toLowerCase().includes(query));
   const showCounters = existing.some((item) => item.parts.counter !== undefined);
+  const [widths, setWidth] = useColumnWidths('hopdeck.elementColumns');
+  const sized = (id: string) => (widths[id] === undefined ? '' : ` ${styles.sized}`);
+  const header = (id: string, label: string) => (
+    <ColumnHeader label={label} width={widths[id]} onResize={(width, save) => setWidth(id, width, save)} className={sized(id)}>
+      {label}
+    </ColumnHeader>
+  );
+  const shown = ['key', ...(map ? ['value'] : []), ...(timeouts ? ['timeout', 'expires'] : []), 'comment', ...(showCounters ? ['counter'] : [])];
+  // Space left over would otherwise widen the columns the viewer sized.
+  const natural = shown.every((id) => widths[id] !== undefined);
+  const cell = (id: string, className: string, content: ReactNode) => (
+    <td className={`${className}${sized(id)}`}>
+      <Fit width={widths[id]}>{content}</Fit>
+    </td>
+  );
 
   // What the add row would add: one element per comma-separated value.
   const suffix = `${timeout ? ` timeout ${timeout.trim()}` : ''}${comment ? ` comment "${comment}"` : ''}${map && value ? ` : ${value.trim()}` : ''}`;
@@ -185,15 +202,15 @@ export function ElementsDialog({ family, table, set, chains, onReview, onClose }
             <p className={styles.note}>{t('elements.empty')}</p>
           ) : (
             <div className={styles.gridScroll}>
-              <table className={styles.grid}>
+              <table className={natural ? `${styles.grid} ${styles.natural}` : styles.grid}>
                 <thead>
                   <tr>
-                    <th>{t(map ? 'elements.col.key' : 'elements.col.element')}</th>
-                    {map && <th>{t('elements.value')}</th>}
-                    {timeouts && <th>{t('elements.timeout')}</th>}
-                    {timeouts && <th>{t('elements.col.expires')}</th>}
-                    <th>{t('elements.comment')}</th>
-                    {showCounters && <th>{t('editor.col.counter')}</th>}
+                    {header('key', t(map ? 'elements.col.key' : 'elements.col.element'))}
+                    {map && header('value', t('elements.value'))}
+                    {timeouts && header('timeout', t('elements.timeout'))}
+                    {timeouts && header('expires', t('elements.col.expires'))}
+                    {header('comment', t('elements.comment'))}
+                    {showCounters && header('counter', t('editor.col.counter'))}
                     <th className={styles.rowActions}>
                       <span className="visually-hidden">{t('editor.col.actions')}</span>
                     </th>
@@ -204,12 +221,12 @@ export function ElementsDialog({ family, table, set, chains, onReview, onClose }
                     const parts = elementParts(element, map);
                     return (
                       <tr key={`add ${element}`} className={styles.rowNew}>
-                        <td className="mono">{parts.key}</td>
-                        {map && <td className="mono">{parts.value}</td>}
-                        {timeouts && <td className="mono">{parts.timeout ?? defaultTimeout ?? ''}</td>}
-                        {timeouts && <td />}
-                        <td className={styles.comment}>{parts.comment}</td>
-                        {showCounters && <td />}
+                        {cell('key', 'mono', parts.key)}
+                        {map && cell('value', 'mono', parts.value)}
+                        {timeouts && cell('timeout', 'mono', parts.timeout ?? defaultTimeout ?? '')}
+                        {timeouts && cell('expires', '', null)}
+                        {cell('comment', styles.comment!, parts.comment)}
+                        {showCounters && cell('counter', '', null)}
                         <td className={styles.rowActions}>
                           <button type="button" className="btn btn-ghost btn-sm btn-icon" title={t('elements.undo')} aria-label={t('elements.undo')}
                             onClick={() => setAdd((current) => current.filter((item) => item !== element))}>
@@ -223,14 +240,12 @@ export function ElementsDialog({ family, table, set, chains, onReview, onClose }
                     const removed = remove.includes(parts.key);
                     return (
                       <tr key={element} className={removed ? styles.rowRemoved : undefined}>
-                        <td className="mono">{parts.key}</td>
-                        {map && <td className="mono">{parts.value}</td>}
-                        {timeouts && <td className="mono">{parts.timeout ?? ''}</td>}
-                        {timeouts && <td className="mono">{parts.expires?.replace(/(?<=\D)\d+ms$/, '') ?? ''}</td>}
-                        <td className={styles.comment}>{parts.comment}</td>
-                        {showCounters && (
-                          <td className={styles.counter}>{parts.counter && `${parts.counter.packets} / ${parts.counter.bytes} B`}</td>
-                        )}
+                        {cell('key', 'mono', parts.key)}
+                        {map && cell('value', 'mono', parts.value)}
+                        {timeouts && cell('timeout', 'mono', parts.timeout ?? '')}
+                        {timeouts && cell('expires', 'mono', parts.expires?.replace(/(?<=\D)\d+ms$/, '') ?? '')}
+                        {cell('comment', styles.comment!, parts.comment)}
+                        {showCounters && cell('counter', styles.counter!, parts.counter && `${parts.counter.packets} / ${parts.counter.bytes} B`)}
                         <td className={styles.rowActions}>
                           {!removed && (
                             <button type="button" className="btn btn-ghost btn-sm btn-icon" title={t('elements.edit')} aria-label={t('elements.edit')}

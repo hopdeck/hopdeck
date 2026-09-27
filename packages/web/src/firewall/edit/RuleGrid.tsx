@@ -1,5 +1,7 @@
 import type { RuleForm } from '@hopdeck/core';
 import { Fragment, type ReactNode } from 'react';
+import { ColumnHeader, Fit } from '../../components/ColumnHeader.tsx';
+import { useColumnWidths } from '../../components/column-widths.ts';
 import { useI18n } from '../../i18n/I18nProvider.tsx';
 import type { MessageKey } from '../../i18n/locales.ts';
 import { NftCode } from '../ruleset/NftCode.tsx';
@@ -54,26 +56,43 @@ const COLUMNS: readonly { id: Column; label: MessageKey; mono: boolean }[] = [
 
 type Cells = RuleColumns & { comment: string };
 
+/** Where the widths the viewer gives columns are kept; shared by every rule table, in the editor too. */
+const WIDTHS_KEY = 'hopdeck.ruleColumns';
+
 /** The rules of a chain as a table: what each rule matches, column by column, and what it does. */
 export function RuleGrid({ rows, actions, onOpen, showRates = false, showHandles = false }: RuleGridProps) {
   const { t } = useI18n();
+  const [widths, setWidth] = useColumnWidths(WIDTHS_KEY);
+  const header = (id: string, label: string, className?: string) => (
+    <ColumnHeader
+      key={id}
+      label={label}
+      width={widths[id]}
+      onResize={(width, save) => setWidth(id, width, save)}
+      className={`${className ?? ''}${widths[id] === undefined ? '' : ` ${styles.sized}`}`}
+    >
+      {label}
+    </ColumnHeader>
+  );
+  const sized = (id: string, className: string) => (widths[id] === undefined ? className : `${className} ${styles.sized}`);
   const cells = rows.map((row): Cells | undefined => row.form && { ...ruleColumns(row.form), comment: row.form.comment ?? '' });
   const columns = COLUMNS.filter((column) => cells.some((cell) => cell !== undefined && cell[column.id] !== ''));
   const showCounters = rows.some((row) => row.counter !== undefined);
+  const shown = ['action', ...columns.map((column) => column.id), ...(showRates ? ['rate'] : []), ...(showCounters ? ['counter'] : []), ...(showHandles ? ['handle'] : [])];
+  // Space left over would otherwise widen the columns the viewer sized.
+  const natural = shown.every((id) => widths[id] !== undefined);
 
   return (
     <div className={styles.gridScroll}>
-      <table className={styles.grid}>
+      <table className={natural ? `${styles.grid} ${styles.natural}` : styles.grid}>
         <thead>
           <tr>
             <th className={styles.index}>#</th>
-            <th>{t('editor.col.action')}</th>
-            {columns.map((column) => (
-              <th key={column.id}>{t(column.label)}</th>
-            ))}
-            {showRates && <th className={styles.numeric}>{t('editor.col.rate')}</th>}
-            {showCounters && <th className={styles.numeric}>{t('editor.col.counter')}</th>}
-            {showHandles && <th className={styles.numeric}>{t('editor.col.handle')}</th>}
+            {header('action', t('editor.col.action'))}
+            {columns.map((column) => header(column.id, t(column.label)))}
+            {showRates && header('rate', t('editor.col.rate'), styles.numeric)}
+            {showCounters && header('counter', t('editor.col.counter'), styles.numeric)}
+            {showHandles && header('handle', t('editor.col.handle'), styles.numeric)}
             {actions !== undefined && (
               <th className={styles.rowActions}>
                 <span className="visually-hidden">{t('editor.col.actions')}</span>
@@ -105,19 +124,36 @@ export function RuleGrid({ rows, actions, onOpen, showRates = false, showHandles
                   </td>
                 ) : (
                   <>
-                    <td>
-                      <span className={`${styles.action} ${styles[`action-${cell.actionTone}`]}`}>{cell.action}</span>
+                    <td className={sized('action', '')}>
+                      <Fit width={widths['action']}>
+                        <span className={`${styles.action} ${styles[`action-${cell.actionTone}`]}`}>{cell.action}</span>
+                      </Fit>
                     </td>
                     {columns.map((column) => (
-                      <td key={column.id} className={column.id === 'comment' ? styles.comment : `${styles.value}${column.mono ? ' mono' : ''}`}>
-                        {column.id === 'comment' ? cell.comment : <Items text={cell[column.id]} />}
+                      <td
+                        key={column.id}
+                        className={sized(column.id, column.id === 'comment' ? styles.comment! : `${styles.value}${column.mono ? ' mono' : ''}`)}
+                      >
+                        <Fit width={widths[column.id]}>{column.id === 'comment' ? cell.comment : <Items text={cell[column.id]} />}</Fit>
                       </td>
                     ))}
                   </>
                 )}
-                {showRates && <td className={`${styles.numeric} ${styles.rate}`}>{row.rate}</td>}
-                {showCounters && <td className={`${styles.numeric} ${styles.counter}`}>{row.counter}</td>}
-                {showHandles && <td className={`${styles.numeric} ${styles.handle}`}>{row.handle !== undefined && `#${row.handle}`}</td>}
+                {showRates && (
+                  <td className={sized('rate', `${styles.numeric} ${styles.rate}`)}>
+                    <Fit width={widths['rate']}>{row.rate}</Fit>
+                  </td>
+                )}
+                {showCounters && (
+                  <td className={sized('counter', `${styles.numeric} ${styles.counter}`)}>
+                    <Fit width={widths['counter']}>{row.counter}</Fit>
+                  </td>
+                )}
+                {showHandles && (
+                  <td className={sized('handle', `${styles.numeric} ${styles.handle}`)}>
+                    <Fit width={widths['handle']}>{row.handle !== undefined && `#${row.handle}`}</Fit>
+                  </td>
+                )}
                 {actions !== undefined && <td className={styles.rowActions}>{actions(index)}</td>}
               </tr>
             );

@@ -656,5 +656,8 @@
   "settings.historyUsage_other": "Zajmuje {{size}} na {{count}} wersji. Po przekroczeniu limitu usuwane są najstarsze wersje; {{min}} ostatnich zostaje zawsze.",
   "settings.sharedNote": "Ustawienia leżą na hoście w {{file}}, więc wszyscy, którzy nim zarządzają, mają te same.",
   "error.version-not-found.title": "W historii nie ma takiej wersji",
-  "error.version-not-found.hint": "Mogła zostać usunięta, żeby historia zmieściła się w limicie rozmiaru."
+  "error.version-not-found.hint": "Mogła zostać usunięta, żeby historia zmieściła się w limicie rozmiaru.",
+  "table.resize": "Szerokość kolumny {{column}}",
+  "table.fitted": "dopasowana do treści",
+  "table.resizeHint": "Przeciągnij albo użyj strzałek, żeby zmienić szerokość. Dwuklik dopasowuje ją z powrotem do treści."
 }
