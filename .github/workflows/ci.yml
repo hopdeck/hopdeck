@@ -1,0 +1,117 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Mateusz T (Tenir)
+
+# Every push: types, tests (the sandbox ones included), the UI build, and the
+# tests against a Debian 13 test host. Every Monday, and by hand before a
+# release: the tests against every test system. Only GitHub's own actions are
+# used, pinned by commit; see "Dependency policy" in docs/ARCHITECTURE.md.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      systems:
+        description: 'Test systems, separated by spaces (empty: all): debian11 debian12 debian13 alma9 alma10 alpine openwrt'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Install pnpm, the version package.json names
+        run: npm install -g "$(node -p 'require("./package.json").packageManager')"
+      # The sandbox tests need nft and user namespaces without root, which
+      # Ubuntu 24.04 restricts through AppArmor.
+      - name: Prepare the sandbox
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nftables
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  # Which test systems this run tests: Debian 13 on pushes, all on Mondays,
+  # the ones asked for by hand.
+  systems:
+    runs-on: ubuntu-24.04
+    outputs:
+      list: ${{ steps.pick.outputs.list }}
+    steps:
+      - id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          WANTED: ${{ inputs.systems }}
+        run: |
+          set -f
+          all='debian11 debian12 debian13 alma9 alma10 alpine openwrt'
+          case "$EVENT" in
+          schedule) picked=$all ;;
+          workflow_dispatch) picked=${WANTED:-$all} ;;
+          *) picked=debian13 ;;
+          esac
+          list=''
+          for system in $picked; do
+            case " $all " in
+            *" $system "*) list="$list\"$system\"," ;;
+            *) echo "unknown test system: $system" >&2; exit 1 ;;
+            esac
+          done
+          echo "list=[${list%,}]" >> "$GITHUB_OUTPUT"
+
+  hosts:
+    needs: systems
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        system: ${{ fromJSON(needs.systems.outputs.list) }}
+    name: hosts (${{ matrix.system }})
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Install pnpm, the version package.json names
+        run: npm install -g "$(node -p 'require("./package.json").packageManager')"
+      # Rootless podman with pasta networking, as on a developer's machine;
+      # the sandbox tests in the same files need nft and user namespaces.
+      - name: Prepare podman and the sandbox
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nftables passt
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          mkdir -p ~/.config/containers
+          printf '[network]\ndefault_rootless_network_cmd = "pasta"\n' > ~/.config/containers/containers.conf
+      - run: pnpm install --frozen-lockfile
+      - name: Test against ${{ matrix.system }}
+        env:
+          SYSTEM: ${{ matrix.system }}
+        run: scripts/test-hosts.sh "$SYSTEM"
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-host-logs-${{ matrix.system }}
+          path: .dev/test-host/logs
+          retention-days: 14

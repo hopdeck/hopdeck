@@ -405,6 +405,11 @@ The npm supply chain is a real risk for a tool with this access.
 - `minimumReleaseAge` is 7 days and `trustPolicy` is `no-downgrade`, set in
   [`pnpm-workspace.yaml`](../pnpm-workspace.yaml).
 - The lockfile is committed, and lockfile changes get reviewed.
+- CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) uses only
+  GitHub's own actions, pinned by commit, and installs the exact pnpm that
+  `packageManager` names. Every push runs types, tests, the build and the
+  Debian 13 test host; every Monday, and by hand before a release, every test
+  system runs.
 
 ## UI plan
 

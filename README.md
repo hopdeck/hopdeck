@@ -63,6 +63,9 @@ removes containers.
 The containers share this machine's kernel, so they test nft, sudo, sshd,
 systemd, OpenRC and the paths of each system, not older kernels.
 
+CI on GitHub runs the same: every push tests the Debian 13 host, and every
+Monday all systems; "Run workflow" on the CI workflow picks systems by hand.
+
 `scripts/nft-fixture.sh FILE.nft` writes what nft prints for a ruleset (JSON and
 the text listing with handles) next to the file, using a throwaway network
 namespace. The host ruleset is not touched.
