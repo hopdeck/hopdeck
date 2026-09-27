@@ -700,5 +700,10 @@
   "error.login-password-rejected.title": "The host did not take the password",
   "error.login-password-rejected.hint": "Check the password and the keyboard layout. The host may also refuse passwords for this account only: sshd lets root log in with a key alone by default (PermitRootLogin prohibit-password).",
   "error.password-login-disabled.title": "The host takes no passwords",
-  "error.password-login-disabled.hint": "sshd accepts keys only (PasswordAuthentication no), so hopdeck cannot log in to put the key there. Add it to the account's ~/.ssh/authorized_keys another way, for example from your provider's console."
+  "error.password-login-disabled.hint": "sshd accepts keys only (PasswordAuthentication no), so hopdeck cannot log in to put the key there. Add it to the account's ~/.ssh/authorized_keys another way, for example from your provider's console.",
+  "clamp.more": "Show all",
+  "clamp.moreItems": "Show all ({{count}})",
+  "clamp.less": "Show less",
+  "rule.fieldExpand": "Show the whole value",
+  "rule.fieldCollapse": "Back to one line"
 }

@@ -3,6 +3,7 @@
 
 import type { RuleForm } from '@hopdeck/core';
 import { Fragment, type ReactNode } from 'react';
+import { Clamp } from '../../components/Clamp.tsx';
 import { ColumnHeader, Fit } from '../../components/ColumnHeader.tsx';
 import { useColumnWidths } from '../../components/column-widths.ts';
 import { useI18n } from '../../i18n/I18nProvider.tsx';
@@ -123,7 +124,9 @@ export function RuleGrid({ rows, actions, onOpen, showRates = false, showHandles
                     <span className={styles.textBadge} title={t('editor.textRuleTitle')}>
                       {t('editor.textRule')}
                     </span>
-                    <NftCode text={row.text} />
+                    <Clamp>
+                      <NftCode text={row.text} />
+                    </Clamp>
                   </td>
                 ) : (
                   <>
@@ -137,7 +140,15 @@ export function RuleGrid({ rows, actions, onOpen, showRates = false, showHandles
                         key={column.id}
                         className={sized(column.id, column.id === 'comment' ? styles.comment! : `${styles.value}${column.mono ? ' mono' : ''}`)}
                       >
-                        <Fit width={widths[column.id]}>{column.id === 'comment' ? cell.comment : <Items text={cell[column.id]} />}</Fit>
+                        <Fit width={widths[column.id]}>
+                          {column.id === 'comment' ? (
+                            <Clamp>{cell.comment}</Clamp>
+                          ) : (
+                            <Clamp count={itemCount(cell[column.id])}>
+                              <Items text={cell[column.id]} />
+                            </Clamp>
+                          )}
+                        </Fit>
                       </td>
                     ))}
                   </>
@@ -165,6 +176,12 @@ export function RuleGrid({ rows, actions, onOpen, showRates = false, showHandles
       </table>
     </div>
   );
+}
+
+/** How many items a list has, when it is a list: the button that shows a cut one says so. */
+function itemCount(text: string): number | undefined {
+  const count = text.split(', ').length;
+  return count > 1 ? count : undefined;
 }
 
 /** A comma-separated list that wraps only between its items, never inside one. */

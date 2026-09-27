@@ -477,6 +477,63 @@
   min-width: 0;
 }
 
+/* A list field: one line, or unfolded to its whole value. */
+.listInput {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.listText {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  line-height: 16px;
+  overflow: hidden;
+  resize: none;
+  white-space: pre;
+}
+
+.listOpen {
+  max-height: 40vh;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.listToggle {
+  flex: none;
+  height: 28px;
+}
+
+.chevronDown {
+  transform: rotate(90deg);
+}
+
+.chevronUp {
+  transform: rotate(-90deg);
+}
+
+/* Next to an unfolded field, the label and the checkboxes stay on its first line. */
+.field:has(.listOpen) {
+  align-items: start;
+}
+
+.field:has(.listOpen) > .fieldLabel {
+  padding-top: 5px;
+}
+
+.inline:has(.listOpen) {
+  align-items: flex-start;
+}
+
+.inline:has(.listOpen) > .check {
+  min-height: 28px;
+}
+
 .checks {
   display: flex;
   flex-wrap: wrap;

@@ -748,5 +748,10 @@
   "error.login-password-rejected.title": "Host nie przyjął hasła",
   "error.login-password-rejected.hint": "Sprawdź hasło i układ klawiatury. Host może też nie przyjmować hasła tylko dla tego konta: sshd domyślnie wpuszcza roota wyłącznie kluczem (PermitRootLogin prohibit-password).",
   "error.password-login-disabled.title": "Host nie przyjmuje haseł",
-  "error.password-login-disabled.hint": "sshd przyjmuje tylko klucze (PasswordAuthentication no), więc hopdeck nie zaloguje się, żeby wgrać klucz. Dopisz go do ~/.ssh/authorized_keys konta inną drogą, np. z konsoli dostawcy serwera."
+  "error.password-login-disabled.hint": "sshd przyjmuje tylko klucze (PasswordAuthentication no), więc hopdeck nie zaloguje się, żeby wgrać klucz. Dopisz go do ~/.ssh/authorized_keys konta inną drogą, np. z konsoli dostawcy serwera.",
+  "clamp.more": "Pokaż całość",
+  "clamp.moreItems": "Pokaż wszystkie ({{count}})",
+  "clamp.less": "Zwiń",
+  "rule.fieldExpand": "Pokaż całą wartość",
+  "rule.fieldCollapse": "Z powrotem do jednej linii"
 }

@@ -15,13 +15,14 @@ import {
   type TcpFlags,
 } from '@hopdeck/core';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Clamp } from '../../components/Clamp.tsx';
 import { Segmented } from '../../components/Segmented.tsx';
 import { Tabs } from '../../components/Tabs.tsx';
 import { useI18n } from '../../i18n/I18nProvider.tsx';
 import type { MessageKey } from '../../i18n/locales.ts';
 import { NftCode } from '../ruleset/NftCode.tsx';
 import styles from './Editor.module.css';
-import { Choice, Field } from './fields.tsx';
+import { Choice, Field, ListInput } from './fields.tsx';
 
 export type RuleEdit = { form: RuleForm; text: string } | { text: string };
 
@@ -480,13 +481,15 @@ export function RuleDialog({ rule, family, chain, chains, counters, sets, onSave
           <div className={styles.fields}>
             {rule !== 'new' && rule !== undefined && !('form' in rule) && <p className={styles.note}>{t('rule.textOnly')}</p>}
             <Field label={t('rule.text')}>
-              <input className="input mono" value={text} onChange={(event) => setText(event.target.value)} spellCheck={false} />
+              <ListInput value={text} label={t('rule.text')} join=" " onChange={setText} />
             </Field>
           </div>
         )}
         <div className={styles.preview}>
           <span className={styles.previewLabel}>{t('rule.preview')}</span>
-          <NftCode text={text ?? rendered} className={styles.previewCode} />
+          <Clamp>
+            <NftCode text={text ?? rendered} className={styles.previewCode} />
+          </Clamp>
         </div>
         {found.length > 0 && (
           <ul className={styles.problems}>
@@ -660,8 +663,8 @@ function MatchField({ label, match, placeholder, onChange }: { label: string; ma
             onChange={(event) => match && onChange({ ...match, negate: event.target.checked })} />
           !
         </label>
-        <input className="input mono" value={match?.value ?? ''} placeholder={placeholder} aria-label={label}
-          onChange={(event) => onChange(event.target.value.trim() === '' ? undefined : { negate: match?.negate ?? false, value: event.target.value })} />
+        <ListInput value={match?.value ?? ''} placeholder={placeholder} label={label}
+          onChange={(value) => onChange(value.trim() === '' ? undefined : { negate: match?.negate ?? false, value })} />
       </span>
     </Field>
   );
@@ -677,8 +680,8 @@ function InterfaceField({ label, match, onChange }: { label: string; match: Inte
             onChange={(event) => match && onChange({ ...match, negate: event.target.checked })} />
           !
         </label>
-        <input className="input mono" value={match?.value ?? ''} placeholder="eth0, wg0" aria-label={label}
-          onChange={(event) => onChange(event.target.value.trim() === '' ? undefined : { negate: match?.negate ?? false, byIndex: match?.byIndex ?? false, value: event.target.value.trim() })} />
+        <ListInput value={match?.value ?? ''} placeholder="eth0, wg0" label={label}
+          onChange={(value) => onChange(value.trim() === '' ? undefined : { negate: match?.negate ?? false, byIndex: match?.byIndex ?? false, value: value.trim() })} />
         <label className={styles.check} title={t('rule.byIndexTitle')}>
           <input type="checkbox" checked={match?.byIndex ?? false} disabled={match === undefined}
             onChange={(event) => match && onChange({ ...match, byIndex: event.target.checked })} />
