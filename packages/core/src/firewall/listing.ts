@@ -17,6 +17,8 @@ export interface Listing {
   blocks: Map<string, string>;
   /** Tables nft reports as managed by iptables-nft; keyed by tableKey(). */
   iptablesNft: Set<string>;
+  /** Each table's comment, keyed by tableKey(); nft 1.0.6 and older leave it out of their JSON. */
+  tableComments: Map<string, string>;
 }
 
 const HANDLE = / # handle \d+$/;
@@ -27,7 +29,7 @@ const RULE = /^\t\t(.*) # handle (\d+)$/;
 const IPTABLES_WARNING = /^# Warning: table (\S+) (\S+) is managed by iptables-nft/;
 
 export function parseListing(listing: string): Listing {
-  const result: Listing = { rules: new Map(), chainHeaders: new Map(), blocks: new Map(), iptablesNft: new Set() };
+  const result: Listing = { rules: new Map(), chainHeaders: new Map(), blocks: new Map(), iptablesNft: new Set(), tableComments: new Map() };
   let table: { family: string; name: string } | undefined;
   let chain: string | undefined;
   let block: { key: string; lines: string[] } | undefined;
@@ -60,6 +62,12 @@ export function parseListing(listing: string): Listing {
       const [, kind, name] = object as unknown as [string, string, string];
       if (kind === 'chain') chain = unquote(name);
       else block = { key: blockKey(table.family, table.name, kind, unquote(name)), lines: [line.slice(1).replace(HANDLE, '')] };
+      continue;
+    }
+
+    const comment = /^\tcomment "(.*)"$/.exec(line);
+    if (comment !== null && block === undefined && chain === undefined) {
+      result.tableComments.set(tableKey(table.family, table.name), comment[1]!);
       continue;
     }
 

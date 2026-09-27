@@ -128,9 +128,13 @@ export interface HistoryState {
  * Per managed table, a hash of its content alone: no handles, counter values,
  * quota use, expiry or set elements. A table loaded again at boot keeps it, and
  * sets that fill themselves do not count as changes.
+ *
+ * Which tables are managed comes from `managed` when given (tableKey()s):
+ * nft 1.0.6 and older print no table comments in JSON, so the marker has to be
+ * read from its text.
  */
-export function historyFingerprints(json: unknown): Record<string, string> {
-  const managed = new Set(
+export function historyFingerprints(json: unknown, managed?: ReadonlySet<string>): Record<string, string> {
+  managed ??= new Set(
     parseRuleset(json)
       .tables.filter((node) => isManaged(node.table))
       .map((node) => tableKey(node.table.family, node.table.name)),

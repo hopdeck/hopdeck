@@ -6,12 +6,14 @@ import {
   isManaged,
   normalizedTable,
   parseHostSettings,
+  parseListing,
   parseRuleset,
   sameTables,
   tableFileName,
   tableKey,
   tableText,
   validMaxBytes,
+  withTableComments,
   HISTORY_MIN_VERSIONS,
   type DeploymentView,
   type Executor,
@@ -61,6 +63,8 @@ type Problem = { code: HostErrorCode; detail: string };
 interface HostRecord {
   /** Fingerprints of the newest version; null before the first one; undefined until read. */
   latest?: Record<string, string> | null;
+  /** The managed tables as last read from nft's text, by tableKey(); see historyFingerprints(). */
+  managed?: ReadonlySet<string>;
   settings?: HostSettings;
   /** One read or write at a time per host. */
   queue: Promise<unknown>;
@@ -77,6 +81,7 @@ type NewVersion = Omit<HistoryVersion, 'id' | 'tables'>;
 interface Snapshot {
   fingerprints: Record<string, string>;
   tables: (HistoryTable & { text: string })[];
+  managed: ReadonlySet<string>;
 }
 
 /**
@@ -110,10 +115,16 @@ export class History {
     if (this.#busy?.(target.hostId) || this.#unavailable(target, host) !== undefined) return;
     await this.#serial(host, async () => {
       await this.#load(target, host);
-      if (this.#unchanged(host, historyFingerprints(json))) return;
+      // Which tables are managed is known from text only, so the first look reads it.
+      host.managed ??= (await readSnapshot(target.access)).managed;
+      if (this.#unchanged(host, historyFingerprints(json, host.managed))) return;
       // Read again, both forms at once, and make sure hopdeck did not start a change meanwhile.
       const snapshot = await readSnapshot(target.access);
+      host.managed = snapshot.managed;
       if (this.#unchanged(host, snapshot.fingerprints) || this.#busy?.(target.hostId)) return;
+      // Another admin's hopdeck may have recorded this state already.
+      await this.#load(target, host, true);
+      if (this.#unchanged(host, snapshot.fingerprints)) return;
       const kind = host.latest === null ? 'baseline' : 'outside';
       const author = await this.#author(target, host);
       const id = await this.#write(target, host, { time: new Date().toISOString(), kind, author, changes: [] }, snapshot);
@@ -138,6 +149,7 @@ export class History {
     return this.#serial(host, async () => {
       await this.#load(target, host);
       const snapshot = await readSnapshot(target.access);
+      host.managed = snapshot.managed;
       const author = await this.#author(target, host);
       const version: NewVersion = {
         time: new Date().toISOString(),
@@ -307,9 +319,9 @@ export class History {
     }
   }
 
-  /** Reads the settings and the newest version's fingerprints, once per host. */
-  async #load(target: HistoryTarget, host: HostRecord): Promise<void> {
-    if (host.latest !== undefined && host.settings !== undefined) return;
+  /** Reads the settings and the newest version's fingerprints, once per host unless `again`. */
+  async #load(target: HistoryTarget, host: HostRecord, again = false): Promise<void> {
+    if (!again && host.latest !== undefined && host.settings !== undefined) return;
     const script = [
       'h=$1',
       `printf 'settings\\0'; cat "$2" 2>/dev/null; printf '\\0'`,
@@ -323,6 +335,7 @@ export class History {
     const newest = [...parts].find(([name]) => /^\d+$/.test(name));
     const version = newest && parseMeta(Number(newest[0]), newest[1]);
     host.latest = version === undefined ? null : fingerprintsOf(version);
+    if (version !== undefined) host.managed ??= new Set(Object.keys(host.latest!));
   }
 
   #unchanged(host: HostRecord, fingerprints: Record<string, string>): boolean {
@@ -428,16 +441,19 @@ async function readSnapshot(access: NftAccess): Promise<Snapshot> {
   const listing = await runNft(access, ['list', 'ruleset']);
   if (listing.exitCode !== 0) throw new HostError('command-failed', listing.stderr.trim() || `nft exited with code ${listing.exitCode}`);
   const parsed: unknown = JSON.parse(json.stdout);
-  const fingerprints = historyFingerprints(parsed);
+  // The managed marker is the table's comment, which older nft prints only as text.
+  const ruleset = withTableComments(parseRuleset(parsed), parseListing(listing.stdout));
+  const managed = new Set(ruleset.tables.filter((node) => isManaged(node.table)).map((node) => tableKey(node.table.family, node.table.name)));
+  const fingerprints = historyFingerprints(parsed, managed);
   const tables: Snapshot['tables'] = [];
-  for (const { table } of parseRuleset(parsed).tables.filter((node) => isManaged(node.table))) {
+  for (const { table } of ruleset.tables.filter((node) => isManaged(node.table))) {
     const text = tableText(listing.stdout, table.family, table.name);
     const fingerprint = fingerprints[tableKey(table.family, table.name)];
     // Gone between the two reads; the next look records it.
     if (text === undefined || fingerprint === undefined) continue;
     tables.push({ family: table.family, name: table.name, file: tableFileName(table.family, table.name), fingerprint, text: normalizedTable(text) });
   }
-  return { fingerprints: Object.fromEntries(tables.map((table) => [tableKey(table.family, table.name), table.fingerprint])), tables };
+  return { fingerprints: Object.fromEntries(tables.map((table) => [tableKey(table.family, table.name), table.fingerprint])), tables, managed };
 }
 
 /**
@@ -453,7 +469,8 @@ async function sshdVerdict(
   const script = [
     'p=" from $1 port $2 "',
     `line=$(journalctl -q --no-pager -o cat -r -t sshd -t sshd-session 2>/dev/null | grep -F -- "$p" | grep -m 1 'Accepted ' || true)`,
-    `[ -n "$line" ] || for f in /var/log/auth.log /var/log/secure; do [ -r "$f" ] && line=$(grep -F -- "$p" "$f" | grep 'Accepted ' | tail -n 1); [ -z "$line" ] || break; done`,
+    // Without journald: Debian's and RHEL's syslog files, and BusyBox syslogd's (Alpine).
+    `[ -n "$line" ] || for f in /var/log/auth.log /var/log/secure /var/log/messages; do [ -r "$f" ] && line=$(grep -F -- "$p" "$f" | grep 'Accepted ' | tail -n 1); [ -z "$line" ] || break; done`,
     'printf "%s" "$line"',
   ].join('\n');
   const found = await root(['sh', '-c', script, 'sh', address, port]).catch(() => undefined);

@@ -10,13 +10,15 @@
   },
   "scripts": {
     "dev": "HOPDECK_TOKEN=$(node -e \"console.log(crypto.randomUUID())\") pnpm -r --parallel dev",
-    "dev:test-host": "HOPDECK_CONFIG_DIR=$PWD/.dev/test-host/config HOPDECK_SSH_CONFIG=$PWD/.dev/test-host/ssh_config pnpm dev",
+    "dev:test-host": "HOPDECK_CONFIG_DIR=$PWD/.dev/test-host/debian13/config HOPDECK_SSH_CONFIG=$PWD/.dev/test-host/debian13/ssh_config pnpm dev",
+    "dev:test-hosts": "dev/test-host/panel.sh",
     "start": "node packages/cli/src/main.ts",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:host": "HOPDECK_TEST_HOST=1 vitest run --no-file-parallelism"
+    "test:host": "HOPDECK_TEST_HOST=1 vitest run --no-file-parallelism",
+    "test:hosts": "scripts/test-hosts.sh"
   },
   "devDependencies": {
     "@types/node": "^24.13.5",

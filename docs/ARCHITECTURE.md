@@ -41,7 +41,7 @@ tools, such as a topology view, come later.
 | polkit | Not used (decided 2026-09-25) | Plain `pkexec` asks for the password on every nft call. Doing it properly needs a root-owned helper and a polkit action installed on the machine, and the lighter alternative (one pkexec per session) hands the panel an unrestricted root channel. It would help only the local host in a graphical session; sudo covers every case. |
 | UI languages | English and Polish | One JSON file per language; adding one needs no code changes |
 | Styling | Plain CSS with design tokens, light and dark theme, system fonts; the look of a network tool: dense, hairlines instead of cards, 2 px corners, no shadows, monospace for data, one signal colour (amber) | No UI framework to trust or update; the CSP blocks external fonts anyway. Dense and plain like Wireshark or htop, not a generic dashboard |
-| Managed hosts | Debian 11+ (nft 0.9.8), RHEL 9+ | Admin machine: Linux; macOS likely works; Windows later |
+| Managed hosts | Debian 11+ (nft 0.9.8), RHEL 9+, Alpine; OpenWrt read-only for now | Each is tested with `pnpm test:hosts` (containers: Debian 11, 12, 13, AlmaLinux 9, 10, Alpine, OpenWrt 24.10). Admin machine: Linux; macOS likely works; Windows later |
 | License | GPL-3.0-or-later | |
 
 ## Components
@@ -184,7 +184,9 @@ disappears with it.
   pipeline as any change: diff, validation, automatic rollback. Tables of
   other tools cannot be adopted. `managed by nftm`, the marker from before
   the rename, still counts; for the same reason it stays until the table's
-  next change, which writes the current one.
+  next change, which writes the current one. nft 1.0.6 and older (Debian 11
+  and 12) print table comments in their text listing only, not in JSON, so
+  hopdeck reads the marker from the text wherever it has one.
 - **Manual override** (PL: Ręczne sterowanie). A per-host switch that lifts
   the ownership rule: any table can be edited without adopting, including
   other tools' tables (each with a warning that the tool may overwrite the
@@ -550,8 +552,9 @@ different ways of reading and changing a host.
 
 ## Open questions
 
-- **Table comments on old systems:** they need nft 0.9.7+ and kernel
-  support; check on Debian 11 and RHEL 9 before relying on them there.
+- **Older kernels:** table comments need kernel support. The test hosts
+  share this machine's kernel, so the kernels of Debian 11 (5.10) and RHEL 9
+  (5.14) are untested; a virtual machine would tell.
 - **Windows as the admin machine:** its OpenSSH has no ControlMaster.
 - **Distribution:** npm package, Node single executable, distribution packages,
   or a desktop wrapper.

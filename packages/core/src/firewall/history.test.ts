@@ -4,6 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import { historyFingerprints, parseHostSettings, restoreChanges, tableFileName, type HistoryVersionDetail } from './history.ts';
 import { tableKey } from './keys.ts';
+import { parseListing } from './listing.ts';
+import { parseRuleset, withTableComments } from './ruleset.ts';
 
 describe('parseHostSettings', () => {
   it('takes the defaults for anything missing, broken or out of range', () => {
@@ -20,6 +22,14 @@ describe('historyFingerprints', () => {
       { table: { family: 'inet', name: 'mine', handle: 1, ...(comment && { comment }) } },
       { table: { family: 'inet', name: 'docker', handle: 2 } },
     ],
+  });
+
+  it('takes the managed tables from nft\'s text when its JSON has no table comments (nft 1.0.6 and older)', () => {
+    const json = ruleset();
+    const listing = parseListing('table inet mine { # handle 1\n\tcomment "managed by hopdeck"\n}\ntable inet docker { # handle 2\n}\n');
+    expect(Object.keys(historyFingerprints(json))).toEqual([]);
+    expect(withTableComments(parseRuleset(json), listing).tables.map((node) => node.table.comment)).toEqual(['managed by hopdeck', undefined]);
+    expect(Object.keys(historyFingerprints(json, new Set([tableKey('inet', 'mine')])))).toEqual([tableKey('inet', 'mine')]);
   });
 
   it('covers managed tables only, the old marker included', () => {

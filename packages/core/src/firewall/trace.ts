@@ -66,7 +66,7 @@ export function traceTable(name: string, filter: TraceFilter, perSecond: number)
   });
   const mark = (rule: RuleForm) => [renderRule(rule, 'inet'), `limit rate ${perSecond}/second meta nftrace set 1`].filter(Boolean).join(' ');
   const chain = (hook: string, rule: string | undefined) =>
-    [`\tchain ${hook === 'prerouting' ? 'pre' : 'out'} {`, `\t\ttype filter hook ${hook} priority -350; policy accept;`, ...(rule === undefined ? [] : [`\t\t${rule}`]), '\t}'];
+    [`\tchain ${hook === 'prerouting' ? 'incoming' : 'outgoing'} {`, `\t\ttype filter hook ${hook} priority -350; policy accept;`, ...(rule === undefined ? [] : [`\t\t${rule}`]), '\t}'];
   // Packets the host sends have no input interface; with one in the filter, only arriving packets match.
   const out = filter.iif?.trim() ? undefined : mark(matches(false));
   return [`table inet ${name} {`, ...chain('prerouting', mark(matches(true))), ...chain('output', out), '}', ''].join('\n');
@@ -176,7 +176,7 @@ export function groupTrace(lines: readonly string[]): TracedPacket[] {
     return {
       key: `${id}#${index}`,
       id,
-      direction: own === undefined ? undefined : own.chain === 'out' ? 'out' : 'in',
+      direction: own === undefined ? undefined : own.chain === 'outgoing' ? 'out' : 'in',
       summary: first?.packet === undefined ? {} : summarize(first.packet),
       steps,
       verdict: (decidedBy?.verdict as 'accept' | 'drop' | undefined) ?? (passed ? 'accept' : undefined),

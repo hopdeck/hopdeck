@@ -20,6 +20,7 @@ import {
   tableOwner,
   tableText,
   withManagedComment,
+  withTableComments,
   type DeploymentTable,
   type DeploymentView,
   type Executor,
@@ -572,10 +573,13 @@ function ownerName(owner: Exclude<TableOwner, { kind: 'unknown' }>): string {
 export async function readTable(access: NftAccess, family: Family, name: string): Promise<CurrentTable | undefined> {
   const json = await runNft(access, ['-j', 'list', 'ruleset']);
   if (json.exitCode !== 0) throw new HostError('command-failed', json.stderr.trim() || `nft exited with code ${json.exitCode}`);
-  const node = parseRuleset(JSON.parse(json.stdout)).tables.find((table) => table.table.family === family && table.table.name === name);
+  const ruleset = parseRuleset(JSON.parse(json.stdout));
+  const node = ruleset.tables.find((table) => table.table.family === family && table.table.name === name);
   if (node === undefined) return undefined;
   const listing = await runNft(access, ['-a', 'list', 'ruleset']);
   if (listing.exitCode !== 0) throw new HostError('command-failed', listing.stderr.trim() || `nft exited with code ${listing.exitCode}`);
+  // The managed marker is the table's comment, which older nft prints only as text.
+  withTableComments(ruleset, parseListing(listing.stdout));
   // The same lines with and without handles: find the table in one, cut it out of both.
   const plain = stripHandles(listing.stdout);
   const text = tableText(plain, family, name);

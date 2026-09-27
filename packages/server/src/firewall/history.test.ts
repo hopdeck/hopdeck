@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Deployments } from './deploy.ts';
 import { History, PRUNE, type HistoryTarget } from './history.ts';
 import { Sandbox } from '../hosts/sandbox.ts';
+import { hasAccount, hostTarget, testHost, type Account } from '../testing/test-host.ts';
 
 describe('prune', () => {
   it('drops the oldest versions beyond the limit, but keeps the minimum', async () => {
@@ -131,47 +132,34 @@ describe.skipIf(NFT === undefined || !USERNS)('History in a sandbox', { timeout:
   });
 });
 
-// Against the podman test host: HOPDECK_TEST_HOST=1 pnpm test (after dev/test-host/up.sh).
-const repo = new URL('../../../../', import.meta.url).pathname;
-const sshConfig = `${repo}.dev/test-host/ssh_config`;
-
-describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('History on the test host', { timeout: 90_000 }, () => {
+// Against a podman test host: dev/test-host/up.sh [SYSTEM], then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
+describe.skipIf(testHost?.platform !== 'linux')('History on the test host', { timeout: 90_000 }, () => {
   let controlDir: string;
   const history = new History({ operator: { user: 'ada', computer: 'desk' } });
 
-  const hostTarget = async (account: 'root' | 'admin'): Promise<HistoryTarget> => {
-    const { SshExecutor } = await import('../hosts/ssh.ts');
-    const destination = `hopdeck-test-${account}`;
-    const executor = new SshExecutor({ destination, controlDir, configFile: sshConfig });
-    const privilege = account === 'root' ? ({ kind: 'root' } as const) : ({ kind: 'sudo-password' } as const);
-    return {
-      hostId: destination,
-      kind: 'ssh',
-      executor,
-      access: { executor, nftPath: '/usr/sbin/nft', privilege, ...(account === 'admin' && { password: 'hopdeck-test' }) },
-      platform: platform('linux'),
-      login: account,
-    };
+  const target = async (account: Account): Promise<HistoryTarget> => {
+    const host = await hostTarget(account, controlDir);
+    return { hostId: host.hostId, kind: 'ssh', executor: host.executor, access: host.access, platform: host.platform, login: host.facts.user };
   };
 
   beforeAll(async () => {
     controlDir = await mkdtemp(`${tmpdir()}/hopdeck-history-`);
-    const root = await hostTarget('root');
+    const root = await target('root');
     await root.executor.exec(['sh', '-c', `rm -rf /var/lib/hopdeck; /usr/sbin/nft -f - <<'EOF'\n${MINE}EOF`]);
   });
 
   afterAll(async () => {
-    const root = await hostTarget('root');
+    const root = await target('root');
     await root.executor.exec(['sh', '-c', 'rm -rf /var/lib/hopdeck; /usr/sbin/nft delete table inet mine']);
   });
 
-  it('names the author by the key sshd accepted for this very connection', async () => {
-    const target = await hostTarget('admin');
-    const json = JSON.parse((await target.executor.exec(['sh', '-c', 'echo hopdeck-test | sudo -S -p "" /usr/sbin/nft -j list ruleset'])).stdout) as unknown;
-    await history.observe(target, json);
-    const state = await history.state(target);
+  it.skipIf(!hasAccount('admin'))('names the author by the key sshd accepted for this very connection', async () => {
+    const admin = await target('admin');
+    const json = JSON.parse((await admin.executor.exec(['sh', '-c', 'echo hopdeck-test | sudo -S -p "" /usr/sbin/nft -j list ruleset'])).stdout) as unknown;
+    await history.observe(admin, json);
+    const state = await history.state(admin);
     expect(state.failure).toBeUndefined();
-    const key = execFileSync('ssh-keygen', ['-lf', `${repo}.dev/test-host/id_ed25519.pub`], { encoding: 'utf8' }).split(' ')[1];
+    const key = execFileSync('ssh-keygen', ['-lf', `${testHost!.key}.pub`], { encoding: 'utf8' }).split(' ')[1];
     expect(state.versions[0]?.author).toMatchObject({
       user: 'ada',
       computer: 'desk',
@@ -180,10 +168,10 @@ describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('Hi
     });
   });
 
-  it('under sudo with a password, the history is root’s alone', async () => {
-    const target = await hostTarget('admin');
-    const modes = await target.executor.exec(['sh', '-c', 'echo hopdeck-test | sudo -S -p "" stat -c "%a %U" /var/lib/hopdeck /var/lib/hopdeck/firewall/history']);
+  it.skipIf(!hasAccount('admin'))('under sudo with a password, the history is root’s alone', async () => {
+    const admin = await target('admin');
+    const modes = await admin.executor.exec(['sh', '-c', 'echo hopdeck-test | sudo -S -p "" stat -c "%a %U" /var/lib/hopdeck /var/lib/hopdeck/firewall/history']);
     expect(modes.stdout).toBe('700 root\n700 root\n');
-    expect((await target.executor.exec(['ls', '/var/lib/hopdeck'])).exitCode).not.toBe(0);
+    expect((await admin.executor.exec(['ls', '/var/lib/hopdeck'])).exitCode).not.toBe(0);
   });
 });

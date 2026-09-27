@@ -4,10 +4,13 @@
 import { parseListing, parseRuleset, platform, type Executor } from '@hopdeck/core';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { checkDefinition, comparable, Deployments, planTable, readTable, type CurrentTable, type DeployTarget } from './deploy.ts';
 import { HostError } from '../hosts/errors.ts';
 import { Sandbox } from '../hosts/sandbox.ts';
+import { hasAccount, hostTarget, testHost, type Account } from '../testing/test-host.ts';
 import { FakeExecutor } from '../testing/fake-executor.ts';
 
 const MINE = 'table inet mine {\n\tchain input {\n\t\ttype filter hook input priority filter; policy accept;\n\t}\n}\n';
@@ -276,33 +279,15 @@ describe.skipIf(NFT === undefined || !USERNS)('Deployments in a sandbox', { time
   });
 });
 
-// Against the podman test host: HOPDECK_TEST_HOST=1 pnpm test (after dev/test-host/up.sh).
-const repo = new URL('../../../../', import.meta.url).pathname;
-const sshConfig = `${repo}.dev/test-host/ssh_config`;
+// Against a podman test host: dev/test-host/up.sh [SYSTEM], then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
+const linuxHost = testHost?.platform === 'linux';
 
-describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('Deployments on the test host', { timeout: 90_000 }, () => {
+describe.skipIf(!linuxHost)('Deployments on the test host', { timeout: 90_000 }, () => {
   const deployments = new Deployments({ seconds: 5 });
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const systemd = testHost?.init === 'systemd';
   let controlDir: string;
-
-  const hostTarget = async (account: 'root' | 'nopass' | 'admin'): Promise<DeployTarget> => {
-    const { SshExecutor } = await import('../hosts/ssh.ts');
-    const destination = `hopdeck-test-${account}`;
-    const executor = new SshExecutor({ destination, controlDir, configFile: sshConfig });
-    const privilege =
-      account === 'root' ? ({ kind: 'root' } as const) : account === 'nopass' ? ({ kind: 'sudo' } as const) : ({ kind: 'sudo-password' } as const);
-    return {
-      hostId: destination,
-      name: destination,
-      kind: 'ssh',
-      executor,
-      access: { executor, nftPath: '/usr/sbin/nft', privilege, ...(account === 'admin' && { password: 'hopdeck-test' }) },
-      platform: platform('linux'),
-      systemd: true,
-      manualOverride: false,
-      freshExecutor: new SshExecutor({ destination, controlDir, configFile: sshConfig, shareConnection: false }),
-    };
-  };
+  const target = (account: Account) => hostTarget(account, controlDir);
   const create = (table: string, body: string) => ({
     kind: 'replace' as const,
     family: 'inet' as const,
@@ -312,33 +297,31 @@ describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('De
   const remove = (table: string) => ({ kind: 'delete' as const, family: 'inet' as const, table });
 
   beforeAll(async () => {
-    const { mkdtemp } = await import('node:fs/promises');
-    const { tmpdir } = await import('node:os');
     controlDir = await mkdtemp(`${tmpdir()}/hopdeck-deploy-`);
   });
 
-  it('under sudo with a password, keeps its files where only root can change them', async () => {
-    const target = await hostTarget('admin');
+  it.skipIf(!hasAccount('admin'))('under sudo with a password, keeps its files where only root can change them', async () => {
+    const admin = await target('admin');
     const { makeStaging, stageFile, removeStaging } = await import('../hosts/staging.ts');
-    const staging = await makeStaging(target);
+    const staging = await makeStaging(admin);
     expect(staging.asRoot).toBe(true);
-    await stageFile(target, staging, 'watchdog.sh', 'echo safe\n');
-    const owner = await target.executor.exec(['stat', '-c', '%U %a', staging.dir]);
+    await stageFile(admin, staging, 'watchdog.sh', 'echo safe\n');
+    const owner = await admin.executor.exec(['stat', '-c', '%U %a', staging.dir]);
     expect(owner.stdout.trim()).toBe('root 700');
     // The login user can neither replace the script nor even see it.
-    expect((await target.executor.exec(['sh', '-c', 'echo "id > /tmp/pwned" > "$1/watchdog.sh"', 'sh', staging.dir])).exitCode).not.toBe(0);
-    await removeStaging(target, staging);
+    expect((await admin.executor.exec(['sh', '-c', 'echo "id > /tmp/pwned" > "$1/watchdog.sh"', 'sh', staging.dir])).exitCode).not.toBe(0);
+    await removeStaging(admin, staging);
   });
 
-  it('as root, protects the change with a systemd watchdog', async () => {
-    const target = await hostTarget('root');
-    const plan = await deployments.prepare(target, [create('hopdeck_root', '\tchain c {\n\t\ttype filter hook input priority 100; policy accept;\n\t}')]);
-    expect(plan.safety).toMatchObject({ watchdog: 'systemd', freshConnectionCheck: true });
-    expect((await deployments.apply(plan.id, target)).state).toBe('awaiting-confirmation');
-    expect((await deployments.confirm(plan.id, target)).state).toBe('confirmed');
-    const cleanup = await deployments.prepare(target, [remove('hopdeck_root')]);
-    await deployments.apply(cleanup.id, target);
-    await deployments.confirm(cleanup.id, target);
+  it('as root, protects the change with a watchdog that outlives the session', async () => {
+    const root = await target('root');
+    const plan = await deployments.prepare(root, [create('hopdeck_root', '\tchain c {\n\t\ttype filter hook input priority 100; policy accept;\n\t}')]);
+    expect(plan.safety).toMatchObject({ watchdog: systemd ? 'systemd' : 'detached', freshConnectionCheck: true });
+    expect((await deployments.apply(plan.id, root)).state).toBe('awaiting-confirmation');
+    expect((await deployments.confirm(plan.id, root)).state).toBe('confirmed');
+    const cleanup = await deployments.prepare(root, [remove('hopdeck_root')]);
+    await deployments.apply(cleanup.id, root);
+    await deployments.confirm(cleanup.id, root);
   });
 
   // The classic mistake: established traffic still flows, new connections (like the next ssh) are dropped.
@@ -348,42 +331,65 @@ describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('De
   );
 
   it('undoes at once a change that blocks new SSH connections', async () => {
-    const target = await hostTarget('root');
+    const root = await target('root');
     const patient = new Deployments({ seconds: 40 });
-    const plan = await patient.prepare(target, [lockout]);
-    const applied = await patient.apply(plan.id, target);
+    const plan = await patient.prepare(root, [lockout]);
+    const applied = await patient.apply(plan.id, root);
     expect(applied).toMatchObject({ state: 'rolled-back', outcome: { reason: 'fresh-connection-failed' } });
-    expect((await target.freshExecutor!.exec(['true'])).exitCode).toBe(0);
-    expect(await readTable(target.access, 'inet', 'hopdeck_lockout')).toBeUndefined();
+    expect((await root.freshExecutor!.exec(['true'])).exitCode).toBe(0);
+    expect(await readTable(root.access, 'inet', 'hopdeck_lockout')).toBeUndefined();
   });
 
   it('reports a watchdog that rolled back during the connection check, instead of awaiting confirmation', async () => {
     // With 5 s the watchdog restores the tables while the check still waits for
     // its 10 s connect timeout; the check then gets through.
-    const target = await hostTarget('root');
-    const plan = await deployments.prepare(target, [lockout]);
-    const applied = await deployments.apply(plan.id, target);
+    const root = await target('root');
+    const plan = await deployments.prepare(root, [lockout]);
+    const applied = await deployments.apply(plan.id, root);
     expect(applied).toMatchObject({ state: 'rolled-back', outcome: { reason: 'timeout' } });
-    expect(await readTable(target.access, 'inet', 'hopdeck_lockout')).toBeUndefined();
+    expect(await readTable(root.access, 'inet', 'hopdeck_lockout')).toBeUndefined();
   });
 
-  it('with sudo for nft only, the watchdog survives the SSH session and rolls back', async () => {
-    const target = await hostTarget('nopass');
-    const plan = await deployments.prepare(target, [create('hopdeck_nopass', '\tset s {\n\t\ttype ipv4_addr\n\t}')]);
+  it.skipIf(!hasAccount('nopass'))('with sudo for nft only, the watchdog survives the SSH session and rolls back', async () => {
+    const nopass = await target('nopass');
+    expect(nopass.access.privilege.kind).toBe('sudo');
+    const plan = await deployments.prepare(nopass, [create('hopdeck_nopass', '\tset s {\n\t\ttype ipv4_addr\n\t}')]);
     expect(plan.safety.watchdog).toBe('detached');
-    await deployments.apply(plan.id, target);
-    expect(await readTable(target.access, 'inet', 'hopdeck_nopass')).toBeDefined();
+    await deployments.apply(plan.id, nopass);
+    expect(await readTable(nopass.access, 'inet', 'hopdeck_nopass')).toBeDefined();
     await sleep(7000);
-    expect(await deployments.refresh(plan.id, target)).toMatchObject({ state: 'rolled-back', outcome: { reason: 'timeout' } });
-    expect(await readTable(target.access, 'inet', 'hopdeck_nopass')).toBeUndefined();
+    expect(await deployments.refresh(plan.id, nopass)).toMatchObject({ state: 'rolled-back', outcome: { reason: 'timeout' } });
+    expect(await readTable(nopass.access, 'inet', 'hopdeck_nopass')).toBeUndefined();
   });
 
-  it('with a sudo password, starts the watchdog through sudo and systemd', async () => {
-    const target = await hostTarget('admin');
-    const plan = await deployments.prepare(target, [create('hopdeck_admin', '\tset s {\n\t\ttype ipv4_addr\n\t}')]);
+  it.skipIf(!hasAccount('admin') || !systemd)('with a sudo password, starts the watchdog through sudo and systemd', async () => {
+    const admin = await target('admin');
+    expect(admin.access.privilege.kind).toBe('sudo-password');
+    const plan = await deployments.prepare(admin, [create('hopdeck_admin', '\tset s {\n\t\ttype ipv4_addr\n\t}')]);
     expect(plan.safety.watchdog).toBe('systemd');
-    await deployments.apply(plan.id, target);
-    expect((await deployments.rollback(plan.id, target)).state).toBe('rolled-back');
-    expect(await readTable(target.access, 'inet', 'hopdeck_admin')).toBeUndefined();
+    await deployments.apply(plan.id, admin);
+    expect((await deployments.rollback(plan.id, admin)).state).toBe('rolled-back');
+    expect(await readTable(admin.access, 'inet', 'hopdeck_admin')).toBeUndefined();
+  });
+
+  it.skipIf(!hasAccount('admin') || systemd)('with a sudo password and no systemd, applies nothing it could not roll back', async () => {
+    const admin = await target('admin');
+    const plan = await deployments.prepare(admin, [create('hopdeck_admin', '\tset s {\n\t\ttype ipv4_addr\n\t}')]);
+    expect(plan.safety.watchdog).toBe('unavailable');
+    await expect(deployments.apply(plan.id, admin)).rejects.toMatchObject({ code: 'rollback-unavailable' });
+    expect(await readTable(admin.access, 'inet', 'hopdeck_admin')).toBeUndefined();
+  });
+});
+
+describe.skipIf(testHost?.platform !== 'openwrt')('Deployments on the OpenWrt test host', { timeout: 60_000 }, () => {
+  it('knows it is OpenWrt and changes nothing there', async () => {
+    const controlDir = await mkdtemp(`${tmpdir()}/hopdeck-openwrt-`);
+    const root = await hostTarget('root', controlDir);
+    expect(root.facts.platform).toBe('openwrt');
+    expect(root.platform.firewall).toBe('read-only');
+    const create = { kind: 'replace' as const, family: 'inet' as const, table: 'hopdeck_x', definition: 'table inet hopdeck_x {\n}\n' };
+    await expect(new Deployments().prepare(root, [create])).rejects.toMatchObject({ code: 'platform-read-only' });
+    // fw4 made its table from UCI, and hopdeck sees it as OpenWrt's.
+    expect(await readTable(root.access, 'inet', 'fw4')).toBeDefined();
   });
 });

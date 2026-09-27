@@ -2,51 +2,80 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Mateusz T (Tenir)
 
-# Starts a Debian 13 container that plays a remote firewall for hopdeck, with
-# systemd, sshd, nftables and one account per privilege case. Its nftables
-# ruleset lives in the container's own network namespace, never the real one.
+# Starts a container that plays a remote host for hopdeck: sshd (dropbear on
+# OpenWrt), nftables and one account per privilege case. Its ruleset lives in
+# the container's own network namespace, never the real one.
 #
-# Everything it generates (test key, known_hosts, ssh config, hopdeck config)
-# stays in .dev/test-host, which git ignores; ~/.ssh is never touched. Then:
+#   dev/test-host/up.sh [SYSTEM]    SYSTEM: debian11 debian12 debian13 (default)
+#                                           alma9 alma10 alpine openwrt
 #
-#   pnpm dev:test-host
+# Everything it generates stays in .dev/test-host, which git ignores: the test
+# key, shared by all systems, and a directory per system with known_hosts, an
+# ssh config, a hopdeck config and host.json for the tests. ~/.ssh is never
+# touched. Then, for Debian 13:
+#
+#   pnpm dev:test-host              the panel with the test hosts
+#   pnpm test:host                  the tests, including those that need it
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
-state="$repo/.dev/test-host"
-name=hopdeck-test-host
-port=${HOPDECK_TEST_PORT:-2222}
+system=${1:-debian13}
+accounts="root admin nopass plain"
+authorized=/etc/ssh/hopdeck_authorized_keys
+init=systemd
+platform=linux
+case "$system" in
+debian11) file=debian base=docker.io/library/debian:bullseye port=2211 ;;
+debian12) file=debian base=docker.io/library/debian:bookworm port=2212 ;;
+debian13) file=debian base=docker.io/library/debian:trixie port=2222 ;;
+alma9) file=rhel base=docker.io/library/almalinux:9 port=2219 ;;
+alma10) file=rhel base=docker.io/library/almalinux:10 port=2220 ;;
+alpine) file=alpine base=docker.io/library/alpine:3.22 port=2231 init=openrc ;;
+openwrt)
+	file=openwrt base=docker.io/openwrt/rootfs:x86-64-openwrt-24.10 port=2241 init=procd platform=openwrt
+	accounts=root authorized=/etc/dropbear/authorized_keys
+	;;
+*)
+	echo "unknown system: $system (debian11, debian12, debian13, alma9, alma10, alpine, openwrt)" >&2
+	exit 2
+	;;
+esac
 
+keys="$repo/.dev/test-host"
+state="$keys/$system"
+name="hopdeck-test-$system"
 mkdir -p "$state/config"
-[ -f "$state/id_ed25519" ] || ssh-keygen -q -t ed25519 -N '' -C hopdeck-test -f "$state/id_ed25519"
+[ -f "$keys/id_ed25519" ] || ssh-keygen -q -t ed25519 -N '' -C hopdeck-test -f "$keys/id_ed25519"
 # A key the host does not have, to fake a changed host key.
-[ -f "$state/other_host_key" ] || ssh-keygen -q -t ed25519 -N '' -C hopdeck-test-other -f "$state/other_host_key"
+[ -f "$keys/other_host_key" ] || ssh-keygen -q -t ed25519 -N '' -C hopdeck-test-other -f "$keys/other_host_key"
 
-echo "Building the image (the first time takes a minute)..."
-podman build -q -t "$name" "$here" >/dev/null
+echo "Building the $system image (the first time takes a minute)..."
+podman build -q -t "$name" -f "$here/$file.Containerfile" --build-arg "BASE=$base" "$here" >/dev/null
 podman rm -f "$name" >/dev/null 2>&1 || true
 podman run -d --name "$name" \
 	--cap-add NET_ADMIN \
 	-p "127.0.0.1:$port:22" \
-	-v "$state/id_ed25519.pub:/etc/ssh/hopdeck_authorized_keys:ro" \
+	-v "$keys/id_ed25519.pub:$authorized:ro" \
 	"$name" >/dev/null
 
-# Until boot finishes, /run/nologin keeps everyone but root out.
-i=0
-until boot=$(podman exec "$name" systemctl is-system-running 2>/dev/null); [ "$boot" = running ] || [ "$boot" = degraded ]; do
-	i=$((i + 1))
-	if [ "$i" -ge 60 ]; then
-		echo "the container did not finish booting (state: ${boot:-unknown}); see: podman logs $name" >&2
-		exit 1
-	fi
-	sleep 1
-done
+# Until systemd has booted, /run/nologin keeps everyone but root out.
+if [ "$init" = systemd ]; then
+	i=0
+	until boot=$(podman exec "$name" systemctl is-system-running 2>/dev/null); [ "$boot" = running ] || [ "$boot" = degraded ]; do
+		i=$((i + 1))
+		if [ "$i" -ge 60 ]; then
+			echo "the container did not finish booting (state: ${boot:-unknown}); see: podman logs $name" >&2
+			exit 1
+		fi
+		sleep 1
+	done
+fi
 
 i=0
 until ssh-keyscan -T 2 -p "$port" 127.0.0.1 >"$state/known_hosts" 2>/dev/null && [ -s "$state/known_hosts" ]; do
 	i=$((i + 1))
-	if [ "$i" -ge 30 ]; then
+	if [ "$i" -ge 60 ]; then
 		echo "sshd did not come up; see: podman logs $name" >&2
 		exit 1
 	fi
@@ -54,53 +83,49 @@ until ssh-keyscan -T 2 -p "$port" 127.0.0.1 >"$state/known_hosts" 2>/dev/null &&
 done
 # Each run starts both key scenarios afresh: no key known, and a wrong key known.
 : >"$state/known_hosts.unknown"
-printf '[127.0.0.1]:%s %s\n' "$port" "$(cut -d' ' -f1,2 "$state/other_host_key.pub")" >"$state/known_hosts.changed"
+printf '[127.0.0.1]:%s %s\n' "$port" "$(cut -d' ' -f1,2 "$keys/other_host_key.pub")" >"$state/known_hosts.changed"
 rm -f "$state/known_hosts.changed.old"
 
 # ssh uses the first value it finds, so specific hosts come before the wildcard.
-cat >"$state/ssh_config" <<CONFIG
-# Generated by dev/test-host/up.sh
-Host hopdeck-test-root
-	User root
-Host hopdeck-test-admin
-	User admin
-Host hopdeck-test-nopass
-	User nopass
-Host hopdeck-test-plain
-	User plain
-Host hopdeck-test-unknown-key
-	User root
-	UserKnownHostsFile "$state/known_hosts.unknown"
-Host hopdeck-test-changed-key
-	User root
-	UserKnownHostsFile "$state/known_hosts.changed"
-Host hopdeck-test-*
-	HostName 127.0.0.1
-	Port $port
-	IdentityFile "$state/id_ed25519"
-	IdentitiesOnly yes
-	UserKnownHostsFile "$state/known_hosts"
-	StrictHostKeyChecking yes
-CONFIG
-
-cat >"$state/config/hosts.json" <<HOSTS
 {
-  "version": 1,
-  "hosts": [
-    { "id": "test-root", "destination": "hopdeck-test-root", "name": "Test: root" },
-    { "id": "test-admin", "destination": "hopdeck-test-admin", "name": "Test: sudo with password" },
-    { "id": "test-nopass", "destination": "hopdeck-test-nopass", "name": "Test: sudo without password" },
-    { "id": "test-plain", "destination": "hopdeck-test-plain", "name": "Test: no sudo" },
-    { "id": "test-unknown-key", "destination": "hopdeck-test-unknown-key", "name": "Test: unknown host key" },
-    { "id": "test-changed-key", "destination": "hopdeck-test-changed-key", "name": "Test: changed host key" }
-  ]
+	echo "# Generated by dev/test-host/up.sh $system"
+	for account in $accounts; do
+		printf 'Host hopdeck-test-%s\n\tUser %s\n' "$account" "$account"
+	done
+	printf 'Host hopdeck-test-unknown-key\n\tUser root\n\tUserKnownHostsFile "%s"\n' "$state/known_hosts.unknown"
+	printf 'Host hopdeck-test-changed-key\n\tUser root\n\tUserKnownHostsFile "%s"\n' "$state/known_hosts.changed"
+	printf 'Host hopdeck-test-*\n\tHostName 127.0.0.1\n\tPort %s\n\tIdentityFile "%s"\n\tIdentitiesOnly yes\n\tUserKnownHostsFile "%s"\n\tStrictHostKeyChecking yes\n' \
+		"$port" "$keys/id_ed25519" "$state/known_hosts"
+} >"$state/ssh_config"
+
+label() {
+	case "$1" in
+	root) echo 'root' ;;
+	admin) echo 'sudo with password' ;;
+	nopass) echo 'sudo without password' ;;
+	plain) echo 'no sudo' ;;
+	esac
 }
-HOSTS
+{
+	printf '{\n  "version": 1,\n  "hosts": [\n'
+	for account in $accounts; do
+		printf '    { "id": "test-%s", "destination": "hopdeck-test-%s", "name": "%s: %s" },\n' "$account" "$account" "$system" "$(label "$account")"
+	done
+	printf '    { "id": "test-unknown-key", "destination": "hopdeck-test-unknown-key", "name": "%s: unknown host key" },\n' "$system"
+	printf '    { "id": "test-changed-key", "destination": "hopdeck-test-changed-key", "name": "%s: changed host key" }\n' "$system"
+	printf '  ]\n}\n'
+} >"$state/config/hosts.json"
+
+# What the tests need to know about this host.
+json_accounts=$(printf '"%s", ' $accounts | sed 's/, $//')
+printf '{ "system": "%s", "port": %s, "init": "%s", "platform": "%s", "accounts": [%s] }\n' \
+	"$system" "$port" "$init" "$platform" "$json_accounts" >"$state/host.json"
 
 cat <<DONE
-Test host is up: Debian 13 in container $name, ssh on 127.0.0.1:$port.
-  Start hopdeck against it:  pnpm dev:test-host
-  Log in by hand:            ssh -F .dev/test-host/ssh_config hopdeck-test-root
-  Stop it:                   dev/test-host/down.sh
-Accounts: root; admin (sudo, password hopdeck-test); nopass (sudo for nft without a password); plain (password hopdeck-test, no sudo).
+Test host is up: $system in container $name, ssh on 127.0.0.1:$port.
+  Its state:          .dev/test-host/$system
+  Log in by hand:     ssh -F .dev/test-host/$system/ssh_config hopdeck-test-root
+  Run the tests:      HOPDECK_TEST_HOST=1 HOPDECK_TEST_HOST_DIR=.dev/test-host/$system pnpm vitest run --no-file-parallelism
+  Stop it:            dev/test-host/down.sh $system
+Accounts: $accounts (admin: sudo, password hopdeck-test; nopass: sudo for nft without a password; plain: password hopdeck-test, no sudo).
 DONE

@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { DeployTarget } from './deploy.ts';
 import { Sandbox } from '../hosts/sandbox.ts';
 import { Traces } from './trace.ts';
+import { hasAccount, hostTarget, testHost } from '../testing/test-host.ts';
 
 const NFT = ['/usr/sbin/nft', '/sbin/nft', '/usr/bin/nft'].find((path) => existsSync(path));
 const USERNS = spawnSync('unshare', ['--user', '--map-root-user', '--net', 'true']).status === 0;
@@ -84,32 +85,11 @@ describe.skipIf(NFT === undefined || !USERNS || PING === undefined)('Traces in a
   });
 });
 
-// Against the podman test host: HOPDECK_TEST_HOST=1 pnpm test (after dev/test-host/up.sh).
-const repo = new URL('../../../../', import.meta.url).pathname;
-const sshConfig = `${repo}.dev/test-host/ssh_config`;
-
-describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('Traces on the test host', { timeout: 60_000 }, () => {
+// Against a podman test host: dev/test-host/up.sh [SYSTEM], then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
+describe.skipIf(testHost === undefined)('Traces on the test host', { timeout: 60_000 }, () => {
   const traces = new Traces();
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
   let controlDir: string;
-
-  const hostTarget = async (account: 'root' | 'nopass' | 'admin'): Promise<DeployTarget> => {
-    const { SshExecutor } = await import('../hosts/ssh.ts');
-    const destination = `hopdeck-test-${account}`;
-    const executor = new SshExecutor({ destination, controlDir, configFile: sshConfig });
-    const privilege = account === 'root' ? ({ kind: 'root' } as const) : account === 'nopass' ? ({ kind: 'sudo' } as const) : ({ kind: 'sudo-password' } as const);
-    return {
-      hostId: destination,
-      name: destination,
-      kind: 'ssh',
-      executor,
-      access: { executor, nftPath: '/usr/sbin/nft', privilege, ...(account === 'admin' && { password: 'hopdeck-test' }) },
-      platform: platform('linux'),
-      systemd: true,
-      manualOverride: false,
-      freshExecutor: undefined,
-    };
-  };
 
   beforeAll(async () => {
     const { mkdtemp } = await import('node:fs/promises');
@@ -118,8 +98,10 @@ describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('Tr
   });
 
   for (const account of ['root', 'nopass', 'admin'] as const) {
-    it(`traces as ${account}, and the host removes the table`, async () => {
-      const target = await hostTarget(account);
+    // Under sudo with a password, the tracing table needs systemd to be removed when time is up.
+    const possible = hasAccount(account) && (account !== 'admin' || testHost?.init === 'systemd');
+    it.skipIf(!possible)(`traces as ${account}, and the host removes the table`, async () => {
+      const target = await hostTarget(account, controlDir);
       // hopdeck's own SSH connection is the traffic: the container has no ping.
       const started = await traces.start(target, { protocol: 'tcp', dport: '22' }, { seconds: 30, perSecond: 10 });
       expect(started.state).toBe('running');

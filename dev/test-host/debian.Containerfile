@@ -1,10 +1,20 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Mateusz T (Tenir)
 
-# A Debian 13 host for testing hopdeck over SSH; start it with dev/test-host/up.sh.
-FROM docker.io/library/debian:trixie
+# A Debian host for testing hopdeck over SSH; dev/test-host/up.sh picks the
+# release (debian11, debian12, debian13) through BASE.
+ARG BASE=docker.io/library/debian:trixie
+FROM ${BASE}
 
 ARG DEBIAN_FRONTEND=noninteractive
+# Debian 11 is past its long-term support and its security archive is going
+# away, so it installs from the archive as it was at the end of that support.
+RUN if grep -q '^VERSION_CODENAME=bullseye' /etc/os-release; then \
+	printf '%s\n' \
+		'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260815T000000Z bullseye main' \
+		'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260815T000000Z bullseye-security main' \
+		> /etc/apt/sources.list && rm -f /etc/apt/sources.list.d/*; \
+ fi
 RUN apt-get update \
  && apt-get install -y --no-install-recommends systemd systemd-sysv openssh-server nftables sudo iproute2 \
  && rm -rf /var/lib/apt/lists/*

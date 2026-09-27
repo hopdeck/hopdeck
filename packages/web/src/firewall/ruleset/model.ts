@@ -17,6 +17,7 @@ import {
   type RulesetSnapshot,
   type TableNode,
   type TableOwner,
+  withTableComments,
 } from '@hopdeck/core';
 
 export interface RulesetModel {
@@ -33,8 +34,9 @@ export interface RulesetModel {
 
 /** Throws RulesetParseError when nft's JSON is not a ruleset. */
 export function buildModel(snapshot: RulesetSnapshot): RulesetModel {
-  const ruleset = parseRuleset(snapshot.json);
   const listing = parseListing(snapshot.listing);
+  // The managed marker is the table's comment, which older nft prints only as text.
+  const ruleset = withTableComments(parseRuleset(snapshot.json), listing);
   const chains = ruleset.tables.flatMap((node) => node.chains);
   return {
     ruleset,

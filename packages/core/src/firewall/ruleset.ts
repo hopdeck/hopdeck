@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
+import { tableKey } from './keys.ts';
+import type { Listing } from './listing.ts';
 import {
   NAMED_OBJECT_KINDS,
   type Family,
@@ -43,6 +45,19 @@ export interface Ruleset {
   metainfo: NftMetainfo | undefined;
   tables: TableNode[];
   unknown: Json[];
+}
+
+/**
+ * Fills in table comments from nft's text listing where its JSON leaves them
+ * out, as nft 1.0.6 and older do; the managed marker is one. The tables are
+ * changed in place, and the ruleset returned.
+ */
+export function withTableComments(ruleset: Ruleset, listing: Listing): Ruleset {
+  for (const node of ruleset.tables) {
+    const comment = listing.tableComments.get(tableKey(node.table.family, node.table.name));
+    if (node.table.comment === undefined && comment !== undefined) node.table.comment = comment;
+  }
+  return ruleset;
 }
 
 export class RulesetParseError extends Error {

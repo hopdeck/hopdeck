@@ -4,10 +4,13 @@
 import {
   isManaged,
   normalizedTable,
+  parseListing,
   parseRuleset,
   platform,
   replaceTableScript,
   tableFileName,
+  tableText,
+  withTableComments,
   type Executor,
   type Family,
   type HostFacts,
@@ -210,15 +213,18 @@ async function findMainConfig(target: PersistTarget): Promise<Pick<PersistenceSt
 
 /** Live tables that carry the hopdeck marker, with their listing. */
 async function managedTables(access: NftAccess): Promise<{ family: Family; name: string; text: string }[]> {
-  const listed = await runNft(access, ['-j', 'list', 'tables']);
-  if (listed.exitCode !== 0) throw new HostError('command-failed', listed.stderr.trim());
-  const managed = parseRuleset(JSON.parse(listed.stdout)).tables.filter((node) => isManaged(node.table));
-  const tables = [];
-  for (const { table } of managed) {
-    const current = await readTable(access, table.family, table.name);
-    if (current !== undefined) tables.push({ family: table.family, name: table.name, text: current.text });
-  }
-  return tables;
+  const json = await runNft(access, ['-j', 'list', 'ruleset']);
+  if (json.exitCode !== 0) throw new HostError('command-failed', json.stderr.trim());
+  const listing = await runNft(access, ['list', 'ruleset']);
+  if (listing.exitCode !== 0) throw new HostError('command-failed', listing.stderr.trim());
+  // The managed marker is the table's comment, which older nft prints only as text.
+  const ruleset = withTableComments(parseRuleset(JSON.parse(json.stdout)), parseListing(listing.stdout));
+  return ruleset.tables
+    .filter((node) => isManaged(node.table))
+    .flatMap(({ table }) => {
+      const text = tableText(listing.stdout, table.family, table.name);
+      return text === undefined ? [] : [{ family: table.family, name: table.name, text }];
+    });
 }
 
 function definesTable(main: string, family: Family, name: string): boolean {

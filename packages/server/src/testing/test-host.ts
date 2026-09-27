@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Mateusz T (Tenir)
+
+import { platform, type HostFacts } from '@hopdeck/core';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import type { DeployTarget } from '../firewall/deploy.ts';
+import { collectFacts } from '../hosts/facts.ts';
+import { detectPrivilege } from '../hosts/privilege.ts';
+import { SshExecutor } from '../hosts/ssh.ts';
+
+export type Account = 'root' | 'admin' | 'nopass' | 'plain';
+
+/** A podman test host started by dev/test-host/up.sh, as its host.json describes it. */
+export interface TestHost {
+  /** debian11, debian12, debian13, alma9, alma10, alpine or openwrt. */
+  system: string;
+  port: number;
+  /** What starts the services there. */
+  init: 'systemd' | 'openrc' | 'procd';
+  platform: 'linux' | 'openwrt';
+  accounts: Account[];
+  dir: string;
+  sshConfig: string;
+  /** The test key, the same for every system. */
+  key: string;
+}
+
+const repo = resolve(import.meta.dirname, '../../../..');
+
+/**
+ * The host the host tests run against: HOPDECK_TEST_HOST=1 turns them on, and
+ * HOPDECK_TEST_HOST_DIR picks the system (default .dev/test-host/debian13).
+ * Undefined, and those tests skipped, without HOPDECK_TEST_HOST.
+ */
+export const testHost: TestHost | undefined = load();
+
+function load(): TestHost | undefined {
+  if (!process.env['HOPDECK_TEST_HOST']) return undefined;
+  const dir = resolve(process.env['HOPDECK_TEST_HOST_DIR'] ?? join(repo, '.dev/test-host/debian13'));
+  const file = join(dir, 'host.json');
+  // Asked for host tests, so no host is an error, not a reason to skip them quietly.
+  if (!existsSync(file)) throw new Error(`HOPDECK_TEST_HOST is set, but ${file} is missing; start the host with dev/test-host/up.sh`);
+  const described = JSON.parse(readFileSync(file, 'utf8')) as Omit<TestHost, 'dir' | 'sshConfig' | 'key'>;
+  return { ...described, dir, sshConfig: join(dir, 'ssh_config'), key: join(repo, '.dev/test-host/id_ed25519') };
+}
+
+export function hasAccount(account: Account): boolean {
+  return testHost?.accounts.includes(account) ?? false;
+}
+
+/**
+ * A deployment target for an account of the test host, built the way the
+ * panel builds one: from the host's facts and the privilege it detects.
+ */
+export async function hostTarget(account: Account, controlDir: string): Promise<DeployTarget & { facts: HostFacts }> {
+  const host = testHost!;
+  const destination = `hopdeck-test-${account}`;
+  const executor = new SshExecutor({ destination, controlDir, configFile: host.sshConfig });
+  const facts = await collectFacts(executor);
+  const privilege = await detectPrivilege(executor, facts);
+  return {
+    hostId: destination,
+    name: destination,
+    kind: 'ssh',
+    executor,
+    access: { executor, nftPath: facts.nft!.path, privilege, ...(privilege.kind === 'sudo-password' && { password: 'hopdeck-test' }) },
+    platform: platform(facts.platform),
+    systemd: facts.systemd,
+    manualOverride: false,
+    freshExecutor: new SshExecutor({ destination, controlDir, configFile: host.sshConfig, shareConnection: false }),
+    facts,
+  };
+}

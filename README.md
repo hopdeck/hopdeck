@@ -40,16 +40,28 @@ pnpm build && pnpm start   # serve the built UI from the backend
 namespace with a demo firewall. It needs no root and never touches the real
 firewall, so everything can be tried safely.
 
-### Test host
+### Test hosts
 
-`dev/test-host/up.sh` starts a Debian 13 container with podman (rootless,
-needs `podman`, `passt` and `uidmap`) that plays a remote firewall: systemd,
-sshd, nftables, and one account per privilege case (root, sudo with a
-password, sudo without one, no sudo). `pnpm dev:test-host` then starts hopdeck
-with those hosts, and `pnpm test:host` runs the tests including the ones that need
-it. Its key, known_hosts and ssh config live in
-`.dev/test-host`; `~/.ssh` is never touched, and the container's ruleset is
-separate from the real one. `dev/test-host/down.sh` removes it.
+`dev/test-host/up.sh [SYSTEM]` starts a container with podman (rootless, needs
+`podman`, `passt` and `uidmap`) that plays a remote host: SSH, nftables, and
+one account per privilege case (root, sudo with a password, sudo without one,
+no sudo). SYSTEM is one of `debian11`, `debian12`, `debian13` (the default),
+`alma9`, `alma10` (RHEL-compatible), `alpine` (OpenRC and BusyBox, no systemd)
+and `openwrt` (procd, dropbear, fw4; root only).
+
+`pnpm dev:test-host` starts hopdeck with the Debian 13 hosts, and
+`pnpm dev:test-hosts` with those of every running system (or of the systems
+named after `--`), each as "SYSTEM: account".
+`pnpm test:host` runs the tests including the ones that need a host; set
+`HOPDECK_TEST_HOST_DIR=.dev/test-host/SYSTEM` for another system.
+`pnpm test:hosts` starts each system in turn, runs those tests against it and
+sums up; logs go to `.dev/test-host/logs`. The key, known_hosts and ssh
+configs live in `.dev/test-host`; `~/.ssh` is never touched, and a container's
+ruleset is separate from the real one. `dev/test-host/down.sh [SYSTEM|all]`
+removes containers.
+
+The containers share this machine's kernel, so they test nft, sudo, sshd,
+systemd, OpenRC and the paths of each system, not older kernels.
 
 `scripts/nft-fixture.sh FILE.nft` writes what nft prints for a ruleset (JSON and
 the text listing with handles) next to the file, using a throwaway network

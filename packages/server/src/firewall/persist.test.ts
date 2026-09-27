@@ -7,10 +7,10 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Deployments, readTable, type DeployTarget } from './deploy.ts';
-import { collectFacts, parseFacts } from '../hosts/facts.ts';
+import { parseFacts } from '../hosts/facts.ts';
 import { addInclude, bootDefinition, bootDirectory, includeLine, persistenceStatus, persistTables, tableFile, type PersistTarget } from './persist.ts';
-import { SshExecutor } from '../hosts/ssh.ts';
 import { DEBIAN_FACTS, FakeExecutor } from '../testing/fake-executor.ts';
+import { hasAccount, hostTarget, testHost, type Account } from '../testing/test-host.ts';
 
 describe('tableFile and bootDefinition', () => {
   it('names files safely', () => {
@@ -40,35 +40,24 @@ describe('tableFile and bootDefinition', () => {
   });
 });
 
-// Against the podman test host: HOPDECK_TEST_HOST=1 pnpm test (after dev/test-host/up.sh).
-const sshConfig = new URL('../../../../.dev/test-host/ssh_config', import.meta.url).pathname;
+// Against a podman test host: dev/test-host/up.sh [SYSTEM], then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
+/** Where each system keeps the configuration its firewall service loads at boot. */
+const MAIN_CONFIG: Record<string, string> = { debian: '/etc/nftables.conf', alma: '/etc/sysconfig/nftables.conf', alpine: '/etc/nftables.nft' };
 
-describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('persistence on the test host', { timeout: 90_000 }, () => {
+describe.skipIf(testHost?.platform !== 'linux')('persistence on the test host', { timeout: 90_000 }, () => {
   let root: PersistTarget & { deploy: DeployTarget };
   let backup: string | undefined;
+  const systemd = testHost?.init === 'systemd';
+  const main = MAIN_CONFIG[testHost?.system.replace(/\d+$/, '') ?? ''] ?? '';
   // As HostManager wires it: a kept change is saved for boot.
   const deployments = new Deployments({ seconds: 30, afterConfirm: (view) => persistTables(root, view.tables) });
 
-  const connect = async (account: 'root' | 'nopass') => {
-    const controlDir = await mkdtemp(`${tmpdir()}/hopdeck-persist-`);
-    const destination = `hopdeck-test-${account}`;
-    const executor = new SshExecutor({ destination, controlDir, configFile: sshConfig });
-    const access = { executor, nftPath: '/usr/sbin/nft', privilege: account === 'root' ? ({ kind: 'root' } as const) : ({ kind: 'sudo' } as const) };
-    const facts = await collectFacts(executor);
-    const deploy: DeployTarget = {
-      hostId: destination,
-      name: destination,
-      kind: 'ssh',
-      executor,
-      access,
-      platform: platform('linux'),
-      systemd: true,
-      manualOverride: false,
-      freshExecutor: new SshExecutor({ destination, controlDir, configFile: sshConfig, shareConnection: false }),
-    };
-    return { kind: 'ssh' as const, executor, access, facts, deploy };
+  const connect = async (account: Account) => {
+    const deploy = await hostTarget(account, await mkdtemp(`${tmpdir()}/hopdeck-persist-`));
+    return { kind: 'ssh' as const, executor: deploy.executor, access: deploy.access, facts: deploy.facts, deploy };
   };
-  const reload = () => root.executor.exec(['systemctl', 'restart', 'nftables.service']);
+  // What the machine does at boot: its firewall service loads the main configuration again.
+  const reload = () => root.executor.exec(systemd ? ['systemctl', 'restart', 'nftables.service'] : ['rc-service', 'nftables', 'restart']);
   const change = async (changes: Parameters<Deployments['prepare']>[1]) => {
     const plan = await deployments.prepare(root.deploy, changes);
     await deployments.apply(plan.id, root.deploy);
@@ -81,21 +70,26 @@ describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('pe
 
   afterAll(async () => {
     // Put the test host back as it was.
-    if (backup !== undefined) await root.executor.exec(['cp', '-p', backup, '/etc/nftables.conf']);
-    await root.executor.exec(['sh', '-c', 'rm -rf /etc/hopdeck /etc/nftables.conf.hopdeck-backup-*; systemctl restart nftables.service']);
+    if (backup !== undefined) await root.executor.exec(['cp', '-p', backup, main]);
+    await root.executor.exec(['sh', '-c', 'rm -rf /etc/hopdeck "$1".hopdeck-backup-*', 'sh', main]);
+    await reload();
   });
 
-  it('finds the boot configuration through the nftables service', async () => {
+  it('finds the configuration that loads at boot', async () => {
     const status = await persistenceStatus(root);
-    expect(status).toMatchObject({ mainConfig: '/etc/nftables.conf', source: 'service', serviceEnabled: true, includePresent: false });
+    expect(status).toMatchObject(
+      systemd
+        ? { mainConfig: main, source: 'service', serviceEnabled: true, includePresent: false }
+        : { mainConfig: main, source: 'guess', includePresent: false },
+    );
   });
 
   it('adds the include once, keeping a backup', async () => {
     await addInclude(root);
     await addInclude(root);
-    const main = (await root.executor.exec(['cat', '/etc/nftables.conf'])).stdout;
-    expect(main.split('\n').filter((line) => line === includeLine('/etc/hopdeck/firewall'))).toHaveLength(1);
-    backup = (await root.executor.exec(['sh', '-c', 'ls /etc/nftables.conf.hopdeck-backup-*'])).stdout.trim();
+    const text = (await root.executor.exec(['cat', main])).stdout;
+    expect(text.split('\n').filter((line) => line === includeLine('/etc/hopdeck/firewall'))).toHaveLength(1);
+    backup = (await root.executor.exec(['sh', '-c', 'ls "$1".hopdeck-backup-*', 'sh', main])).stdout.trim();
     expect(backup).toMatch(/hopdeck-backup-\d{14}$/);
     expect((await persistenceStatus(root)).includePresent).toBe(true);
     // Root's alone: host settings and the boot tables.
@@ -118,10 +112,18 @@ describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(sshConfig))('pe
     expect(await readTable(root.access, 'inet', 'hopdeck_boot')).toBeUndefined();
   });
 
-  it('says why nothing can be saved when sudo allows only nft', async () => {
+  it.skipIf(!hasAccount('nopass'))('says why nothing can be saved when sudo allows only nft', async () => {
     const nopass = await connect('nopass');
     const status = await persistenceStatus(nopass);
     expect(status.problem).toMatchObject({ code: 'persistence-unavailable', detail: expect.stringContaining('sudo allows only nft') });
     expect((await persistTables(nopass, [{ family: 'inet', name: 'x' }])).problem?.code).toBe('persistence-unavailable');
+  });
+});
+
+describe.skipIf(testHost?.platform !== 'openwrt')('persistence on the OpenWrt test host', { timeout: 60_000 }, () => {
+  it('saves nothing, since UCI decides what loads at boot', async () => {
+    const deploy = await hostTarget('root', await mkdtemp(`${tmpdir()}/hopdeck-persist-`));
+    const status = await persistenceStatus({ kind: 'ssh', executor: deploy.executor, access: deploy.access, facts: deploy.facts });
+    expect(status.problem).toMatchObject({ code: 'persistence-unavailable', detail: expect.stringContaining('UCI') });
   });
 });

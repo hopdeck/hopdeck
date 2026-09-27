@@ -5,12 +5,12 @@ import { describe, expect, it } from 'vitest';
 import { groupTrace, parseTraceLine, summarize, traceFilterProblem, traceTable } from './trace.ts';
 
 // `nft -a monitor trace` (nftables 1.1.3): a TCP SYN to port 9 over lo, dropped by a rule, and one to port 10, dropped by the policy.
-const LINES = `trace id 52924af7 inet hopdeck_trace_t2 out packet: oif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 ip dscp cs0 ip ecn not-ect ip ttl 64 ip id 23602 ip protocol tcp ip length 60 tcp sport 59846 tcp dport 9 tcp flags == syn tcp window 65495
-trace id 52924af7 inet hopdeck_trace_t2 out rule tcp dport { 9, 10 } limit rate 10/second burst 5 packets meta nftrace set 1 # handle 6 (verdict continue)
-trace id 52924af7 inet hopdeck_trace_t2 out policy accept
-trace id 26dee5ea inet hopdeck_trace_t2 pre packet: iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 ip dscp cs0 ip ecn not-ect ip ttl 64 ip id 23602 ip protocol tcp ip length 60 tcp sport 59846 tcp dport 9 tcp flags == syn tcp window 65495
-trace id 26dee5ea inet hopdeck_trace_t2 pre rule tcp dport { 9, 10 } limit rate 10/second burst 5 packets meta nftrace set 1 # handle 4 (verdict continue)
-trace id 26dee5ea inet hopdeck_trace_t2 pre policy accept
+const LINES = `trace id 52924af7 inet hopdeck_trace_t2 outgoing packet: oif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 ip dscp cs0 ip ecn not-ect ip ttl 64 ip id 23602 ip protocol tcp ip length 60 tcp sport 59846 tcp dport 9 tcp flags == syn tcp window 65495
+trace id 52924af7 inet hopdeck_trace_t2 outgoing rule tcp dport { 9, 10 } limit rate 10/second burst 5 packets meta nftrace set 1 # handle 6 (verdict continue)
+trace id 52924af7 inet hopdeck_trace_t2 outgoing policy accept
+trace id 26dee5ea inet hopdeck_trace_t2 incoming packet: iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 ip dscp cs0 ip ecn not-ect ip ttl 64 ip id 23602 ip protocol tcp ip length 60 tcp sport 59846 tcp dport 9 tcp flags == syn tcp window 65495
+trace id 26dee5ea inet hopdeck_trace_t2 incoming rule tcp dport { 9, 10 } limit rate 10/second burst 5 packets meta nftrace set 1 # handle 4 (verdict continue)
+trace id 26dee5ea inet hopdeck_trace_t2 incoming policy accept
 trace id 26dee5ea inet f input packet: iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 ip dscp cs0 ip ecn not-ect ip ttl 64 ip id 23602 ip protocol tcp ip length 60 tcp sport 59846 tcp dport 9 tcp flags == syn tcp window 65495
 trace id 26dee5ea inet f input rule iif "lo" jump lo_in # handle 3 (verdict jump lo_in)
 trace id 26dee5ea inet f input rule tcp dport 9 drop comment "discard port" # handle 4 (verdict drop)
@@ -55,14 +55,14 @@ describe('groupTrace', () => {
 
   it('starts a new packet where hopdeck\'s chain reports one, even when the kernel reuses the trace id', () => {
     // A ping to lo and its reply, both given the id 3c0118c9 (nftables 1.1.3, kernel 6.12).
-    const reused = `trace id 3c0118c9 inet hopdeck_trace_t9 pre packet: iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 ip id 13597 ip protocol icmp icmp type echo-request
-trace id 3c0118c9 inet hopdeck_trace_t9 pre rule meta l4proto icmp limit rate 10/second burst 5 packets meta nftrace set 1 # handle 3 (verdict continue)
-trace id 3c0118c9 inet hopdeck_trace_t9 pre policy accept
+    const reused = `trace id 3c0118c9 inet hopdeck_trace_t9 incoming packet: iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 ip id 13597 ip protocol icmp icmp type echo-request
+trace id 3c0118c9 inet hopdeck_trace_t9 incoming rule meta l4proto icmp limit rate 10/second burst 5 packets meta nftrace set 1 # handle 3 (verdict continue)
+trace id 3c0118c9 inet hopdeck_trace_t9 incoming policy accept
 trace id 3c0118c9 inet filter input packet: iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 ip id 13597 ip protocol icmp icmp type echo-request
 trace id 3c0118c9 inet filter input rule iif "lo" accept # handle 11 (verdict accept)
-trace id 3c0118c9 inet hopdeck_trace_t9 pre packet: iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 ip id 13598 ip protocol icmp icmp type echo-reply
-trace id 3c0118c9 inet hopdeck_trace_t9 pre rule meta l4proto icmp limit rate 10/second burst 5 packets meta nftrace set 1 # handle 3 (verdict continue)
-trace id 3c0118c9 inet hopdeck_trace_t9 pre policy accept
+trace id 3c0118c9 inet hopdeck_trace_t9 incoming packet: iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 ip id 13598 ip protocol icmp icmp type echo-reply
+trace id 3c0118c9 inet hopdeck_trace_t9 incoming rule meta l4proto icmp limit rate 10/second burst 5 packets meta nftrace set 1 # handle 3 (verdict continue)
+trace id 3c0118c9 inet hopdeck_trace_t9 incoming policy accept
 trace id 3c0118c9 inet filter input packet: iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 ip id 13598 ip protocol icmp icmp type echo-reply
 trace id 3c0118c9 inet filter input rule ct state established,related accept # handle 9 (verdict accept)`.split('\n');
     const packets = groupTrace(reused);
@@ -101,11 +101,11 @@ describe('trace filters', () => {
     expect(traceTable('hopdeck_trace_ab12', { protocol: 'tcp', dport: '22', saddr: '10.0.0.5' }, 10)).toBe(
       [
         'table inet hopdeck_trace_ab12 {',
-        '\tchain pre {',
+        '\tchain incoming {',
         '\t\ttype filter hook prerouting priority -350; policy accept;',
         '\t\tip saddr 10.0.0.5 tcp dport 22 limit rate 10/second meta nftrace set 1',
         '\t}',
-        '\tchain out {',
+        '\tchain outgoing {',
         '\t\ttype filter hook output priority -350; policy accept;',
         '\t\tip saddr 10.0.0.5 tcp dport 22 limit rate 10/second meta nftrace set 1',
         '\t}',
@@ -115,7 +115,7 @@ describe('trace filters', () => {
     );
     const arriving = traceTable('hopdeck_trace_ab12', { protocol: 'icmp', iif: 'eth0' }, 5);
     expect(arriving).toContain('\t\tiifname "eth0" meta l4proto icmp limit rate 5/second meta nftrace set 1');
-    expect(arriving).toContain('\tchain out {\n\t\ttype filter hook output priority -350; policy accept;\n\t}');
+    expect(arriving).toContain('\tchain outgoing {\n\t\ttype filter hook output priority -350; policy accept;\n\t}');
     expect(traceTable('hopdeck_trace_ab12', {}, 10)).toContain('\t\tlimit rate 10/second meta nftrace set 1');
   });
 });

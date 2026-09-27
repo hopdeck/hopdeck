@@ -9,6 +9,7 @@ import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { fingerprint, hashName, HostKeys, knownHostsName, parseSshSettings } from './host-keys.ts';
 import { SshExecutor } from './ssh.ts';
+import { testHost } from '../testing/test-host.ts';
 
 describe('parseSshSettings and knownHostsName', () => {
   const output = [
@@ -58,12 +59,11 @@ describe('fingerprint and hashName', () => {
   });
 });
 
-// Against the podman test host: HOPDECK_TEST_HOST=1 pnpm test (after dev/test-host/up.sh).
-const repo = resolve(import.meta.dirname, '../../../..');
-const testKey = join(repo, '.dev/test-host/id_ed25519');
-const port = process.env['HOPDECK_TEST_PORT'] ?? '2222';
+// Against a podman test host: dev/test-host/up.sh [SYSTEM], then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
+const testKey = testHost?.key ?? '';
+const port = testHost?.port ?? 0;
 
-describe.skipIf(!process.env['HOPDECK_TEST_HOST'] || !existsSync(testKey))('HostKeys against the test host', () => {
+describe.skipIf(testHost === undefined)('HostKeys against the test host', () => {
   let dir: string;
   let keys: HostKeys;
   let serverFingerprint: string;
