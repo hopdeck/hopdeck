@@ -44,8 +44,9 @@ describe.skipIf(!USERNS)('deployments API', { timeout: 30_000 }, () => {
   });
 
   afterAll(async () => {
-    await server.close();
-    await sandbox.dispose();
+    // Whatever beforeAll got to start, even if it failed halfway.
+    await server?.close();
+    await sandbox?.dispose();
     await rm(configDir, { recursive: true, force: true });
   });
 

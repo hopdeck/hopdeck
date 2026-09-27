@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Mateusz T (Tenir)
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ExecOptions, ExecResult, Executor } from '@hopdeck/core';
@@ -59,9 +59,21 @@ export class Sandbox {
 
   /** Replaces the sandbox's ruleset, e.g. with demoRuleset(). */
   async load(ruleset: string): Promise<void> {
+    await this.nft(`flush ruleset\n${ruleset}`);
+  }
+
+  /**
+   * Runs nft input in the sandbox. It goes through a file: nft 1.0.9 (Ubuntu
+   * 24.04) refuses "-f -" when its input is a socket, which is what a program
+   * started from Node gets.
+   */
+  async nft(script: string): Promise<void> {
     const facts = await collectFacts(this.executor);
     if (facts.nft === undefined) throw new HostError('nft-missing');
-    const result = await this.executor.exec([facts.nft.path, '-f', '-'], { stdin: `flush ruleset\n${ruleset}` });
+    const file = join(this.directory, 'input.nft');
+    await writeFile(file, script, { mode: 0o600 });
+    const result = await this.executor.exec([facts.nft.path, '-f', file]);
+    await rm(file, { force: true });
     if (result.exitCode !== 0) throw new HostError('command-failed', result.stderr.trim());
   }
 

@@ -44,10 +44,7 @@ describe.skipIf(NFT === undefined || !USERNS)('History in a sandbox', { timeout:
   let target: HistoryTarget;
   const deployments = new Deployments({ seconds: 5 });
   const history = new History({ operator: { user: 'ada', computer: 'desk' }, busy: (hostId) => deployments.busy(hostId) });
-  const run = async (script: string) => {
-    const result = await executor.exec([nft, '-f', '-'], { stdin: script });
-    expect(result.stderr).toBe('');
-  };
+  const run = (script: string) => sandbox.nft(script);
   const json = async () => JSON.parse((await executor.exec([nft, '-j', 'list', 'ruleset'])).stdout) as unknown;
   const look = async () => history.observe(target, await json());
   const deployTarget = () => ({ ...target, name: 'sandbox', systemd: false, manualOverride: false, freshExecutor: undefined });

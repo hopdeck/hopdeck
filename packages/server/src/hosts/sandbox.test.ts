@@ -29,7 +29,7 @@ describe.skipIf(NFT === undefined || !USERNS)('Sandbox', () => {
   it('keeps its own ruleset between commands, isolated from other sandboxes', async () => {
     const run = sandbox.executor;
     expect((await run.exec([nft, 'add', 'table', 'inet', 'hopdeck_test'])).exitCode).toBe(0);
-    await run.exec([nft, '-f', '-'], { stdin: 'add chain inet hopdeck_test input { type filter hook input priority 0; }\n' });
+    await sandbox.nft('add chain inet hopdeck_test input { type filter hook input priority 0; }\n');
 
     const listed = await run.exec([nft, '-j', 'list', 'ruleset']);
     const kinds = JSON.parse(listed.stdout).nftables.map((item: object) => Object.keys(item)[0]);

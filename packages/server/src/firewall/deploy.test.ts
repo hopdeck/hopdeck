@@ -202,7 +202,7 @@ describe.skipIf(NFT === undefined || !USERNS)('Deployments in a sandbox', { time
 
   it('changes rule by rule: the rules left alone keep their handles and counters', async () => {
     const rules = 'table inet rules {\n\tcomment "managed by hopdeck"\n\tchain input {\n\t\ttype filter hook input priority 10; policy accept;\n\t\ticmp type echo-request counter accept\n\t\ttcp dport 22 accept\n\t\ttcp dport 80 accept\n\t}\n}\n';
-    await executor.exec([nft, '-f', '-'], { stdin: rules });
+    await sandbox.nft(rules);
     await executor.exec(['ping', '-c', '2', '-W', '1', '127.0.0.1']);
     const before = (await readTable(target.access, 'inet', 'rules'))!;
     const counted = / {2}icmp type echo-request counter packets (\d+) bytes \d+ accept # handle (\d+)/.exec(before.annotated.replace(/\t/g, '  '));
