@@ -706,5 +706,7 @@
   "clamp.moreItems": "Show all ({{count}})",
   "clamp.less": "Show less",
   "rule.fieldExpand": "Show the whole value",
-  "rule.fieldCollapse": "Back to one line"
+  "rule.fieldCollapse": "Back to one line",
+  "host.loginLost": "The host stopped letting hopdeck in",
+  "host.loginLostHint": "A new SSH connection was refused. A key unlocked for a limited time has probably left the agent: unlock it again below, and hopdeck reconnects."
 }

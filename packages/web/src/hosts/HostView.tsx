@@ -13,9 +13,9 @@ import {
   type Privilege,
   type TableChange,
 } from '@hopdeck/core';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Callout } from '../components/Callout.tsx';
-import { ErrorBody, ErrorCallout, errorTitle, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
+import { ErrorBody, ErrorCallout, ErrorVarsProvider, errorTitle, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
 import { AlertIcon, CheckIcon, HostKindIcon, LockIcon, RefreshIcon, SandboxIcon, TrashIcon } from '../components/icons.tsx';
 import { Tabs } from '../components/Tabs.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
@@ -35,6 +35,7 @@ import { PersistencePanel } from '../firewall/deploy/PersistencePanel.tsx';
 import { HistoryPanel } from '../firewall/history/HistoryPanel.tsx';
 import { HostSettings } from './HostSettings.tsx';
 import { UsageMeter } from './UsageMeter.tsx';
+import { useUsage } from './useUsage.ts';
 import { HostKeyPanel } from './HostKeyPanel.tsx';
 import { SshKeyPanel } from './SshKeyPanel.tsx';
 import { ManualOverrideBanner, ManualOverrideButton } from './ManualOverride.tsx';
@@ -97,6 +98,21 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   // The firewall is only shown where changing it with nft would go behind the platform's back.
   const readOnly = status.state === 'connected' && platform(status.facts.platform).firewall === 'read-only';
   const ruleset = useRuleset(host.id, readable);
+  // Read every few seconds, it also notices when an SSH host stops letting hopdeck in.
+  const usage = useUsage(host.id, status.state === 'connected');
+  const loginLost = host.kind === 'ssh' && status.state === 'connected' && usage.error?.code === 'ssh-auth' ? usage.error : undefined;
+  const errorVars = useMemo(() => ({ destination: host.destination ?? host.name }), [host.destination, host.name]);
+  // Once the host lets hopdeck in again, what the refused login could not read is read again.
+  const wasLost = useRef(false);
+  useEffect(() => {
+    if (loginLost !== undefined) {
+      wasLost.current = true;
+    } else if (wasLost.current) {
+      wasLost.current = false;
+      if (readable) ruleset.reload();
+    }
+    // Only the change of loginLost matters, not a new ruleset object.
+  }, [loginLost]);
   const [tab, setTab] = useState('rules');
   // A chain to scroll to once the rules tab is shown, e.g. picked in the packet path.
   const [scrollTarget, setScrollTarget] = useState<string>();
@@ -110,7 +126,8 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   const [traceSession, setTraceSession] = useState<TraceSession>(NEW_TRACE_SESSION);
   const [liveSeconds, setLiveSeconds] = useState(5);
   // Counters and changes are read while the rules (or the editor) are in view.
-  const live = useLive(host.id, liveSeconds, readable && tab === 'rules' && ruleset.model !== undefined);
+  // Paused while the host refuses the login: it would only repeat that.
+  const live = useLive(host.id, liveSeconds, readable && tab === 'rules' && ruleset.model !== undefined && loginLost === undefined);
   // While hopdeck applies a change itself, the host differing is expected.
   const changed =
     live.info === undefined || ruleset.model === undefined || changes !== undefined || ruleset.loading
@@ -146,225 +163,234 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
     readable && status.state === 'connected' && status.privilege.kind !== 'none' ? ACCESS_BADGES[status.privilege.kind] : undefined;
 
   return (
-    <section className={styles.view} aria-labelledby="host-title">
-      <header className={styles.header}>
-        <div className={styles.identity}>
-          <span className={styles.icon}>
-            <HostKindIcon kind={host.kind} />
-          </span>
-          <div className={styles.names}>
-            <h1 id="host-title" className={styles.title}>
-              {host.name}
-            </h1>
-            <p className={styles.subtitle}>
-              <span className={'text' in subtitle ? 'mono' : undefined}>{'text' in subtitle ? subtitle.text : t(subtitle.key)}</span>
-              {badge !== undefined && (
-                <span className={styles.accessBadge} title={t(badge.title)}>
-                  <CheckIcon />
-                  {t(badge.label)}
-                </span>
-              )}
-            </p>
+    <ErrorVarsProvider value={errorVars}>
+      <section className={styles.view} aria-labelledby="host-title">
+        <header className={styles.header}>
+          <div className={styles.identity}>
+            <span className={styles.icon}>
+              <HostKindIcon kind={host.kind} />
+            </span>
+            <div className={styles.names}>
+              <h1 id="host-title" className={styles.title}>
+                {host.name}
+              </h1>
+              <p className={styles.subtitle}>
+                <span className={'text' in subtitle ? 'mono' : undefined}>{'text' in subtitle ? subtitle.text : t(subtitle.key)}</span>
+                {badge !== undefined && (
+                  <span className={styles.accessBadge} title={t(badge.title)}>
+                    <CheckIcon />
+                    {t(badge.label)}
+                  </span>
+                )}
+              </p>
+            </div>
           </div>
-        </div>
-        <UsageMeter hostId={host.id} active={status.state === 'connected'} />
-        <div className={styles.actions}>
-          <button type="button" className="btn" onClick={onConnect} disabled={connecting}>
-            {connecting ? <span className="spinner" aria-hidden="true" /> : <RefreshIcon />}
-            {t(status.state === 'new' ? 'host.connect' : 'host.reconnect')}
-          </button>
-          {readable && !readOnly && <ManualOverrideButton host={host} onUpdate={onUpdate} />}
-          {host.kind === 'ssh' && (
-            <button type="button" className="btn btn-ghost btn-danger" onClick={onRemove}>
-              <TrashIcon />
-              {t('host.remove')}
+          {status.state === 'connected' && <UsageMeter usage={usage.usage} error={loginLost === undefined ? usage.error : undefined} />}
+          <div className={styles.actions}>
+            <button type="button" className="btn" onClick={onConnect} disabled={connecting}>
+              {connecting ? <span className="spinner" aria-hidden="true" /> : <RefreshIcon />}
+              {t(status.state === 'new' ? 'host.connect' : 'host.reconnect')}
             </button>
-          )}
-        </div>
-      </header>
+            {readable && !readOnly && <ManualOverrideButton host={host} onUpdate={onUpdate} />}
+            {host.kind === 'ssh' && (
+              <button type="button" className="btn btn-ghost btn-danger" onClick={onRemove}>
+                <TrashIcon />
+                {t('host.remove')}
+              </button>
+            )}
+          </div>
+        </header>
 
-      <ManualOverrideBanner host={host} onUpdate={onUpdate} />
+        <ManualOverrideBanner host={host} onUpdate={onUpdate} />
 
-      {host.kind === 'sandbox' && (
-        <Callout tone="info" icon={<SandboxIcon />} title={t('host.sandboxTitle')}>
-          {t('host.sandboxNote')}
-        </Callout>
-      )}
+        {host.kind === 'sandbox' && (
+          <Callout tone="info" icon={<SandboxIcon />} title={t('host.sandboxTitle')}>
+            {t('host.sandboxNote')}
+          </Callout>
+        )}
 
-      {status.state === 'new' && (
-        <p className={styles.loading} role="status">
-          <span className="spinner" aria-hidden="true" />
-          {t('status.connecting')}
-        </p>
-      )}
+        {status.state === 'new' && (
+          <p className={styles.loading} role="status">
+            <span className="spinner" aria-hidden="true" />
+            {t('status.connecting')}
+          </p>
+        )}
 
-      {status.state === 'error' && (
-        <ErrorCallout
-          error={{ code: status.error.code, message: status.error.detail }}
-          vars={{ destination: host.destination ?? host.name }}
-        />
-      )}
+        {status.state === 'error' && (
+          <ErrorCallout error={{ code: status.error.code, message: status.error.detail }} />
+        )}
 
-      {status.state === 'error' && host.kind === 'ssh' && ['ssh-host-key', 'ssh-host-key-changed'].includes(status.error.code) && (
-        <HostKeyPanel hostId={host.id} changed={status.error.code === 'ssh-host-key-changed'} onTrusted={onUpdate} />
-      )}
+        {status.state === 'error' && host.kind === 'ssh' && ['ssh-host-key', 'ssh-host-key-changed'].includes(status.error.code) && (
+          <HostKeyPanel hostId={host.id} changed={status.error.code === 'ssh-host-key-changed'} onTrusted={onUpdate} />
+        )}
 
-      {status.state === 'error' && host.kind === 'ssh' && status.error.code === 'ssh-auth' && (
-        <SshKeyPanel hostId={host.id} onUnlocked={onConnect} />
-      )}
+        {status.state === 'error' && host.kind === 'ssh' && status.error.code === 'ssh-auth' && (
+          <SshKeyPanel hostId={host.id} onUnlocked={onConnect} />
+        )}
 
-      {status.state === 'connected' && !readable && (
-        <>
-          <Access status={status} kind={host.kind} onUnlock={onUnlock} />
-          <Facts facts={status.facts} />
-        </>
-      )}
+        {loginLost !== undefined && (
+          <>
+            <Callout tone="warn" icon={<LockIcon />} title={t('host.loginLost')} role="alert">
+              <p>{t('host.loginLostHint')}</p>
+              <pre className="details">{loginLost.message}</pre>
+            </Callout>
+            <SshKeyPanel hostId={host.id} onUnlocked={onConnect} />
+          </>
+        )}
 
-      {readable && status.state === 'connected' && (
-        <Tabs
-          label={t('tabs.label')}
-          active={tab}
-          onChange={setTab}
-          tabs={[
-            {
-              id: 'rules',
-              group: t('tabs.group.firewall'),
-              label: t('tabs.rules'),
-              content:
-                editing !== undefined && ruleset.model !== undefined ? (
-                  editedNode !== undefined || editing.create !== undefined ? (
-                    <TableEditor
-                      key={`${editing.family} ${editing.table}`}
-                      family={editing.family}
-                      name={editing.table}
-                      source={source}
-                      initialMode={editing.mode}
-                      draft={editing.draft}
-                      onDraft={(draft) => setEditing((current) => current && { ...current, draft })}
-                      problem={editing.problem}
-                      changedOnHost={changedOnHost}
-                      onReview={(definition) => {
-                        setEditing((current) => current && { ...current, sent: definition });
-                        const base = source !== undefined && !source.creating ? source.original : undefined;
-                        setChanges([{ kind: 'replace', family: editing.family, table: editing.table, definition, ...(base !== undefined && { base }) }]);
+        {status.state === 'connected' && !readable && (
+          <>
+            <Access status={status} kind={host.kind} onUnlock={onUnlock} />
+            <Facts facts={status.facts} />
+          </>
+        )}
+
+        {readable && status.state === 'connected' && (
+          <Tabs
+            label={t('tabs.label')}
+            active={tab}
+            onChange={setTab}
+            tabs={[
+              {
+                id: 'rules',
+                group: t('tabs.group.firewall'),
+                label: t('tabs.rules'),
+                content:
+                  editing !== undefined && ruleset.model !== undefined ? (
+                    editedNode !== undefined || editing.create !== undefined ? (
+                      <TableEditor
+                        key={`${editing.family} ${editing.table}`}
+                        family={editing.family}
+                        name={editing.table}
+                        source={source}
+                        initialMode={editing.mode}
+                        draft={editing.draft}
+                        onDraft={(draft) => setEditing((current) => current && { ...current, draft })}
+                        problem={editing.problem}
+                        changedOnHost={changedOnHost}
+                        onReview={(definition) => {
+                          setEditing((current) => current && { ...current, sent: definition });
+                          const base = source !== undefined && !source.creating ? source.original : undefined;
+                          setChanges([{ kind: 'replace', family: editing.family, table: editing.table, definition, ...(base !== undefined && { base }) }]);
+                        }}
+                        onClose={() => setEditing(undefined)}
+                      />
+                    ) : (
+                      <Callout tone="warn" icon={<AlertIcon />} title={t('editor.gone', { table: `${editing.family} ${editing.table}` })}>
+                        <button type="button" className="btn btn-sm" onClick={() => setEditing(undefined)}>
+                          {t('common.close')}
+                        </button>
+                      </Callout>
+                    )
+                  ) : (
+                    <div className={styles.rules}>
+                      {readOnly ? (
+                        <Callout tone="info" icon={<LockIcon />} title={t('platform.readOnly.title')}>
+                          {t('platform.readOnly.openwrt')}
+                        </Callout>
+                      ) : (
+                        <PersistencePanel hostId={host.id} version={ruleset.model?.readAt} />
+                      )}
+                      <RulesetView
+                        state={ruleset}
+                        live={{ info: live.info, error: live.error, seconds: liveSeconds, onSeconds: setLiveSeconds, changed }}
+                        actions={
+                          readOnly
+                            ? undefined
+                            : {
+                                manualOverride: host.manualOverride,
+                                onChange: setChanges,
+                                onEdit: (family, table, mode) => setEditing({ family, table, mode }),
+                                onCreate: () => setCreating(true),
+                              }
+                        }
+                      />
+                    </div>
+                  ),
+              },
+              {
+                id: 'path',
+                group: t('tabs.group.firewall'),
+                label: t('tabs.path'),
+                content:
+                  ruleset.model !== undefined ? (
+                    <PacketPathView
+                      model={ruleset.model}
+                      onShowChain={(anchor) => {
+                        setScrollTarget(anchor);
+                        setTab('rules');
                       }}
-                      onClose={() => setEditing(undefined)}
                     />
                   ) : (
-                    <Callout tone="warn" icon={<AlertIcon />} title={t('editor.gone', { table: `${editing.family} ${editing.table}` })}>
-                      <button type="button" className="btn btn-sm" onClick={() => setEditing(undefined)}>
-                        {t('common.close')}
-                      </button>
-                    </Callout>
-                  )
-                ) : (
-                  <div className={styles.rules}>
-                    {readOnly ? (
-                      <Callout tone="info" icon={<LockIcon />} title={t('platform.readOnly.title')}>
-                        {t('platform.readOnly.openwrt')}
-                      </Callout>
-                    ) : (
-                      <PersistencePanel hostId={host.id} version={ruleset.model?.readAt} />
-                    )}
-                    <RulesetView
-                      state={ruleset}
-                      live={{ info: live.info, error: live.error, seconds: liveSeconds, onSeconds: setLiveSeconds, changed }}
-                      actions={
-                        readOnly
-                          ? undefined
-                          : {
-                              manualOverride: host.manualOverride,
-                              onChange: setChanges,
-                              onEdit: (family, table, mode) => setEditing({ family, table, mode }),
-                              onCreate: () => setCreating(true),
-                            }
-                      }
-                    />
-                  </div>
-                ),
-            },
-            {
-              id: 'path',
-              group: t('tabs.group.firewall'),
-              label: t('tabs.path'),
-              content:
-                ruleset.model !== undefined ? (
-                  <PacketPathView
-                    model={ruleset.model}
+                    <Listing state={ruleset} />
+                  ),
+              },
+              {
+                id: 'trace',
+                group: t('tabs.group.firewall'),
+                label: t('tabs.trace'),
+                content: (
+                  <TracePanel
+                    hostId={host.id}
+                    hostKind={host.kind}
+                    session={traceSession}
+                    onSession={setTraceSession}
                     onShowChain={(anchor) => {
                       setScrollTarget(anchor);
                       setTab('rules');
                     }}
                   />
-                ) : (
-                  <Listing state={ruleset} />
                 ),
-            },
-            {
-              id: 'trace',
-              group: t('tabs.group.firewall'),
-              label: t('tabs.trace'),
-              content: (
-                <TracePanel
-                  hostId={host.id}
-                  hostKind={host.kind}
-                  session={traceSession}
-                  onSession={setTraceSession}
-                  onShowChain={(anchor) => {
-                    setScrollTarget(anchor);
-                    setTab('rules');
-                  }}
-                />
-              ),
-            },
-            {
-              id: 'history',
-              group: t('tabs.group.firewall'),
-              label: t('tabs.history'),
-              content: (
-                <HistoryPanel
-                  hostId={host.id}
-                  model={ruleset.model}
-                  canRestore={!readOnly}
-                  onRestore={(restore, version) => {
-                    setRestoredFrom(version);
-                    setChanges(restore);
-                  }}
-                />
-              ),
-            },
-            { id: 'text', group: t('tabs.group.firewall'), label: t('tabs.text'), content: <Listing state={ruleset} /> },
-            { id: 'system', group: t('tabs.group.host'), label: t('tabs.system'), content: <Facts facts={status.facts} /> },
-            { id: 'settings', group: t('tabs.group.host'), label: t('tabs.settings'), content: <HostSettings hostId={host.id} /> },
-          ]}
+              },
+              {
+                id: 'history',
+                group: t('tabs.group.firewall'),
+                label: t('tabs.history'),
+                content: (
+                  <HistoryPanel
+                    hostId={host.id}
+                    model={ruleset.model}
+                    canRestore={!readOnly}
+                    onRestore={(restore, version) => {
+                      setRestoredFrom(version);
+                      setChanges(restore);
+                    }}
+                  />
+                ),
+              },
+              { id: 'text', group: t('tabs.group.firewall'), label: t('tabs.text'), content: <Listing state={ruleset} /> },
+              { id: 'system', group: t('tabs.group.host'), label: t('tabs.system'), content: <Facts facts={status.facts} /> },
+              { id: 'settings', group: t('tabs.group.host'), label: t('tabs.settings'), content: <HostSettings hostId={host.id} /> },
+            ]}
+          />
+        )}
+        <NewTableDialog
+          open={creating}
+          existing={ruleset.model?.ruleset.tables.map((node) => ({ family: node.table.family, name: node.table.name })) ?? []}
+          remote={host.kind === 'ssh'}
+          onCreate={(family, table, create) => {
+            setCreating(false);
+            setEditing({ family, table, mode: 'visual', create });
+          }}
+          onClose={() => setCreating(false)}
         />
-      )}
-      <NewTableDialog
-        open={creating}
-        existing={ruleset.model?.ruleset.tables.map((node) => ({ family: node.table.family, name: node.table.name })) ?? []}
-        remote={host.kind === 'ssh'}
-        onCreate={(family, table, create) => {
-          setCreating(false);
-          setEditing({ family, table, mode: 'visual', create });
-        }}
-        onClose={() => setCreating(false)}
-      />
-      <DeploymentDialog
-        hostId={host.id}
-        hostName={host.name}
-        changes={changes}
-        restoredFrom={restoredFrom}
-        onClose={(result) => {
-          setChanges(undefined);
-          setRestoredFrom(undefined);
-          if (result.changed) ruleset.reload();
-          if (editing?.sent === undefined) return;
-          const sent = editing.sent;
-          if (result.view?.state === 'confirmed') setEditing(undefined);
-          else setEditing((current) => current && { ...current, problem: rejection(result, sent) });
-        }}
-      />
-    </section>
+        <DeploymentDialog
+          hostId={host.id}
+          hostName={host.name}
+          changes={changes}
+          restoredFrom={restoredFrom}
+          onClose={(result) => {
+            setChanges(undefined);
+            setRestoredFrom(undefined);
+            if (result.changed) ruleset.reload();
+            if (editing?.sent === undefined) return;
+            const sent = editing.sent;
+            if (result.view?.state === 'confirmed') setEditing(undefined);
+            else setEditing((current) => current && { ...current, problem: rejection(result, sent) });
+          }}
+        />
+      </section>
+    </ErrorVarsProvider>
   );
 }
 

@@ -61,6 +61,38 @@ describe('HostManager', () => {
     expect(await hosts.remove('missing')).toBe(false);
   });
 
+  it('stops logging in to an SSH host that refused, until it is connected again', async () => {
+    let refuse = false;
+    const executors: FakeExecutor[] = [];
+    const script: Script = (argv, stdin) => (refuse ? new HostError('ssh-auth', 'admin@fw1: Permission denied (publickey).') : SUDO_WITH_PASSWORD(argv, stdin));
+    const hosts = await HostManager.open({
+      configDir,
+      controlDir: configDir,
+      createSshExecutor: () => {
+        executors.push(new FakeExecutor(script));
+        return executors.at(-1)!;
+      },
+    });
+    const { id } = await hosts.add({ destination: 'fw1' });
+    await hosts.connect(id);
+    const ssh = executors.at(-1)!;
+
+    // The key left the agent: the panel's next readings are refused, and only the first one tries.
+    refuse = true;
+    const before = ssh.calls.length;
+    await expect(hosts.usage(id)).rejects.toMatchObject({ code: 'ssh-auth' });
+    await expect(hosts.usage(id)).rejects.toMatchObject({ code: 'ssh-auth' });
+    await expect(hosts.usage(id)).rejects.toMatchObject({ code: 'ssh-auth' });
+    expect(ssh.calls.length).toBe(before + 1);
+
+    // Connecting again logs in again, and so does what follows.
+    refuse = false;
+    expect((await hosts.connect(id))?.status).toMatchObject({ state: 'connected' });
+    const connected = ssh.calls.length;
+    await hosts.usage(id).catch(() => undefined);
+    expect(ssh.calls.length).toBe(connected + 1);
+  });
+
   it('connects to localhost', async () => {
     const connected = await (await open()).connect('local');
     expect(connected?.status).toMatchObject({ state: 'connected', facts: { kernel: release() } });

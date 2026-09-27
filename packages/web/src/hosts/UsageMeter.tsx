@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
+import type { HostUsage } from '@hopdeck/core';
+import type { ErrorInfo } from '../components/ErrorCallout.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import { formatBytes } from '../firewall/ruleset/model.ts';
 import styles from './UsageMeter.module.css';
-import { useUsage } from './useUsage.ts';
 
-/** The host's CPU (100% per fully busy thread, as top shows) and memory in use, kept up to date. */
-export function UsageMeter({ hostId, active }: { hostId: string; active: boolean }) {
+/** The host's CPU (100% per fully busy thread, as top shows) and memory in use, as useUsage() reads them. */
+export function UsageMeter({ usage, error }: { usage: HostUsage | undefined; error: ErrorInfo | undefined }) {
   const { t, locale } = useI18n();
-  const { usage, error } = useUsage(hostId, active);
-  if (!active) return null;
   if (error !== undefined && usage === undefined) {
     return (
       <p className={styles.error} role="status">

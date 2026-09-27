@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Mateusz T (Tenir)
 
 import { RulesetParseError } from '@hopdeck/core';
+import { createContext, useContext } from 'react';
 import { ApiError } from '../api.ts';
 import { errorText } from '../errors.ts';
 import { useI18n, type I18n } from '../i18n/I18nProvider.tsx';
@@ -23,6 +24,14 @@ export function toErrorInfo(caught: unknown): ErrorInfo {
   return { code: 'ui-error', message };
 }
 
+/**
+ * Values every error hint below may use, such as the host's destination for
+ * "check that ssh {{destination}} works": given once by the host's view, not
+ * by each place that shows an error.
+ */
+const ErrorVars = createContext<Vars>({});
+export const ErrorVarsProvider = ErrorVars.Provider;
+
 export function errorTitle(t: I18n['t'], code: string): string {
   const text = errorText(code);
   return text === undefined ? t('error.unexpected', { code }) : t(text.title);
@@ -34,11 +43,12 @@ export function errorTitle(t: I18n['t'], code: string): string {
  */
 export function ErrorBody({ error, vars }: { error: ErrorInfo; vars?: Vars }) {
   const { t } = useI18n();
+  const shared = useContext(ErrorVars);
   const hint = errorText(error.code)?.hint;
   const message = error.message.trim();
   return (
     <>
-      {hint !== undefined && <p>{t(hint, vars)}</p>}
+      {hint !== undefined && <p>{t(hint, { ...shared, ...vars })}</p>}
       {message !== '' && message !== error.code && (
         <div>
           <p className="details-label">{t('error.original')}</p>

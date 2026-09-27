@@ -40,6 +40,7 @@ import { LocalExecutor } from './local.ts';
 import { detectPrivilege, runNft, type NftAccess } from './privilege.ts';
 import { isValidDestination, SshExecutor } from './ssh.ts';
 import { KeyLogin } from './key-login.ts';
+import { LoginGuard } from './login-guard.ts';
 import { SshKeys } from './ssh-keys.ts';
 
 interface Entry {
@@ -177,6 +178,8 @@ export class HostManager {
     const entry = this.#entries.get(id);
     if (entry === undefined) return undefined;
     this.#history.reset(id);
+    // Connecting is the user asking to log in again.
+    if (entry.executor instanceof LoginGuard) entry.executor.reset();
     try {
       const facts = await collectFacts(entry.executor);
       const privilege = await detectPrivilege(entry.executor, facts);
@@ -518,14 +521,15 @@ export class HostManager {
   }
 
   #sshEntry(host: StoredHost): Entry {
-    const executor =
+    const executor = new LoginGuard(
       this.#options.createSshExecutor?.(host.destination) ??
-      new SshExecutor({
-        destination: host.destination,
-        controlDir: this.#options.controlDir,
-        configFile: this.#options.sshConfigFile,
-        env: this.#sshKeys.env,
-      });
+        new SshExecutor({
+          destination: host.destination,
+          controlDir: this.#options.controlDir,
+          configFile: this.#options.sshConfigFile,
+          env: this.#sshKeys.env,
+        }),
+    );
     return {
       id: host.id,
       kind: 'ssh',

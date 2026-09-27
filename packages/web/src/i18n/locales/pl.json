@@ -754,5 +754,7 @@
   "clamp.moreItems": "Pokaż wszystkie ({{count}})",
   "clamp.less": "Zwiń",
   "rule.fieldExpand": "Pokaż całą wartość",
-  "rule.fieldCollapse": "Z powrotem do jednej linii"
+  "rule.fieldCollapse": "Z powrotem do jednej linii",
+  "host.loginLost": "Host przestał wpuszczać hopdecka",
+  "host.loginLostHint": "Nowe połączenie SSH zostało odrzucone. Najpewniej klucz odblokowany na ograniczony czas zniknął z agenta: odblokuj go poniżej, a hopdeck połączy się ponownie."
 }
