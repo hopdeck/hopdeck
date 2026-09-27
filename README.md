@@ -69,7 +69,7 @@ No code changes are needed: every file in that directory becomes a language.
 
 ## Author and license
 
-hopdeck was created by Mateusz T (Tenir), who maintains it; see
+hopdeck was created by Mateusz T ([Tenir](https://github.com/Tenirrr)), who maintains it; see
 [AUTHORS](AUTHORS).
 
 Copyright (C) 2026 Mateusz T (Tenir)

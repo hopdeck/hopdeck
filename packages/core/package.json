@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "license": "GPL-3.0-or-later",
-  "author": { "name": "Mateusz T (Tenir)" },
+  "author": { "name": "Mateusz T (Tenir)", "url": "https://github.com/Tenirrr" },
   "exports": {
     ".": "./src/index.ts"
   },

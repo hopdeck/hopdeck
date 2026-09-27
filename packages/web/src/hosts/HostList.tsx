@@ -61,7 +61,12 @@ export function HostList({ hosts, selectedId, connecting, onSelect, onAdd }: Hos
       </button>
       {/* The Appropriate Legal Notices of GPL-3.0: authors, licence, no warranty. */}
       <footer className={styles.legal}>
-        <span>{COPYRIGHT}</span>
+        <span>
+          Copyright (C) {COPYRIGHT.year}{' '}
+          <a href={COPYRIGHT.url} target="_blank" rel="noopener noreferrer">
+            {COPYRIGHT.author}
+          </a>
+        </span>
         <span>
           {t('legal.license')}{' '}
           <a href={LICENSE_URL} target="_blank" rel="noopener noreferrer">
