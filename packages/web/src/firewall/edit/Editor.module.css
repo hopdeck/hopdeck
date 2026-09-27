@@ -165,6 +165,11 @@
   font-size: var(--text-sm);
 }
 
+/*
+ * Headers break between words: a header held on one line would make its
+ * column at least that wide, and with many columns the rows would get only
+ * what is left, one list item per line.
+ */
 .grid th {
   padding: 4px 8px;
   border-bottom: 1px solid var(--border);
@@ -173,7 +178,7 @@
   font-size: var(--text-xs);
   font-weight: 600;
   text-align: left;
-  white-space: nowrap;
+  vertical-align: bottom;
 }
 
 .grid td {
@@ -273,10 +278,9 @@
   font-size: var(--text-xs);
 }
 
-/* Long lists wrap after their commas instead of pushing columns out of view. */
+/* Long lists wrap after their commas, and only when the table has no more room. */
 .grid .value {
   min-width: 6ch;
-  max-width: 32ch;
   white-space: normal;
   overflow-wrap: break-word;
 }
@@ -310,10 +314,12 @@
 }
 
 .comment {
-  max-width: 24ch;
-  overflow: hidden;
+  min-width: 12ch;
   color: var(--text-muted);
-  text-overflow: ellipsis;
+}
+
+.grid .comment {
+  white-space: normal;
 }
 
 .counter {
@@ -323,12 +329,9 @@
   font-family: var(--font-mono);
 }
 
-/*
- * A column the viewer gave a width keeps it: 1% shrinks it to its content,
- * which Fit holds at that width, so the rest of the row takes the space left.
- */
+/* A column the viewer gave a width: the header's width decides, with no minimum from the content. */
 .grid .sized {
-  width: 1%;
+  min-width: 0;
   max-width: none;
 }
 

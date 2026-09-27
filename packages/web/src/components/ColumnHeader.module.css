@@ -38,11 +38,13 @@
 }
 
 .label {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Set narrower than its content, a cell wraps, inside words if it must, whatever its content says. */
+/* Narrower than its content, a cell wraps, inside words if it must, whatever its content says. */
 div.fit,
 div.fit * {
   white-space: normal;

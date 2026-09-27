@@ -68,13 +68,13 @@ export function ColumnHeader({ label, width, onResize, className, children }: Co
   }
 
   return (
-    <th ref={cell} className={`${styles.header}${className === undefined ? '' : ` ${className}`}`}>
+    <th ref={cell} className={`${styles.header}${className === undefined ? '' : ` ${className}`}`} style={width === undefined ? undefined : { width }}>
       {width === undefined ? (
         children
       ) : (
-        <div className={styles.label} style={{ width }}>
+        <span className={styles.label} style={{ width }}>
           {children}
-        </div>
+        </span>
       )}
       <span
         role="separator"
@@ -97,12 +97,16 @@ export function ColumnHeader({ label, width, onResize, className, children }: Co
   );
 }
 
-/** The content of a body cell in a column with a set width: it wraps within it. */
+/**
+ * The content of a body cell in a column with a set width: never narrower than
+ * that width, so the column keeps it when the table runs out of room, and as
+ * wide as the cell, so it wraps at the column's edge if the table widens it.
+ */
 export function Fit({ width, children }: { width: number | undefined; children: ReactNode }) {
   return width === undefined ? (
     children
   ) : (
-    <div className={styles.fit} style={{ width }}>
+    <div className={styles.fit} style={{ minWidth: width }}>
       {children}
     </div>
   );
