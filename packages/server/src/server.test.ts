@@ -2,11 +2,13 @@
 // Copyright (C) 2026 Mateusz T (Tenir)
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { HostManager } from './hosts/manager.ts';
-import { startServer, type RunningServer } from './server.ts';
+import { PortsTakenError, startServer, startServerOnFreePort, whoListens, type RunningServer } from './server.ts';
 import { webFilesIn } from './web-files.ts';
 
 describe('startServer', () => {
@@ -55,5 +57,62 @@ describe('startServer', () => {
   it('does not serve files outside the web root', async () => {
     expect((await fetch(`${base}/..%2f..%2f..%2fetc%2fpasswd`)).status).toBe(404);
     expect((await fetch(`${base}/%E0%A4%A`)).status).toBe(400);
+  });
+});
+
+describe('startServerOnFreePort', () => {
+  let dir: string;
+  let hosts: HostManager;
+  const opened: { close(): Promise<void> | void }[] = [];
+
+  /** A port some other program listens on. */
+  async function otherProgram(): Promise<number> {
+    const other: Server = createServer((_req, res) => res.end('not hopdeck'));
+    await new Promise<void>((resolve) => other.listen(0, '127.0.0.1', resolve));
+    opened.push({ close: () => new Promise<void>((resolve) => other.close(() => resolve())) });
+    return (other.address() as AddressInfo).port;
+  }
+
+  /** A port free a moment ago. */
+  async function freePort(): Promise<number> {
+    const probe = createServer();
+    await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
+    const { port } = probe.address() as AddressInfo;
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
+    return port;
+  }
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'hopdeck-ports-'));
+    hosts = await HostManager.open({ configDir: join(dir, 'config'), controlDir: dir });
+  });
+
+  afterAll(async () => {
+    for (const server of opened) await server.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const options = () => ({ token: 'test-token', version: '0.0.0-test', hosts });
+
+  it('takes the first free port, and says what held the ones before it', async () => {
+    const byOther = await otherProgram();
+    const first = await startServerOnFreePort(options(), [0]);
+    opened.push(first.server);
+    const free = await freePort();
+
+    const started = await startServerOnFreePort(options(), [byOther, first.server.port, free]);
+    opened.push(started.server);
+    expect(started.server.port).toBe(free);
+    expect(started.taken).toEqual([
+      { port: byOther, by: 'other' },
+      { port: first.server.port, by: 'hopdeck' },
+    ]);
+  });
+
+  it('fails with the ports and their holders when all are taken', async () => {
+    const byOther = await otherProgram();
+    await expect(startServerOnFreePort(options(), [byOther])).rejects.toThrow(PortsTakenError);
+    await expect(startServerOnFreePort(options(), [byOther])).rejects.toMatchObject({ taken: [{ port: byOther, by: 'other' }] });
+    expect(await whoListens(await freePort())).toBe('other');
   });
 });

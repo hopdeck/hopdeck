@@ -39,6 +39,54 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
 };
 
 /** Starts the panel backend. It listens on 127.0.0.1 only, never on other interfaces. */
+/** A port that was taken, and whether another hopdeck holds it. */
+export interface TakenPort {
+  port: number;
+  by: 'hopdeck' | 'other';
+}
+
+/** Thrown when every port asked for is taken. */
+export class PortsTakenError extends Error {
+  override name = 'PortsTakenError';
+  readonly taken: readonly TakenPort[];
+
+  constructor(taken: readonly TakenPort[]) {
+    super(`every port is taken: ${taken.map(({ port, by }) => `${port} (${by === 'hopdeck' ? 'another hopdeck' : 'another program'})`).join(', ')}`);
+    this.taken = taken;
+  }
+}
+
+/**
+ * Serves on the first of `ports` that is free, and says which ones before it
+ * were taken, and by what.
+ */
+export async function startServerOnFreePort(
+  options: Omit<ServerOptions, 'port'>,
+  ports: readonly number[],
+): Promise<{ server: RunningServer; taken: TakenPort[] }> {
+  const taken: TakenPort[] = [];
+  for (const port of ports) {
+    try {
+      return { server: await startServer({ ...options, port }), taken };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error;
+      taken.push({ port, by: await whoListens(port) });
+    }
+  }
+  throw new PortsTakenError(taken);
+}
+
+/** Whether what listens on a local port is hopdeck: it answers with hopdeck's own security headers. */
+export async function whoListens(port: number): Promise<TakenPort['by']> {
+  try {
+    const answer = await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(2000) });
+    await answer.body?.cancel();
+    return answer.headers.get('content-security-policy') === SECURITY_HEADERS['Content-Security-Policy'] ? 'hopdeck' : 'other';
+  } catch {
+    return 'other';
+  }
+}
+
 export async function startServer(options: ServerOptions): Promise<RunningServer> {
   let policy: AccessPolicy | undefined;
   const server = createServer((req, res) => {

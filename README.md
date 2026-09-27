@@ -44,7 +44,9 @@ hopdeck-0.1.0-linux-x64/hopdeck
 ```
 
 It prints the address of the panel; open it in a browser on the same
-machine. `hopdeck --sandbox` adds a host with a demo firewall to try things
+machine. It listens on 127.0.0.1 only, on port 7400, or the next free one up
+to 7419 when that is taken (it says by what: another hopdeck, with its
+address, or another program); `--port` picks one. `hopdeck --sandbox` adds a host with a demo firewall to try things
 on, `hopdeck --help` lists the options, and `hopdeck --licenses` the licenses
 of all it contains.
 
@@ -58,7 +60,7 @@ You need Node.js 24 and pnpm 12 (`npm install -g pnpm@12`).
 
 ```sh
 pnpm install
-pnpm dev         # API on 127.0.0.1:7400 and UI on 127.0.0.1:5173; open the printed URL
+pnpm dev         # API and UI on the first free ports from 7400 and 5173; open the printed URL
 pnpm test
 pnpm typecheck
 pnpm build && pnpm start   # serve the built UI from the backend
