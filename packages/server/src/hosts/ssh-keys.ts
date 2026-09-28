@@ -18,6 +18,12 @@ export interface SshKeysOptions {
   runtimeDir: string;
   /** false: never use the session's agent, e.g. in tests. */
   sessionAgent?: boolean;
+  /**
+   * Who ends a key's time: the agent (ssh-add -t), or hopdeck, which removes
+   * the key itself, for an agent that takes no time limit (Windows'). By
+   * default, hopdeck for Windows' agent and the agent otherwise.
+   */
+  lifetimes?: 'agent' | 'hopdeck';
 }
 
 /** Lifetimes a key may be given in an agent, in seconds; no lifetime keeps it as long as the agent runs. */
@@ -35,6 +41,8 @@ export class SshKeys {
   /** Why there is no agent, when there is none. */
   #unavailable: string | undefined;
   #agent: ChildProcessWithoutNullStreams | undefined;
+  /** Keys hopdeck removes itself when their time is up, by fingerprint. */
+  readonly #expiring = new Map<string, { file: string; timer: ReturnType<typeof setTimeout> }>();
 
   constructor(options: SshKeysOptions) {
     this.#options = options;
@@ -112,21 +120,60 @@ export class SshKeys {
     if (seconds !== undefined && !(Number.isInteger(seconds) && seconds > 0 && seconds <= MAX_KEY_LIFETIME)) {
       throw new HostError('command-failed', `a key's lifetime must be 1 to ${MAX_KEY_LIFETIME} seconds`);
     }
-    const { result: added, asked } = await withAskpass(passphrase, (askpass) =>
-      runProcess('ssh-add', [...(seconds === undefined ? [] : ['-t', String(seconds)]), '--', file], {
+    // Windows' agent refuses a key with a time limit ("agent refused operation").
+    const byHopdeck = (this.#options.lifetimes ?? (this.#kind === 'windows' ? 'hopdeck' : 'agent')) === 'hopdeck';
+    const limit = seconds === undefined || byHopdeck ? [] : ['-t', String(seconds)];
+    const { result: added, askedAgain } = await withAskpass(passphrase, (askpass) =>
+      runProcess('ssh-add', [...limit, '--', file], {
         timeoutMs: 15_000,
         env: { ...this.env, ...askpass },
       }),
     );
     if (added.exitCode !== 0) {
-      if (asked) throw new HostError('wrong-passphrase', added.stderr.trim() || `ssh-add did not accept the passphrase of ${file}`);
-      throw new HostError('command-failed', added.stderr.trim() || `ssh-add exited with code ${added.exitCode}`);
+      const said = added.stderr.trim();
+      // Asked again ("Bad passphrase, try again"): the passphrase. Anything else, such as the agent refusing the key, is not.
+      if (askedAgain) throw new HostError('wrong-passphrase', said || `ssh-add did not accept the passphrase of ${file}`);
+      throw new HostError('command-failed', said || `ssh-add exited with code ${added.exitCode}`);
+    }
+    if (byHopdeck) {
+      const { fingerprint } = await describe(file);
+      clearTimeout(this.#expiring.get(fingerprint)?.timer);
+      this.#expiring.delete(fingerprint);
+      if (seconds !== undefined) {
+        const timer = setTimeout(() => void this.#remove(fingerprint), seconds * 1000);
+        // A key's time is no reason for hopdeck to keep running.
+        timer.unref();
+        this.#expiring.set(fingerprint, { file, timer });
+      }
     }
     return this.list(destination);
   }
 
+  /** Takes a key hopdeck timed out of the agent, by its public half. */
+  async #remove(fingerprint: string): Promise<void> {
+    const entry = this.#expiring.get(fingerprint);
+    if (entry === undefined) return;
+    clearTimeout(entry.timer);
+    this.#expiring.delete(fingerprint);
+    const listed = await runProcess('ssh-add', ['-L'], { timeoutMs: 10_000, env: this.env }).catch(() => undefined);
+    for (const candidate of listed?.stdout.split('\n') ?? []) {
+      const line = authorizedKeyLine(candidate);
+      if (line === undefined || (await fingerprintOf(line)) !== fingerprint) continue;
+      const dir = await mkdtemp(join(tmpdir(), 'hopdeck-key-'));
+      try {
+        await writeFile(join(dir, 'key.pub'), `${line}\n`);
+        await runProcess('ssh-add', ['-d', join(dir, 'key.pub')], { timeoutMs: 10_000, env: this.env });
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+      return;
+    }
+  }
+
   /** Stops hopdeck's own agent, if it started one. */
   async close(): Promise<void> {
+    // Keys hopdeck was to take out go now: after hopdeck, nothing would.
+    await Promise.allSettled([...this.#expiring.keys()].map((fingerprint) => this.#remove(fingerprint)));
     const agent = this.#agent;
     this.#agent = undefined;
     if (agent === undefined || agent.exitCode !== null) return;
@@ -153,7 +200,7 @@ export class SshKeys {
     if (opened.exitCode === 0) candidates.push(opened.stdout.trim());
     for (const candidate of candidates) {
       const line = authorizedKeyLine(candidate);
-      if (line !== undefined && (await fingerprint(line)) === key.fingerprint) return { line, key };
+      if (line !== undefined && (await fingerprintOf(line)) === key.fingerprint) return { line, key };
     }
     throw new HostError(
       'command-failed',
@@ -223,7 +270,8 @@ async function describe(file: string): Promise<Omit<SshKeyInfo, 'file' | 'loaded
 
 /**
  * Runs `run` with SSH_ASKPASS set up to answer `secret` once, for ssh-add or
- * ssh; `asked` says whether it was asked. It answers no yes/no question, so a
+ * ssh; `asked` says whether it was asked, `askedAgain` whether it was asked a
+ * second time, as after a wrong secret. It answers no yes/no question, so a
  * host key to accept never gets the secret for an answer. The secret travels
  * in the environment of the program and the answering one only.
  *
@@ -231,7 +279,10 @@ async function describe(file: string): Promise<Omit<SshKeyInfo, 'file' | 'loaded
  * itself (answerAskpass()), the executable directly, or from source through
  * a .cmd that runs Node.js with hopdeck's main script.
  */
-export async function withAskpass<T>(secret: string, run: (env: Record<string, string>) => Promise<T>): Promise<{ result: T; asked: boolean }> {
+export async function withAskpass<T>(
+  secret: string,
+  run: (env: Record<string, string>) => Promise<T>,
+): Promise<{ result: T; asked: boolean; askedAgain: boolean }> {
   const dir = await mkdtemp(join(tmpdir(), 'hopdeck-askpass-'));
   try {
     await chmod(dir, 0o700);
@@ -252,12 +303,12 @@ export async function withAskpass<T>(secret: string, run: (env: Record<string, s
       // After a wrong secret the program asks again; the second time the answer is no.
       await writeFile(
         askpass,
-        '#!/bin/sh\ncase "${1-}" in *"(yes/no"*) exit 1 ;; esac\n[ -e "$HOPDECK_ASKPASS_DIR/asked" ] && exit 1\n: > "$HOPDECK_ASKPASS_DIR/asked"\nprintf \'%s\\n\' "$HOPDECK_ASKPASS_SECRET"\n',
+        '#!/bin/sh\ncase "${1-}" in *"(yes/no"*) exit 1 ;; esac\n[ -e "$HOPDECK_ASKPASS_DIR/asked" ] && { : > "$HOPDECK_ASKPASS_DIR/asked-again"; exit 1; }\n: > "$HOPDECK_ASKPASS_DIR/asked"\nprintf \'%s\\n\' "$HOPDECK_ASKPASS_SECRET"\n',
         { mode: 0o700 },
       );
     }
     const result = await run({ SSH_ASKPASS: askpass, SSH_ASKPASS_REQUIRE: 'force', HOPDECK_ASKPASS_DIR: dir, HOPDECK_ASKPASS_SECRET: secret, ...extra });
-    return { result, asked: existsSync(join(dir, 'asked')) };
+    return { result, asked: existsSync(join(dir, 'asked')), askedAgain: existsSync(join(dir, 'asked-again')) };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -277,7 +328,10 @@ export function answerAskpass(
   const secret = env['HOPDECK_ASKPASS_SECRET'];
   if (dir === undefined || secret === undefined || (prompt ?? '').includes('(yes/no')) return 1;
   const asked = join(dir, 'asked');
-  if (existsSync(asked)) return 1;
+  if (existsSync(asked)) {
+    writeFileSync(join(dir, 'asked-again'), '');
+    return 1;
+  }
   writeFileSync(asked, '');
   write(`${secret}\n`);
   return 0;
@@ -291,7 +345,7 @@ export function authorizedKeyLine(text: string): string | undefined {
   return `${match[1]} ${match[2]}${comment === '' ? '' : ` ${comment}`}`;
 }
 
-async function fingerprint(line: string): Promise<string | undefined> {
+async function fingerprintOf(line: string): Promise<string | undefined> {
   const shown = await runProcess('ssh-keygen', ['-l', '-f', '-'], { stdin: `${line}\n`, timeoutMs: 5_000 });
   return /^\d+ (\S+) /.exec(shown.stdout)?.[1];
 }

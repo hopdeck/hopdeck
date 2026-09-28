@@ -141,7 +141,8 @@ try {
 }
 const { server, taken } = started;
 
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+// SIGHUP: the terminal, or on Windows the console window, was closed.
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
   process.once(signal, async () => {
     await Promise.allSettled([server.close(), sandbox?.dispose(), hosts.close()]);
     process.exit(0);

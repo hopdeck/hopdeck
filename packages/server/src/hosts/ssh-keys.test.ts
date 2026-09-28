@@ -56,6 +56,33 @@ describe('SshKeys with hopdeck\'s own agent', () => {
     expect(listed).toContain('locked key');
   });
 
+  it('times a key out itself for an agent that takes no time limit, as Windows\' refuses one', async () => {
+    // hopdeck's own agent stands for Windows': a second SshKeys uses it as the session's.
+    const agent = keys.env['SSH_AUTH_SOCK']!;
+    const session = process.env['SSH_AUTH_SOCK'];
+    process.env['SSH_AUTH_SOCK'] = agent;
+    const windowsLike = new SshKeys({ configFile: join(dir, 'config'), runtimeDir: dir, lifetimes: 'hopdeck' });
+    try {
+      await windowsLike.start();
+    } finally {
+      if (session === undefined) delete process.env['SSH_AUTH_SOCK'];
+      else process.env['SSH_AUTH_SOCK'] = session;
+    }
+    const loaded = async () => (await keys.list('fw1')).keys[0]!.loaded;
+    execFileSync('ssh-add', ['-D'], { env: { ...process.env, SSH_AUTH_SOCK: agent }, stdio: 'ignore' });
+
+    await windowsLike.unlock('fw1', join(dir, 'locked'), 'right passphrase', 1);
+    expect(await loaded()).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 1600));
+    expect(await loaded()).toBe(false);
+
+    // What is still timed goes when hopdeck stops.
+    await windowsLike.unlock('fw1', join(dir, 'locked'), 'right passphrase', 3600);
+    expect(await loaded()).toBe(true);
+    await windowsLike.close();
+    expect(await loaded()).toBe(false);
+  });
+
   it('runs without an agent when there is none to be had, and says why unlocking cannot work', async () => {
     const path = process.env['PATH'];
     // A PATH without ssh-agent, as on a system with no OpenSSH client.
