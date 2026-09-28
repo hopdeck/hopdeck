@@ -8,6 +8,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import {
+  answerAskpass,
   demoRuleset,
   embedded,
   ensureControlDir,
@@ -28,6 +29,7 @@ const NOTICE = `hopdeck  Copyright (C) 2026 Mateusz T (Tenir), https://github.co
 This program comes with ABSOLUTELY NO WARRANTY. It is free software, and you
 are welcome to redistribute it under the terms of the GNU GPL, version 3 or
 later: https://www.gnu.org/licenses/gpl-3.0.html
+Source code: https://github.com/hopdeck/hopdeck
 `;
 
 const HELP = `Usage: hopdeck [options]
@@ -58,6 +60,9 @@ const PORTS_TRIED = 20;
 const devUiPort = Number(process.env['HOPDECK_UI_PORT'] ?? 5173);
 const DEV_UI_ORIGINS = [`http://127.0.0.1:${devUiPort}`, `http://localhost:${devUiPort}`];
 
+// Run by ssh as SSH_ASKPASS on Windows (see withAskpass()): answer, and nothing else.
+if (process.env['HOPDECK_ASKPASS'] === '1') process.exit(answerAskpass(process.argv[2]));
+
 const { values } = parseArgs({
   options: {
     port: { type: 'string', short: 'p' },
@@ -85,7 +90,10 @@ const configDir =
   process.env['HOPDECK_CONFIG_DIR'] || join(process.env['XDG_CONFIG_HOME'] || join(homedir(), '.config'), 'hopdeck');
 
 let sandbox: Sandbox | undefined;
-if (values.sandbox) {
+if (values.sandbox && process.platform === 'win32') {
+  // Network namespaces are Linux's; pnpm dev asks for the sandbox everywhere.
+  process.stderr.write('hopdeck: the sandbox needs Linux, so there is none on Windows\n');
+} else if (values.sandbox) {
   try {
     sandbox = await Sandbox.start();
     await sandbox.load(await demoRuleset());

@@ -3,7 +3,8 @@
 
 import type { SshKeyInfo, SshKeysView } from '@hopdeck/core';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, statSync, writeFileSync, writeSync } from 'node:fs';
+import { isSea } from 'node:sea';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
@@ -45,6 +46,15 @@ export class SshKeys {
    * it cannot.
    */
   async start(): Promise<void> {
+    if (process.platform === 'win32') {
+      // Windows' agent is a service, which ssh finds without SSH_AUTH_SOCK; hopdeck cannot start one.
+      if (this.#options.sessionAgent !== false && (await reachable(undefined))) {
+        this.#kind = 'windows';
+        return;
+      }
+      this.#none('the OpenSSH Authentication Agent service is not running; start it in PowerShell as administrator: Set-Service ssh-agent -StartupType Manual; Start-Service ssh-agent');
+      return;
+    }
     const session = process.env['SSH_AUTH_SOCK'];
     if (this.#options.sessionAgent !== false && session && (await reachable(session))) {
       this.#socket = session;
@@ -188,9 +198,10 @@ function onPath(program: string): boolean {
   return (process.env['PATH'] ?? '').split(delimiter).some((dir) => dir !== '' && existsSync(join(dir, program)));
 }
 
-async function reachable(socket: string): Promise<boolean> {
+/** Whether an agent answers at the socket; undefined: where ssh looks by itself, as on Windows. */
+async function reachable(socket: string | undefined): Promise<boolean> {
   // 0: keys, 1: no keys, 2: no agent there.
-  const listed = await runProcess('ssh-add', ['-l'], { timeoutMs: 5_000, env: { SSH_AUTH_SOCK: socket } }).catch(() => undefined);
+  const listed = await runProcess('ssh-add', ['-l'], { timeoutMs: 5_000, env: socket === undefined ? undefined : { SSH_AUTH_SOCK: socket } }).catch(() => undefined);
   return listed !== undefined && listed.exitCode !== 2;
 }
 
@@ -214,24 +225,62 @@ async function describe(file: string): Promise<Omit<SshKeyInfo, 'file' | 'loaded
  * Runs `run` with SSH_ASKPASS set up to answer `secret` once, for ssh-add or
  * ssh; `asked` says whether it was asked. It answers no yes/no question, so a
  * host key to accept never gets the secret for an answer. The secret travels
- * in the environment of the program and the script only.
+ * in the environment of the program and the answering one only.
+ *
+ * On Linux a sh script answers. Windows has no sh: there hopdeck answers
+ * itself (answerAskpass()), the executable directly, or from source through
+ * a .cmd that runs Node.js with hopdeck's main script.
  */
 export async function withAskpass<T>(secret: string, run: (env: Record<string, string>) => Promise<T>): Promise<{ result: T; asked: boolean }> {
   const dir = await mkdtemp(join(tmpdir(), 'hopdeck-askpass-'));
   try {
     await chmod(dir, 0o700);
-    const askpass = join(dir, 'askpass');
-    // After a wrong secret the program asks again; the second time the answer is no.
-    await writeFile(
-      askpass,
-      '#!/bin/sh\ncase "${1-}" in *"(yes/no"*) exit 1 ;; esac\n[ -e "$HOPDECK_ASKPASS_DIR/asked" ] && exit 1\n: > "$HOPDECK_ASKPASS_DIR/asked"\nprintf \'%s\\n\' "$HOPDECK_ASKPASS_SECRET"\n',
-      { mode: 0o700 },
-    );
-    const result = await run({ SSH_ASKPASS: askpass, SSH_ASKPASS_REQUIRE: 'force', HOPDECK_ASKPASS_DIR: dir, HOPDECK_ASKPASS_SECRET: secret });
+    let askpass: string;
+    const extra: Record<string, string> = {};
+    if (process.platform === 'win32') {
+      if (isSea()) {
+        askpass = process.execPath;
+      } else {
+        askpass = join(dir, 'askpass.cmd');
+        await writeFile(askpass, `@echo off\r\n"${process.execPath}" "${process.argv[1]}" %*\r\n`);
+      }
+      extra['HOPDECK_ASKPASS'] = '1';
+      // OpenSSH before 8.4, as in Windows 10, knows no SSH_ASKPASS_REQUIRE and wants a DISPLAY.
+      if (process.env['DISPLAY'] === undefined) extra['DISPLAY'] = 'hopdeck:0';
+    } else {
+      askpass = join(dir, 'askpass');
+      // After a wrong secret the program asks again; the second time the answer is no.
+      await writeFile(
+        askpass,
+        '#!/bin/sh\ncase "${1-}" in *"(yes/no"*) exit 1 ;; esac\n[ -e "$HOPDECK_ASKPASS_DIR/asked" ] && exit 1\n: > "$HOPDECK_ASKPASS_DIR/asked"\nprintf \'%s\\n\' "$HOPDECK_ASKPASS_SECRET"\n',
+        { mode: 0o700 },
+      );
+    }
+    const result = await run({ SSH_ASKPASS: askpass, SSH_ASKPASS_REQUIRE: 'force', HOPDECK_ASKPASS_DIR: dir, HOPDECK_ASKPASS_SECRET: secret, ...extra });
     return { result, asked: existsSync(join(dir, 'asked')) };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+/**
+ * hopdeck as SSH_ASKPASS, where no sh can be (Windows): answers the secret
+ * once, and never a yes/no question, as the sh script does. Returns the exit
+ * code.
+ */
+export function answerAskpass(
+  prompt: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+  write: (text: string) => void = (text) => writeSync(1, text),
+): number {
+  const dir = env['HOPDECK_ASKPASS_DIR'];
+  const secret = env['HOPDECK_ASKPASS_SECRET'];
+  if (dir === undefined || secret === undefined || (prompt ?? '').includes('(yes/no')) return 1;
+  const asked = join(dir, 'asked');
+  if (existsSync(asked)) return 1;
+  writeFileSync(asked, '');
+  write(`${secret}\n`);
+  return 0;
 }
 
 /** A public key as one authorized_keys line: type, key, and a comment without control characters. */

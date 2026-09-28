@@ -69,12 +69,39 @@ jobs:
           sudo apt-get install -y --no-install-recommends qemu-user-static libc6-arm64-cross libstdc++6-arm64-cross libatomic1-arm64-cross
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:sea --target linux-x64 --target linux-arm64 --archive --check-all --qemu
+      # Windows on arm64 only builds: no runner here starts it.
+      - run: pnpm build:sea --target win-arm64 --archive
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: hopdeck-linux
           path: |
             dist/*.tar.xz
+            dist/*.zip
             dist/SHA256SUMS
+          retention-days: 14
+
+  # hopdeck on Windows: the tests that need no Linux, then the executable,
+  # built and started there and asked for its UI, API and licenses.
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Install pnpm, the version package.json names
+        run: npm install -g "$(node -p 'require("./package.json").packageManager')"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run packages/core packages/web
+      - run: pnpm build:sea --target win-x64 --archive --check-all
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hopdeck-windows
+          path: dist/*.zip
           retention-days: 14
 
   # Which test systems this run tests: Debian 13 on pushes, all on Mondays,
@@ -134,6 +161,13 @@ jobs:
       - name: Test against ${{ matrix.system }}
         env:
           SYSTEM: ${{ matrix.system }}
+        run: scripts/test-hosts.sh "$SYSTEM"
+      # The same tests through the SSH sessions hopdeck uses on Windows,
+      # whose OpenSSH has no ControlMaster.
+      - name: Test against ${{ matrix.system }} through SSH sessions
+        env:
+          SYSTEM: ${{ matrix.system }}
+          HOPDECK_SSH_SESSIONS: '1'
         run: scripts/test-hosts.sh "$SYSTEM"
       - name: Keep the logs
         if: always()

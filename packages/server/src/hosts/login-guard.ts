@@ -37,4 +37,9 @@ export class LoginGuard implements Executor {
   reset(): void {
     this.#refused = undefined;
   }
+
+  /** Ends what the executor inside keeps open. */
+  close(): void {
+    (this.#inner as Executor & { close?(): void }).close?.();
+  }
 }

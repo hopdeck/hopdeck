@@ -97,6 +97,26 @@ login shell, so every argument is single-quoted. The login shell must be
 POSIX-compatible (sh, bash, dash, zsh, ksh, ash); fish and csh are not
 supported.
 
+**Without ControlMaster** (`hosts/ssh-session.ts`). Windows' OpenSSH has
+no ControlMaster, and a login per command would make the panel slow, fill
+the host's auth log, and ask for a FIDO key's touch every time. There,
+hopdeck keeps one ssh session per host (ending after a minute idle, as
+ControlPersist does) and runs a small loop in it: `sh` makes a private
+directory, then awk reads the requests. awk and nothing else reads the
+session's input, since sh's `read` goes byte by byte and BusyBox's
+`head -c` reads past its count; mawk gets `-W interactive`, or it would wait
+for a full buffer. A request is the command and its input as lines, each
+behind a `|`, ended by a line `.`, with a flag for a last line break; the
+answer comes back the same way with the exit code. No base64 (OpenWrt has
+none), so the one thing that cannot pass is a NUL byte, and hopdeck sends
+only text. The command goes to a file in the private directory; its input
+goes to it through a pipe, never to disk, since it may be a sudo password.
+Commands run one after another, from the home directory; what hopdeck runs
+for long on hosts detaches itself. A command over its time ends the session,
+and the next command starts a new one. The same tests that run against the
+test hosts run through sessions too (`HOPDECK_SSH_SESSIONS=1`), on every
+system.
+
 **SSH authentication.** Keys or ssh-agent only; hopdeck keeps no SSH
 passwords, and a password serves only to put a key on a host (below).
 `BatchMode` rules out interactive prompts. An unknown host key makes the connection fail:

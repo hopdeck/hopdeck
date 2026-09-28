@@ -57,9 +57,32 @@ and root or sudo.
 ### Windows
 
 From version 0.2, hopdeck also runs on Windows 10 and 11 (x64 and arm64), as
-`hopdeck.exe`. It uses Windows' own OpenSSH client, built in since Windows 10
-version 1809: if `ssh -V` in PowerShell finds nothing, add it under Settings,
-Apps, Optional features, "OpenSSH Client".
+`hopdeck.exe`. It manages Linux hosts over SSH; the Windows machine itself is
+no host, and there is no sandbox. It uses Windows' own OpenSSH client, built
+in since Windows 10 version 1809: if `ssh -V` in PowerShell finds nothing, add
+it under Settings, Apps, Optional features, "OpenSSH Client".
+
+Download the zip for your machine and `SHA256SUMS`, extract the zip, and start
+`hopdeck.exe` from PowerShell:
+
+```powershell
+Expand-Archive hopdeck-0.2.0-win-x64.zip -DestinationPath .
+.\hopdeck-0.2.0-win-x64\hopdeck.exe
+```
+
+To unlock SSH keys that have a passphrase, hopdeck uses Windows' OpenSSH
+agent service, which is off by default. Turn it on once, in PowerShell as
+administrator:
+
+```powershell
+Set-Service ssh-agent -StartupType Manual
+Start-Service ssh-agent
+```
+
+Windows' OpenSSH has no ControlMaster, so hopdeck keeps one SSH session per
+host and runs its commands through it: one login, then commands as fast as on
+Linux. The hosts need nothing more for it than they have (`sh`, `awk`, and
+`base64`, `hexdump` or `od`).
 
 `hopdeck.exe` is not signed with a code signing certificate, so the first
 time Windows SmartScreen says "Windows protected your PC", with an unknown

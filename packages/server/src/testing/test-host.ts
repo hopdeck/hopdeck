@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import type { DeployTarget } from '../firewall/deploy.ts';
 import { collectFacts } from '../hosts/facts.ts';
 import { detectPrivilege } from '../hosts/privilege.ts';
+import { SessionExecutor, sshSessionsWanted } from '../hosts/ssh-session.ts';
 import { SshExecutor } from '../hosts/ssh.ts';
 
 export type Account = 'root' | 'admin' | 'nopass' | 'plain';
@@ -56,7 +57,10 @@ export function hasAccount(account: Account): boolean {
 export async function hostTarget(account: Account, controlDir: string): Promise<DeployTarget & { facts: HostFacts }> {
   const host = testHost!;
   const destination = `hopdeck-test-${account}`;
-  const executor = new SshExecutor({ destination, controlDir, configFile: host.sshConfig });
+  // HOPDECK_SSH_SESSIONS=1 runs the same tests through the sessions hopdeck uses on Windows.
+  const executor = sshSessionsWanted()
+    ? new SessionExecutor({ destination, configFile: host.sshConfig })
+    : new SshExecutor({ destination, controlDir, configFile: host.sshConfig });
   const facts = await collectFacts(executor);
   const privilege = await detectPrivilege(executor, facts);
   return {

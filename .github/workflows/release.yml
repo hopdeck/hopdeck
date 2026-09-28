@@ -2,9 +2,11 @@
 # Copyright (C) 2026 Mateusz T (Tenir)
 
 # A tag vVERSION, where VERSION is the cli package's version, makes a GitHub
-# release: the executables for Linux x64 and arm64, their SHA256SUMS, and the
-# notes of that version from CHANGELOG.md. The same checks as CI run first,
-# and every executable is started and checked before anything is published.
+# release: the executables for Linux x64 and arm64 and Windows x64 and arm64,
+# their SHA256SUMS, and the notes of that version from CHANGELOG.md. The same
+# checks as CI run first. Every executable is started and checked before
+# anything is published: Linux arm64 under QEMU, Windows x64 on Windows;
+# Windows arm64 only builds, as no runner here can start it.
 name: Release
 
 on:
@@ -19,12 +21,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  linux:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
-    # Only this job may write, and only to publish the release.
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -56,10 +55,60 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build:sea --target linux-x64 --target linux-arm64 --archive --check-all --qemu
-      - name: The notes of this version
+      - run: pnpm build:sea --target win-arm64 --archive
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-linux
+          path: |
+            dist/*.tar.xz
+            dist/*.zip
+          retention-days: 7
+
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    # The same commands as on Linux, in Git Bash.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Install pnpm, the version package.json names
+        run: npm install -g "$(node -p 'require("./package.json").packageManager')"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:sea --target win-x64 --archive --check-all
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-windows
+          path: dist/*.zip
+          retention-days: 7
+
+  publish:
+    needs: [linux, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Only this job may write, and only to publish the release.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: The sums and the notes of this version
         env:
           TAG: ${{ github.ref_name }}
         run: |
+          cd dist
+          sha256sum hopdeck-* > SHA256SUMS
+          cat SHA256SUMS
+          test "$(wc -l < SHA256SUMS)" -eq 4
+          cd ..
           version=${TAG#v}
           awk -v head="## $version " 'index($0, head) == 1 { found = 1; next } found && /^## / { exit } found' CHANGELOG.md > dist/NOTES.md
           test -s dist/NOTES.md
@@ -67,4 +116,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" dist/*.tar.xz dist/SHA256SUMS --verify-tag --title "hopdeck ${TAG#v}" --notes-file dist/NOTES.md
+        run: gh release create "$TAG" dist/hopdeck-* dist/SHA256SUMS --verify-tag --title "hopdeck ${TAG#v}" --notes-file dist/NOTES.md

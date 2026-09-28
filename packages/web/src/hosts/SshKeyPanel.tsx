@@ -22,6 +22,13 @@ const LIFETIMES: readonly { value: string; label: MessageKey }[] = [
 
 const LIFETIME_KEY = 'hopdeck.keyLifetime';
 
+/** What the agent that holds unlocked keys is, and how long it keeps them. */
+const AGENT_TEXT: Readonly<Record<Exclude<SshKeysView['agent'], 'none'>, MessageKey>> = {
+  session: 'sshKeys.agent.session',
+  hopdeck: 'sshKeys.agent.hopdeck',
+  windows: 'sshKeys.agent.windows',
+};
+
 /** The viewer's last choice; storage can be missing or refuse, so it falls back to an hour. */
 function storedLifetime(): string {
   try {
@@ -81,7 +88,7 @@ export function SshKeyPanel({ hostId, onUnlocked }: { hostId: string; onUnlocked
               {view.agentError !== undefined && <pre className="details">{view.agentError}</pre>}
             </div>
           ) : (
-            <p className={styles.agent}>{t(view.agent === 'session' ? 'sshKeys.agent.session' : 'sshKeys.agent.hopdeck')}</p>
+            <p className={styles.agent}>{t(AGENT_TEXT[view.agent])}</p>
           )}
           <KeySetup path={path} keys={view.keys} onWorks={onUnlocked} />
         </>
@@ -150,7 +157,9 @@ function Key({ sshKey, view, path, onUnlocked }: { sshKey: SshKeyInfo; view: Ssh
             <select className="input" value={lifetime} onChange={(event) => setLifetime(event.target.value)}>
               {LIFETIMES.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.value === 'none' ? t(view.agent === 'session' ? 'sshKeys.lifetime.session' : 'sshKeys.lifetime.hopdeck') : t(option.label)}
+                  {option.value === 'none'
+                    ? t(view.agent === 'hopdeck' ? 'sshKeys.lifetime.hopdeck' : view.agent === 'windows' ? 'sshKeys.lifetime.windows' : 'sshKeys.lifetime.session')
+                    : t(option.label)}
                 </option>
               ))}
             </select>

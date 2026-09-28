@@ -41,6 +41,7 @@ import { detectPrivilege, runNft, type NftAccess } from './privilege.ts';
 import { isValidDestination, SshExecutor } from './ssh.ts';
 import { KeyLogin } from './key-login.ts';
 import { LoginGuard } from './login-guard.ts';
+import { SessionExecutor, sshSessionsWanted } from './ssh-session.ts';
 import { SshKeys } from './ssh-keys.ts';
 
 interface Entry {
@@ -131,7 +132,10 @@ export class HostManager {
     const manager = new HostManager(options);
     // Before any ssh runs: it has to know which agent to ask for keys.
     await manager.#sshKeys.start();
-    manager.#put({ id: 'local', kind: 'local', name: 'localhost', executor: new LocalExecutor(), status: { state: 'new' }, manualOverride: false });
+    // nftables is Linux's: on Windows, the machine hopdeck runs on is no host for it.
+    if (process.platform !== 'win32') {
+      manager.#put({ id: 'local', kind: 'local', name: 'localhost', executor: new LocalExecutor(), status: { state: 'new' }, manualOverride: false });
+    }
     if (options.sandbox !== undefined) {
       manager.#put({ id: 'sandbox', kind: 'sandbox', name: 'sandbox', executor: options.sandbox.executor, status: { state: 'new' }, manualOverride: false });
     }
@@ -169,6 +173,7 @@ export class HostManager {
     const entry = this.#entries.get(id);
     if (entry?.kind !== 'ssh') return false;
     this.#entries.delete(id);
+    closeExecutor(entry.executor);
     await this.#save();
     return true;
   }
@@ -413,6 +418,7 @@ export class HostManager {
 
   /** Ends what hopdeck started for its hosts: its own ssh-agent, if any. */
   async close(): Promise<void> {
+    for (const entry of this.#entries.values()) closeExecutor(entry.executor);
     await this.#sshKeys.close();
   }
 
@@ -521,14 +527,11 @@ export class HostManager {
   }
 
   #sshEntry(host: StoredHost): Entry {
+    const connection = { destination: host.destination, configFile: this.#options.sshConfigFile, env: this.#sshKeys.env };
     const executor = new LoginGuard(
       this.#options.createSshExecutor?.(host.destination) ??
-        new SshExecutor({
-          destination: host.destination,
-          controlDir: this.#options.controlDir,
-          configFile: this.#options.sshConfigFile,
-          env: this.#sshKeys.env,
-        }),
+        // Where ssh has no ControlMaster (Windows), one long session per host does its work.
+        (sshSessionsWanted() ? new SessionExecutor(connection) : new SshExecutor({ ...connection, controlDir: this.#options.controlDir })),
     );
     return {
       id: host.id,
@@ -597,4 +600,9 @@ async function writeInventory(configDir: string, hosts: StoredHost[]): Promise<v
   const temporary = `${path}.${process.pid}.tmp`;
   await writeFile(temporary, `${JSON.stringify({ version: 1, hosts }, null, 2)}\n`, { mode: 0o600 });
   await rename(temporary, path);
+}
+
+/** Ends what an executor keeps open, such as an SSH session. */
+function closeExecutor(executor: Executor): void {
+  (executor as Executor & { close?(): void }).close?.();
 }

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Windows 10 and 11 (x64 and arm64) as the machine hopdeck runs on, as
+  `hopdeck.exe` in a zip. Windows' OpenSSH has no ControlMaster, so hopdeck
+  keeps one SSH session per host and runs its commands through it. Keys with
+  a passphrase are unlocked into Windows' OpenSSH agent service. The Windows
+  machine itself is no host, and there is no sandbox there.
+- `HOPDECK_SSH_SESSIONS=1` uses these sessions on Linux too, where ssh's
+  ControlMaster does not work.
+- The startup message links to the source code.
+
 ## 0.1.1 (2026-09-28)
 
 ### Fixed

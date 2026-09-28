@@ -114,9 +114,10 @@ export interface SshKeyInfo {
 export interface SshKeysView {
   /**
    * session: the agent of the user's login session; hopdeck: hopdeck's own,
-   * gone when hopdeck stops; none: neither, so keys cannot be unlocked here.
+   * gone when hopdeck stops; windows: Windows' OpenSSH agent service, which
+   * keeps keys across restarts; none: no agent, so keys cannot be unlocked here.
    */
-  agent: 'session' | 'hopdeck' | 'none';
+  agent: 'session' | 'hopdeck' | 'windows' | 'none';
   /** Only for "none": why hopdeck's own agent did not start, the raw message. */
   agentError?: string;
   keys: SshKeyInfo[];

@@ -7,7 +7,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { SshKeys } from './ssh-keys.ts';
+import { answerAskpass, SshKeys } from './ssh-keys.ts';
 
 describe('SshKeys with hopdeck\'s own agent', () => {
   let dir: string;
@@ -81,5 +81,24 @@ describe('SshKeys with hopdeck\'s own agent', () => {
     const env = { ...process.env, ...keys.env };
     await keys.close();
     expect(() => execFileSync('ssh-add', ['-l'], { env, stdio: 'pipe' })).toThrow();
+  });
+});
+
+describe('answerAskpass, as Windows runs it for ssh', () => {
+  it('answers the secret once, and never a yes/no question', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'hopdeck-askpass-test-'));
+    try {
+      const env = { HOPDECK_ASKPASS_DIR: dir, HOPDECK_ASKPASS_SECRET: 'the secret' };
+      const written: string[] = [];
+      const write = (text: string) => written.push(text);
+      expect(answerAskpass('Are you sure you want to continue connecting (yes/no/[fingerprint])?', env, write)).toBe(1);
+      expect(answerAskpass("admin@fw1's password: ", env, write)).toBe(0);
+      // Asked again after a wrong secret: no.
+      expect(answerAskpass("admin@fw1's password: ", env, write)).toBe(1);
+      expect(written).toEqual(['the secret\n']);
+      expect(answerAskpass('Password: ', {}, write)).toBe(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
