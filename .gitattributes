@@ -1,0 +1,3 @@
+# Text files keep LF line endings everywhere, in Windows checkouts too: the
+# test fixtures are nft's own output, and shell scripts run on Linux hosts.
+* text=auto eol=lf
