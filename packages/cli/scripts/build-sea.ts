@@ -32,9 +32,9 @@ import { chmod, copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } fro
 import { tmpdir } from 'node:os';
 import { basename, join, relative } from 'node:path';
 import { parseArgs } from 'node:util';
-import { crc32, deflateRawSync } from 'node:zlib';
 import { build } from 'vite';
 import pkg from '../package.json' with { type: 'json' };
+import { unzipEntry, zip } from './zip.ts';
 
 /**
  * Node.js 26 builds the executable itself (--build-sea), also for another
@@ -126,8 +126,13 @@ async function nodeLicense(): Promise<string> {
     await officialNode(host);
     return join(work, basename(NODE.targets[host]!.file, '.tar.xz'), 'LICENSE');
   }
-  const license = join(work, basename(NODE.windowsZip.file, '.zip'), 'LICENSE');
-  if (!existsSync(license)) run('tar', ['-xf', await download(NODE.windowsZip), '-C', work, `${basename(NODE.windowsZip.file, '.zip')}/LICENSE`]);
+  // Read here rather than by tar: Git Bash's GNU tar comes first there, and reads no zip.
+  const license = join(work, `${basename(NODE.windowsZip.file, '.zip')}-LICENSE`);
+  if (!existsSync(license)) {
+    const text = unzipEntry(await readFile(await download(NODE.windowsZip)), `${basename(NODE.windowsZip.file, '.zip')}/LICENSE`).toString('utf8');
+    // The zip's copy has CRLF line breaks; with LF, it is the text of the Linux releases.
+    await writeFile(license, text.replace(/\r\n/g, '\n'));
+  }
   return license;
 }
 
@@ -196,63 +201,14 @@ async function check(target: string, executable: string, licenses: string): Prom
     const api = await fetch(`${origin}/api/hosts`, { headers: { authorization: `Bearer ${token}` } });
     if (!api.ok) throw new Error(`/api/hosts answered ${api.status}: ${await api.text()}`);
   } finally {
-    child.kill();
-    await rm(config, { recursive: true, force: true });
+    // Windows removes no directory a running program has files open in.
+    if (child.exitCode === null && child.signalCode === null) {
+      const exited = new Promise((resolve) => child.once('exit', resolve));
+      child.kill();
+      await exited;
+    }
+    await rm(config, { recursive: true, force: true, maxRetries: 5 });
   }
-}
-
-/**
- * A zip of files, as Windows opens it without extra tools: deflated, with the
- * given time for all, so that the same input gives the same bytes. Below
- * 4 GiB, so without zip64.
- */
-function zip(entries: { name: string; data: Buffer; executable?: boolean }[], time: Date): Buffer {
-  const dosTime = (time.getUTCHours() << 11) | (time.getUTCMinutes() << 5) | (time.getUTCSeconds() >> 1);
-  const dosDate = ((time.getUTCFullYear() - 1980) << 9) | ((time.getUTCMonth() + 1) << 5) | time.getUTCDate();
-  const parts: Buffer[] = [];
-  const directory: Buffer[] = [];
-  let offset = 0;
-  for (const entry of entries) {
-    const name = Buffer.from(entry.name, 'utf8');
-    const packed = deflateRawSync(entry.data, { level: 9 });
-    const crc = crc32(entry.data);
-    const local = Buffer.alloc(30);
-    local.writeUInt32LE(0x04034b50, 0);
-    local.writeUInt16LE(20, 4); // version needed: 2.0
-    local.writeUInt16LE(0x0800, 6); // UTF-8 names
-    local.writeUInt16LE(8, 8); // deflate
-    local.writeUInt16LE(dosTime, 10);
-    local.writeUInt16LE(dosDate, 12);
-    local.writeUInt32LE(crc, 14);
-    local.writeUInt32LE(packed.length, 18);
-    local.writeUInt32LE(entry.data.length, 22);
-    local.writeUInt16LE(name.length, 26);
-    parts.push(local, name, packed);
-    const central = Buffer.alloc(46);
-    central.writeUInt32LE(0x02014b50, 0);
-    central.writeUInt16LE((3 << 8) | 20, 4); // made by Unix, 2.0: the mode below counts
-    central.writeUInt16LE(20, 6);
-    central.writeUInt16LE(0x0800, 8);
-    central.writeUInt16LE(8, 10);
-    central.writeUInt16LE(dosTime, 12);
-    central.writeUInt16LE(dosDate, 14);
-    central.writeUInt32LE(crc, 16);
-    central.writeUInt32LE(packed.length, 20);
-    central.writeUInt32LE(entry.data.length, 24);
-    central.writeUInt16LE(name.length, 28);
-    central.writeUInt32LE(((entry.executable ? 0o100755 : 0o100644) << 16) >>> 0, 38);
-    central.writeUInt32LE(offset, 42);
-    directory.push(central, name);
-    offset += local.length + name.length + packed.length;
-  }
-  const listing = Buffer.concat(directory);
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(entries.length, 8);
-  end.writeUInt16LE(entries.length, 10);
-  end.writeUInt32LE(listing.length, 12);
-  end.writeUInt32LE(offset, 16);
-  return Buffer.concat([...parts, listing, end]);
 }
 
 /** The archive a target's directory is packed into. */
