@@ -198,6 +198,13 @@ and `openwrt` (procd, dropbear, fw4; root only). Logins are by key; the
 accounts with a password (`admin` and `plain`, root on OpenWrt, all
 `hopdeck-test`) may also use it, for the key setup.
 
+Each system also has a host no key opens yet, "SYSTEM: no key yet" (admin,
+or root on OpenWrt, password `hopdeck-test`), to try the key setup on: the
+panel shows the SSH key panel, where a key is generated and then put on the
+host with the password. In the test panels, generated keys go to
+`.dev/test-host/generated-keys` (`HOPDECK_SSH_DIR`), not `~/.ssh`, and
+hopdeck's own ssh-agent holds them, not your session's.
+
 `pnpm dev:test-host` starts hopdeck with the Debian 13 hosts, and
 `pnpm dev:test-hosts [SYSTEM...]` with those of the systems named, or of every
 running one, each as "SYSTEM: account".

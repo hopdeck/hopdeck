@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "node packages/cli/scripts/dev.ts",
-    "dev:test-host": "HOPDECK_CONFIG_DIR=$PWD/.dev/test-host/debian13/config HOPDECK_SSH_CONFIG=$PWD/.dev/test-host/debian13/ssh_config pnpm dev",
+    "dev:test-host": "env -u SSH_AUTH_SOCK HOPDECK_CONFIG_DIR=$PWD/.dev/test-host/debian13/config HOPDECK_SSH_CONFIG=$PWD/.dev/test-host/debian13/ssh_config HOPDECK_SSH_DIR=$PWD/.dev/test-host/generated-keys pnpm dev",
     "dev:test-hosts": "dev/test-host/panel.sh",
     "start": "node packages/cli/src/main.ts",
     "build": "pnpm -r build",

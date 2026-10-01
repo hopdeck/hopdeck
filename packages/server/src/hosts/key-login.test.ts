@@ -58,16 +58,18 @@ describe.skipIf(host === undefined)('KeyLogin on the test host', { timeout: 60_0
     dir = await mkdtemp('/tmp/hd-login-');
     execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-C', `${MARK} fresh`, '-f', fresh()]);
     execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', 'the passphrase', '-C', `${MARK} locked`, '-f', locked()]);
-    // Each account under two names: with the fresh key, and with the locked one; neither key is on the host yet.
+    // Each account under three names: with the fresh key, with the locked one,
+    // and with none at all (a file that is not there); neither key is on the host yet.
     const entries = ['root', 'admin', 'plain'].flatMap((account) =>
       [
         ['fresh', fresh()],
         ['locked', locked()],
+        ['bare', join(dir, 'no-key-yet')],
       ].map(([name, key]) => `Host ${name}-${account}\n\tUser ${account}\n\tIdentityFile ${key}\n`),
     );
     const common = `Host *\n\tHostName 127.0.0.1\n\tPort ${port}\n\tIdentitiesOnly yes\n\tUserKnownHostsFile ${state}/known_hosts\n\tStrictHostKeyChecking yes\n`;
     await writeFile(join(dir, 'config'), `${entries.join('')}${common}`);
-    keys = new SshKeys({ configFile: join(dir, 'config'), runtimeDir: dir, sessionAgent: false });
+    keys = new SshKeys({ configFile: join(dir, 'config'), runtimeDir: dir, sessionAgent: false, sshDir: join(dir, 'generated') });
     await keys.start();
     login = new KeyLogin({ keys, configFile: join(dir, 'config') });
     root = new SshExecutor({ destination: 'hopdeck-test-root', controlDir: dir, configFile: host!.sshConfig });
@@ -82,6 +84,17 @@ describe.skipIf(host === undefined)('KeyLogin on the test host', { timeout: 60_0
     }
     await keys?.close();
     await rm(dir, { recursive: true, force: true });
+  });
+
+  it('generates a key, puts it on a host no key opened with the password, and logs in with it as hopdeck keeps it', async () => {
+    const account = host!.platform === 'openwrt' ? 'root' : 'plain';
+    const key = await keys.generate({ type: 'ed25519', name: 'generated', comment: `${MARK} generated`, passphrase: 'the passphrase' });
+    // hopdeck keeps the key for the host, apart from the ssh config, which names no key for it.
+    const target = { destination: `bare-${account}`, identityFile: key.file };
+    await keys.unlock(target, key.file, 'the passphrase', 60);
+    expect(await login.setUp(target, key.file, PASSWORD)).toMatchObject({ added: true, outcome: 'works' });
+    const executor = new SshExecutor({ ...target, controlDir: dir, configFile: join(dir, 'config'), env: keys.env, shareConnection: false });
+    expect((await executor.exec(['id', '-un'])).stdout).toBe(`${account}\n`);
   });
 
   it('says so when the password is wrong, and installs nothing', async () => {

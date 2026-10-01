@@ -21,6 +21,7 @@
   key for its host, or adds it to `~/.ssh/config` (keeping a copy of the file
   as it was); with a passphrase it goes to the agent at once, and the key
   setup below puts it on the host.
+- `HOPDECK_SSH_DIR` puts generated keys elsewhere than `~/.ssh`.
 
 ### Fixed
 

@@ -52,10 +52,18 @@ for system in "$@"; do
 			"$system" "$account" "$account" "$port" "$keys/id_ed25519" "$keys/$system/known_hosts" >>"$ssh_config"
 		hosts="$hosts    { \"id\": \"$system-$account\", \"destination\": \"hopdeck-$system-$account\", \"name\": \"$system: $(label "$account")\" },\n"
 	done
+	# As in up.sh: an account no key opens yet, for the key setup; OpenWrt has root only.
+	nokey=admin
+	case " $accounts " in *" admin "*) ;; *) nokey=root ;; esac
+	printf 'Host hopdeck-%s-nokey\n\tUser %s\n\tHostName 127.0.0.1\n\tPort %s\n\tIdentityFile "%s"\n\tIdentitiesOnly yes\n\tUserKnownHostsFile "%s"\n\tStrictHostKeyChecking yes\n' \
+		"$system" "$nokey" "$port" "$keys/$system/no-key-yet" "$keys/$system/known_hosts" >>"$ssh_config"
+	hosts="$hosts    { \"id\": \"$system-nokey\", \"destination\": \"hopdeck-$system-nokey\", \"name\": \"$system: no key yet ($nokey, password hopdeck-test)\" },\n"
 done
 printf '{\n  "version": 1,\n  "hosts": [\n%b' "$hosts" | sed '$ s/},$/}/' >"$panel/config/hosts.json"
 printf '  ]\n}\n' >>"$panel/config/hosts.json"
 
 echo "Starting the panel with: $*"
 cd "$repo"
-HOPDECK_CONFIG_DIR="$panel/config" HOPDECK_SSH_CONFIG="$ssh_config" exec pnpm dev
+# Keys generated in the panel go to .dev/test-host/generated-keys, not ~/.ssh,
+# and hopdeck's own agent holds them, not the session's.
+exec env -u SSH_AUTH_SOCK HOPDECK_CONFIG_DIR="$panel/config" HOPDECK_SSH_CONFIG="$ssh_config" HOPDECK_SSH_DIR="$keys/generated-keys" pnpm dev

@@ -50,6 +50,7 @@ Environment:
   HOPDECK_PORT          the port, as --port
   HOPDECK_CONFIG_DIR    where hosts.json is kept (default: ~/.config/hopdeck)
   HOPDECK_SSH_CONFIG    an ssh config file to use instead of ~/.ssh/config
+  HOPDECK_SSH_DIR       where keys generated in the panel go (default: ~/.ssh)
 `;
 
 /** Ports tried in turn when none is asked for. */
@@ -108,6 +109,7 @@ const hosts = await HostManager.open({
   configDir,
   controlDir: await ensureControlDir(),
   sshConfigFile: sshConfig ? resolve(sshConfig) : undefined,
+  sshDir: process.env['HOPDECK_SSH_DIR'] ? resolve(process.env['HOPDECK_SSH_DIR']) : undefined,
   ...(sandbox && { sandbox: { executor: sandbox.executor, directory: sandbox.directory } }),
 });
 

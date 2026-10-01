@@ -29,6 +29,8 @@ here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
 system=${1:-debian13}
 accounts="root admin nopass plain"
+# The account of the host no key opens yet; it may log in with its password.
+nokey=admin
 authorized=/etc/ssh/hopdeck_authorized_keys
 init=systemd
 platform=linux
@@ -41,7 +43,7 @@ alma10) file=rhel base=docker.io/library/almalinux:10 port=2220 ;;
 alpine) file=alpine base=docker.io/library/alpine:3.22 port=2231 init=openrc ;;
 openwrt)
 	file=openwrt base=docker.io/openwrt/rootfs:x86-64-openwrt-24.10 port=2241 init=procd platform=openwrt
-	accounts=root authorized=
+	accounts=root authorized= nokey=root
 	;;
 *)
 	echo "unknown system: $system (debian11, debian12, debian13, alma9, alma10, alpine, openwrt)" >&2
@@ -111,6 +113,11 @@ rm -f "$state/known_hosts.changed.old"
 	printf 'Host hopdeck-test-changed-key\n\tUser root\n\tUserKnownHostsFile "%s"\n' "$state/known_hosts.changed"
 	printf 'Host hopdeck-test-*\n\tHostName 127.0.0.1\n\tPort %s\n\tIdentityFile "%s"\n\tIdentitiesOnly yes\n\tUserKnownHostsFile "%s"\n\tStrictHostKeyChecking yes\n' \
 		"$port" "$keys/id_ed25519" "$state/known_hosts"
+	# An account no key of this machine opens, as a host is before the key setup:
+	# outside hopdeck-test-*, and with a key file that is not there, so ssh
+	# offers nothing, not even the keys in ~/.ssh.
+	printf 'Host hopdeck-nokey\n\tHostName 127.0.0.1\n\tPort %s\n\tUser %s\n\tIdentityFile "%s"\n\tIdentitiesOnly yes\n\tUserKnownHostsFile "%s"\n\tStrictHostKeyChecking yes\n' \
+		"$port" "$nokey" "$state/no-key-yet" "$state/known_hosts"
 } >"$state/ssh_config"
 
 label() {
@@ -127,7 +134,8 @@ label() {
 		printf '    { "id": "test-%s", "destination": "hopdeck-test-%s", "name": "%s: %s" },\n' "$account" "$account" "$system" "$(label "$account")"
 	done
 	printf '    { "id": "test-unknown-key", "destination": "hopdeck-test-unknown-key", "name": "%s: unknown host key" },\n' "$system"
-	printf '    { "id": "test-changed-key", "destination": "hopdeck-test-changed-key", "name": "%s: changed host key" }\n' "$system"
+	printf '    { "id": "test-changed-key", "destination": "hopdeck-test-changed-key", "name": "%s: changed host key" },\n' "$system"
+	printf '    { "id": "test-nokey", "destination": "hopdeck-nokey", "name": "%s: no key yet (%s, password hopdeck-test)" }\n' "$system" "$nokey"
 	printf '  ]\n}\n'
 } >"$state/config/hosts.json"
 
@@ -149,3 +157,4 @@ else
 	echo 'Accounts: root, admin (sudo, password hopdeck-test), nopass (sudo for nft without a password), plain (password hopdeck-test, no sudo).'
 	echo 'Only admin and plain may log in with their password, for the key setup.'
 fi
+echo "\"$system: no key yet\" ($nokey) has no key that opens it: try generating one in the panel and putting it on the host with the password."

@@ -79,6 +79,8 @@ export interface HostManagerOptions {
   controlDir: string;
   /** An ssh config file used instead of ~/.ssh/config. */
   sshConfigFile?: string | undefined;
+  /** Where keys generated in the panel go, instead of ~/.ssh (HOPDECK_SSH_DIR). */
+  sshDir?: string | undefined;
   /** The sandbox host, when one runs: its executor, and where it keeps hopdeck's files (Sandbox.directory). */
   sandbox?: { executor: Executor; directory: string };
   /** Who runs hopdeck, and on which computer; recorded as the author of changes. Defaults to this process's user and machine. */
@@ -115,7 +117,7 @@ export class HostManager {
 
   private constructor(options: HostManagerOptions) {
     this.#options = options;
-    this.#sshKeys = options.sshKeys ?? new SshKeys({ configFile: options.sshConfigFile, runtimeDir: options.controlDir });
+    this.#sshKeys = options.sshKeys ?? new SshKeys({ configFile: options.sshConfigFile, runtimeDir: options.controlDir, sshDir: options.sshDir });
     this.#keyLogin = new KeyLogin({ keys: this.#sshKeys, configFile: options.sshConfigFile });
     this.#hostKeys = options.hostKeys ?? new HostKeys({ configFile: options.sshConfigFile });
     const entryOf = (hostId: string) => {
