@@ -6,7 +6,7 @@ import { HostError } from './errors.ts';
 import { runProcess } from './process.ts';
 import { shellCommand } from './shell-quote.ts';
 import { configNote, sshFailure } from './ssh.ts';
-import { withAskpass, type SshKeys } from './ssh-keys.ts';
+import { withAskpass, type SshKeys, type SshTarget } from './ssh-keys.ts';
 
 export interface KeyLoginOptions {
   keys: SshKeys;
@@ -162,10 +162,11 @@ export class KeyLogin {
     this.#options = options;
   }
 
-  async setUp(destination: string, file: string, password: string, options: { allow?: boolean } = {}): Promise<KeySetupResult> {
+  async setUp(target: SshTarget, file: string, password: string, options: { allow?: boolean } = {}): Promise<KeySetupResult> {
     const { keys } = this.#options;
-    const { line, key } = await keys.publicKey(destination, file);
-    const loaded = (await keys.list(destination)).keys.find((listed) => listed.file === file)?.loaded ?? false;
+    const { destination } = target;
+    const { line, key } = await keys.publicKey(target, file);
+    const loaded = (await keys.list(target)).keys.find((listed) => listed.file === file)?.loaded ?? false;
 
     const installed = parseReport(succeeded(await this.#withPassword(destination, password, INSTALL, ['-n'], `${line}\n`)).stdout);
     const field = (name: string) => installed.fields.get(name) ?? '';

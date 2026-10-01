@@ -133,6 +133,22 @@ and hopdeck keeps the passphrase nowhere. It uses the login session's agent,
 so the terminal's ssh sees the key too; without one it runs its own, tied to
 hopdeck's input so that it ends with hopdeck, even after a crash.
 
+**New keys** (`SshKeys.generate()`, `hosts/ssh-config.ts`). The panel
+generates Ed25519 keys, or RSA keys of 2048, 3072 or 4096 bits, in `~/.ssh`
+with ssh-keygen, never over an existing file. The passphrase goes to
+ssh-keygen through askpass, which answers twice (the passphrase and its
+confirmation), never on its command line; a key without one is allowed, with
+a warning. ssh offers a key to a host only when the config names it, so the
+user chooses: hopdeck keeps the key for the host in `hosts.json` and adds it
+to every ssh it runs for the host (`ssh -i`, ControlMaster sockets apart per
+key), or hopdeck appends a Host block naming it to `~/.ssh/config`.
+IdentityFile adds up across all matching blocks, so a block at the end counts
+whatever comes before it; the file as it was is kept as
+`config.hopdeck-backup`, and if `ssh -G` does not then name the key for the
+host, the file is put back. A key with a passphrase goes to the agent at
+once. FIDO keys (`ed25519-sk`) are not generated yet: they want a touch, and
+often a PIN, while ssh-keygen runs.
+
 **Putting a key on a host** (`hosts/key-login.ts`). For a host that has no
 key yet, the panel asks for the account's password once. hopdeck logs in with
 it alone (`PubkeyAuthentication=no`, one prompt, the same one-shot askpass,

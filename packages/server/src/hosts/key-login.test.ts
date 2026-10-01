@@ -86,28 +86,28 @@ describe.skipIf(host === undefined)('KeyLogin on the test host', { timeout: 60_0
 
   it('says so when the password is wrong, and installs nothing', async () => {
     const account = host!.platform === 'openwrt' ? 'root' : 'plain';
-    await expect(login.setUp(`fresh-${account}`, fresh(), 'wrong password')).rejects.toMatchObject({ code: 'login-password-rejected' });
+    await expect(login.setUp({ destination: `fresh-${account}` }, fresh(), 'wrong password')).rejects.toMatchObject({ code: 'login-password-rejected' });
   });
 
   it.runIf(host?.platform === 'openwrt')('puts root\'s key where OpenWrt\'s dropbear reads it, and the key alone gets in', async () => {
-    const result = await login.setUp('fresh-root', fresh(), PASSWORD);
+    const result = await login.setUp({ destination: 'fresh-root' }, fresh(), PASSWORD);
     expect(result).toEqual({ file: '/etc/dropbear/authorized_keys', added: true, outcome: 'works', check: { server: 'dropbear', blockers: [] } });
   });
 
   describe.runIf(host?.platform === 'linux')('with sshd', () => {
     it('says so when the server takes no password for the account', async () => {
-      await expect(login.setUp('fresh-root', fresh(), PASSWORD)).rejects.toMatchObject({ code: 'password-login-disabled' });
+      await expect(login.setUp({ destination: 'fresh-root' }, fresh(), PASSWORD)).rejects.toMatchObject({ code: 'password-login-disabled' });
     });
 
     it('installs the key with one password login, and a new connection gets in with the key alone', async () => {
-      const result = await login.setUp('fresh-plain', fresh(), PASSWORD);
+      const result = await login.setUp({ destination: 'fresh-plain' }, fresh(), PASSWORD);
       expect(result).toMatchObject({ file: '/home/plain/.ssh/authorized_keys', added: true, outcome: 'works', check: { server: 'sshd', blockers: [] } });
       // plain may not use sudo, so sshd's configuration stays unread; with the key working, nothing asks for it.
       expect(result.check.reason).toMatch(/password is required|sudoers/);
       // Alpine's home directories are setgid, and a new .ssh inherits that: harmless to sshd.
       expect(await asRoot("stat -c '%a %U' /home/plain/.ssh /home/plain/.ssh/authorized_keys")).toMatch(/^2?700 plain\n600 plain\n$/);
 
-      const again = await login.setUp('fresh-plain', fresh(), PASSWORD);
+      const again = await login.setUp({ destination: 'fresh-plain' }, fresh(), PASSWORD);
       expect(again).toMatchObject({ added: false, outcome: 'works' });
       expect(await asRoot(`grep -c '${MARK} fresh' /home/plain/.ssh/authorized_keys`)).toBe('1\n');
       const executor = new SshExecutor({ destination: 'fresh-plain', controlDir: dir, configFile: join(dir, 'config'), env: keys.env, shareConnection: false });
@@ -115,16 +115,16 @@ describe.skipIf(host === undefined)('KeyLogin on the test host', { timeout: 60_0
     });
 
     it('cannot try a key that needs its passphrase, until it is unlocked', async () => {
-      expect(await login.setUp('locked-plain', locked(), PASSWORD)).toMatchObject({ added: true, outcome: 'unverified' });
-      await keys.unlock('locked-plain', locked(), 'the passphrase', 60);
-      expect(await login.setUp('locked-plain', locked(), PASSWORD)).toMatchObject({ added: false, outcome: 'works' });
+      expect(await login.setUp({ destination: 'locked-plain' }, locked(), PASSWORD)).toMatchObject({ added: true, outcome: 'unverified' });
+      await keys.unlock({ destination: 'locked-plain' }, locked(), 'the passphrase', 60);
+      expect(await login.setUp({ destination: 'locked-plain' }, locked(), PASSWORD)).toMatchObject({ added: false, outcome: 'works' });
     });
 
     it('says why sshd refuses keys, and lets them in on request, with passwords working as before', async () => {
       await reconfigure(`printf 'PubkeyAuthentication no\\n' > ${BLOCK}`);
       try {
         // admin needs its password for sudo, so reading sshd's configuration takes a second login.
-        const refused = await login.setUp('fresh-admin', fresh(), PASSWORD);
+        const refused = await login.setUp({ destination: 'fresh-admin' }, fresh(), PASSWORD);
         expect(refused).toMatchObject({
           added: true,
           outcome: 'refused',
@@ -133,7 +133,7 @@ describe.skipIf(host === undefined)('KeyLogin on the test host', { timeout: 60_0
         expect(refused.check.reason).toBeUndefined();
         expect(refused.refusal).toMatch(/Permission denied/);
 
-        const allowed = await login.setUp('fresh-admin', fresh(), PASSWORD, { allow: true });
+        const allowed = await login.setUp({ destination: 'fresh-admin' }, fresh(), PASSWORD, { allow: true });
         expect(allowed).toMatchObject({
           added: false,
           outcome: 'works',
@@ -143,7 +143,7 @@ describe.skipIf(host === undefined)('KeyLogin on the test host', { timeout: 60_0
         const written = await asRoot(`cat ${ALLOW_KEYS_FILE}`);
         expect(written).toMatch(/^# Written by hopdeck on .*\n# Passwords work as they did\..*\nPubkeyAuthentication yes\n$/);
         // The password still logs in: the whole setup did, once more.
-        expect(await login.setUp('fresh-admin', fresh(), PASSWORD)).toMatchObject({ outcome: 'works' });
+        expect(await login.setUp({ destination: 'fresh-admin' }, fresh(), PASSWORD)).toMatchObject({ outcome: 'works' });
       } finally {
         await reconfigure(`rm -f ${BLOCK} ${ALLOW_KEYS_FILE}`);
       }
@@ -152,7 +152,7 @@ describe.skipIf(host === undefined)('KeyLogin on the test host', { timeout: 60_0
     it('puts everything back when a Match block wins over what hopdeck would add', async () => {
       await reconfigure(`printf 'Match User admin\\n\\tPubkeyAuthentication no\\n' > ${BLOCK}`);
       try {
-        const result = await login.setUp('fresh-admin', fresh(), PASSWORD, { allow: true });
+        const result = await login.setUp({ destination: 'fresh-admin' }, fresh(), PASSWORD, { allow: true });
         expect(result).toMatchObject({
           outcome: 'refused',
           allowed: { file: ALLOW_KEYS_FILE, lines: ['PubkeyAuthentication yes'], applied: false, why: 'overridden', reason: 'pubkeyauthentication no' },
@@ -166,7 +166,7 @@ describe.skipIf(host === undefined)('KeyLogin on the test host', { timeout: 60_0
     it('says why it cannot read sshd\'s configuration when the account may not use sudo', async () => {
       await reconfigure(`printf 'PubkeyAuthentication no\\n' > ${BLOCK}`);
       try {
-        const result = await login.setUp('fresh-plain', fresh(), PASSWORD, { allow: true });
+        const result = await login.setUp({ destination: 'fresh-plain' }, fresh(), PASSWORD, { allow: true });
         expect(result).toMatchObject({ outcome: 'refused', check: { server: 'sshd', blockers: [] } });
         expect(result.allowed).toBeUndefined();
         expect(result.check.reason).toMatch(/sudoers/);

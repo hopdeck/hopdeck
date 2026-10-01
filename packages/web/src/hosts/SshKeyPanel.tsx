@@ -7,11 +7,12 @@ import { api } from '../api.ts';
 import { ErrorCallout, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import type { MessageKey } from '../i18n/locales.ts';
+import { KeyGenerate } from './KeyGenerate.tsx';
 import { KeySetup } from './KeySetup.tsx';
 import styles from './SshKeyPanel.module.css';
 
 /** How long the agent keeps an unlocked key; "none" as long as the agent runs. */
-const LIFETIMES: readonly { value: string; label: MessageKey }[] = [
+export const LIFETIMES: readonly { value: string; label: MessageKey }[] = [
   { value: '900', label: 'sshKeys.lifetime.15m' },
   { value: '3600', label: 'sshKeys.lifetime.1h' },
   { value: '14400', label: 'sshKeys.lifetime.4h' },
@@ -20,7 +21,7 @@ const LIFETIMES: readonly { value: string; label: MessageKey }[] = [
   { value: 'none', label: 'sshKeys.lifetime.none' },
 ];
 
-const LIFETIME_KEY = 'hopdeck.keyLifetime';
+export const LIFETIME_KEY = 'hopdeck.keyLifetime';
 
 /** What the agent that holds unlocked keys is, and how long it keeps them. */
 const AGENT_TEXT: Readonly<Record<Exclude<SshKeysView['agent'], 'none'>, MessageKey>> = {
@@ -30,7 +31,7 @@ const AGENT_TEXT: Readonly<Record<Exclude<SshKeysView['agent'], 'none'>, Message
 };
 
 /** The viewer's last choice; storage can be missing or refuse, so it falls back to an hour. */
-function storedLifetime(): string {
+export function storedLifetime(): string {
   try {
     const stored = localStorage.getItem(LIFETIME_KEY);
     return LIFETIMES.some((option) => option.value === stored) ? stored! : '3600';
@@ -45,7 +46,7 @@ function storedLifetime(): string {
  * for as long as the user chose. hopdeck keeps the passphrase nowhere. Below
  * them, a way to put a key on the host.
  */
-export function SshKeyPanel({ hostId, onUnlocked }: { hostId: string; onUnlocked(): void }) {
+export function SshKeyPanel({ hostId, destination, onUnlocked }: { hostId: string; destination: string; onUnlocked(): void }) {
   const { t } = useI18n();
   const [view, setView] = useState<SshKeysView>();
   const [error, setError] = useState<ErrorInfo>();
@@ -63,6 +64,15 @@ export function SshKeyPanel({ hostId, onUnlocked }: { hostId: string; onUnlocked
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function forget() {
+    try {
+      setView((await api.delete<{ keys: SshKeysView }>(`${path}/remembered`)).keys);
+      setError(undefined);
+    } catch (caught) {
+      setError(toErrorInfo(caught));
+    }
+  }
 
   if (view === undefined) return error === undefined ? null : <ErrorCallout error={error} />;
   const locked = view.keys.filter((key) => key.encrypted && !key.loaded);
@@ -90,9 +100,18 @@ export function SshKeyPanel({ hostId, onUnlocked }: { hostId: string; onUnlocked
           ) : (
             <p className={styles.agent}>{t(AGENT_TEXT[view.agent])}</p>
           )}
-          <KeySetup path={path} keys={view.keys} onWorks={onUnlocked} />
+          {view.remembered !== undefined && (
+            <p className={styles.remembered}>
+              <span>{t('sshKeys.remembered', { file: view.remembered })}</span>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => void forget()}>
+                {t('sshKeys.forget')}
+              </button>
+            </p>
+          )}
         </>
       )}
+      <KeyGenerate path={path} agent={view.agent} destination={destination} onGenerated={setView} />
+      {view.keys.length > 0 && <KeySetup path={path} keys={view.keys} onWorks={onUnlocked} />}
       {error !== undefined && <ErrorCallout error={error} />}
     </section>
   );

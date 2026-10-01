@@ -3,13 +3,14 @@
 
 import { parseListing, parseRuleset, ruleKey } from '@hopdeck/core';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { availableParallelism, release, tmpdir, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DEBIAN_FACTS, FakeExecutor, failed, ok, type Script } from '../testing/fake-executor.ts';
 import { HostError } from './errors.ts';
 import { HostManager, HostStateError, InvalidHostError } from './manager.ts';
+import { SshKeys } from './ssh-keys.ts';
 import { demoRuleset, Sandbox } from './sandbox.ts';
 
 /** A host whose sudo wants the password "secret". */
@@ -91,6 +92,47 @@ describe('HostManager', () => {
     const connected = ssh.calls.length;
     await hosts.usage(id).catch(() => undefined);
     expect(ssh.calls.length).toBe(connected + 1);
+  });
+
+  it('generates a key for an SSH host, and has it offered there by hopdeck or by ssh config', async () => {
+    const keysDir = await mkdtemp('/tmp/hd-gen-');
+    const sshConfig = join(keysDir, 'config');
+    await writeFile(sshConfig, '');
+    const keys = new SshKeys({ configFile: sshConfig, runtimeDir: keysDir, sessionAgent: false, sshDir: join(keysDir, 'ssh') });
+    const made: { destination: string; identityFile: string | undefined }[] = [];
+    const hosts = await HostManager.open({
+      configDir,
+      controlDir: configDir,
+      sshKeys: keys,
+      sshConfigFile: sshConfig,
+      createSshExecutor: (destination, options) => {
+        made.push({ destination, identityFile: options?.identityFile });
+        return new FakeExecutor(SUDO_WITH_PASSWORD);
+      },
+    });
+    await keys.start();
+    try {
+      const { id } = await hosts.add({ destination: 'fw1' });
+      const kept = await hosts.generateKey(id, { type: 'ed25519', name: 'id_fw1', comment: '', passphrase: '' }, 'hopdeck', undefined);
+      const file = join(keysDir, 'ssh', 'id_fw1');
+      expect(kept?.key).toMatchObject({ file, use: 'hopdeck', encrypted: false });
+      expect(kept?.key.comment).toMatch(/^\S+@\S+$/);
+      expect(kept?.keys).toMatchObject({ remembered: file });
+      expect(made.at(-1)).toEqual({ destination: 'fw1', identityFile: file });
+      expect(JSON.parse(await readFile(join(configDir, 'hosts.json'), 'utf8')).hosts[0]).toMatchObject({ identityFile: file });
+
+      expect((await hosts.forgetKey(id))?.remembered).toBeUndefined();
+      expect(made.at(-1)).toEqual({ destination: 'fw1', identityFile: undefined });
+      expect(JSON.parse(await readFile(join(configDir, 'hosts.json'), 'utf8')).hosts[0].identityFile).toBeUndefined();
+
+      const named = await hosts.generateKey(id, { type: 'rsa', bits: 2048, name: 'id_fw1_rsa', comment: 'ada@desk', passphrase: '' }, 'config', undefined);
+      expect(named?.key).toMatchObject({ use: 'config', config: { file: sshConfig } });
+      expect(await readFile(sshConfig, 'utf8')).toContain(`Host fw1\n    IdentityFile ${join(keysDir, 'ssh', 'id_fw1_rsa')}\n`);
+      expect(named?.keys.keys.map((key) => key.file)).toContain(join(keysDir, 'ssh', 'id_fw1_rsa'));
+    } finally {
+      await keys.close();
+      await rm(keysDir, { recursive: true, force: true });
+    }
   });
 
   it('connects to localhost', async () => {

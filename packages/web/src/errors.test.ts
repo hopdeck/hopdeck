@@ -36,6 +36,7 @@ const HOST_ERROR_CODES = {
   'wrong-passphrase': true,
   'login-password-rejected': true,
   'password-login-disabled': true,
+  'key-exists': true,
 } satisfies Record<HostErrorCode, true>;
 
 describe('errorText', () => {

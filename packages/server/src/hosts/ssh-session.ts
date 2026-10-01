@@ -121,6 +121,7 @@ export interface SessionExecutorOptions {
   /** As for SshExecutor. */
   destination: string;
   configFile?: string | undefined;
+  identityFile?: string | undefined;
   env?: Readonly<Record<string, string>> | undefined;
   /** Defaults to "ssh" from PATH. */
   sshPath?: string;
@@ -197,6 +198,7 @@ class Session {
     this.#options = options;
     const args = [
       ...(options.configFile === undefined ? [] : ['-F', options.configFile]),
+      ...(options.identityFile === undefined ? [] : ['-i', options.identityFile]),
       '-T',
       ...['-o', 'BatchMode=yes'],
       ...['-o', 'ConnectTimeout=10'],

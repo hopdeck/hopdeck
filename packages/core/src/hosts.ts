@@ -42,7 +42,8 @@ export type HostErrorCode =
   | 'platform-read-only'
   | 'wrong-passphrase'
   | 'login-password-rejected'
-  | 'password-login-disabled';
+  | 'password-login-disabled'
+  | 'key-exists';
 
 export interface HostFacts {
   uid: number;
@@ -121,6 +122,30 @@ export interface SshKeysView {
   /** Only for "none": why hopdeck's own agent did not start, the raw message. */
   agentError?: string;
   keys: SshKeyInfo[];
+  /** The key hopdeck itself adds for this host (ssh -i), apart from ~/.ssh/config. */
+  remembered?: string;
+}
+
+/** Key types hopdeck generates: Ed25519, or RSA of at least 2048 bits. */
+export type KeyType = 'ed25519' | 'rsa';
+export const RSA_BITS = [2048, 3072, 4096] as const;
+
+/** Where a new key is used for its host: hopdeck adds it itself, or ~/.ssh/config names it. */
+export type KeyUse = 'hopdeck' | 'config';
+
+/** A key hopdeck generated. */
+export interface GeneratedKey {
+  file: string;
+  /** e.g. "ED25519", as ssh-keygen -l prints it. */
+  type: string;
+  fingerprint: string;
+  comment: string;
+  /** The public half, one authorized_keys line. */
+  publicKey: string;
+  encrypted: boolean;
+  use: KeyUse;
+  /** For "config": the file the Host block went into, and the copy of it as it was. */
+  config?: { file: string; backup?: string; block: string };
 }
 
 /** The live ruleset as nft prints it; the UI parses it with parseRuleset() and parseListing(). */

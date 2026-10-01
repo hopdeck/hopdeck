@@ -17,6 +17,8 @@ export interface SshExecutorOptions {
   controlDir: string;
   /** Replaces ~/.ssh/config (ssh -F), e.g. to reach a test host without touching the user's setup. */
   configFile?: string | undefined;
+  /** A key to offer besides those ~/.ssh/config names (ssh -i): one hopdeck keeps for the host. */
+  identityFile?: string | undefined;
   /** Variables for ssh, e.g. the SSH_AUTH_SOCK of hopdeck's own agent. */
   env?: Readonly<Record<string, string>> | undefined;
   /** Defaults to "ssh" from PATH. */
@@ -58,6 +60,7 @@ export class SshExecutor implements Executor {
     this.#env = options.env;
     this.#sshArgs = [
       ...(options.configFile !== undefined ? ['-F', options.configFile] : []),
+      ...(options.identityFile !== undefined ? ['-i', options.identityFile] : []),
       '-T',
       ...['-o', 'BatchMode=yes'],
       ...['-o', 'ConnectTimeout=10'],
@@ -65,7 +68,7 @@ export class SshExecutor implements Executor {
         ? ['-o', 'ControlMaster=no', '-o', 'ControlPath=none']
         : [
             ...['-o', 'ControlMaster=auto'],
-            ...['-o', `ControlPath=${join(options.controlDir, controlName(options.destination, options.configFile))}`],
+            ...['-o', `ControlPath=${join(options.controlDir, controlName(options.destination, options.configFile, options.identityFile))}`],
             ...['-o', 'ControlPersist=60'],
           ]),
     ];
@@ -97,8 +100,8 @@ export function configNote(configFile: string | undefined): string {
  * key check. Hashing exactly what hopdeck asks ssh for avoids that; the hash also
  * keeps the socket path short.
  */
-function controlName(destination: string, configFile: string | undefined): string {
-  return createHash('sha256').update(`${destination}\0${configFile ?? ''}`).digest('hex').slice(0, 32);
+function controlName(destination: string, configFile: string | undefined, identityFile: string | undefined): string {
+  return createHash('sha256').update(`${destination}\0${configFile ?? ''}\0${identityFile ?? ''}`).digest('hex').slice(0, 32);
 }
 
 /** A leading "-" would turn the destination into an ssh option such as -oProxyCommand=... */

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import { HISTORY_MAX_BYTES, validMaxBytes, type Family, type TableChange, type TraceFilter } from '@hopdeck/core';
+import { HISTORY_MAX_BYTES, RSA_BITS, validMaxBytes, type Family, type TableChange, type TraceFilter } from '@hopdeck/core';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HostError } from './hosts/errors.ts';
 import { HostStateError, InvalidHostError, type HostManager } from './hosts/manager.ts';
@@ -237,11 +237,37 @@ const ROUTES: Route[] = [
       const body = asObject(await readJson(req));
       const file = requiredString(body, 'file', 4096);
       const passphrase = requiredString(body, 'passphrase', 1024);
-      const seconds = body['seconds'];
-      if (seconds !== null && !(typeof seconds === 'number' && Number.isInteger(seconds) && seconds > 0 && seconds <= MAX_KEY_LIFETIME)) {
-        throw new ApiError(400, 'invalid-body', `seconds must be null or a whole number from 1 to ${MAX_KEY_LIFETIME}`);
-      }
-      return { body: { keys: found(await ctx.hosts.unlockSshKey(id!, file, passphrase, seconds ?? undefined)) } };
+      return { body: { keys: found(await ctx.hosts.unlockSshKey(id!, file, passphrase, lifetime(body['seconds']))) } };
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/hosts\/([^/]+)\/ssh-keys\/generate$/,
+    async handle(req, [id], ctx) {
+      const body = asObject(await readJson(req));
+      const type = body['type'];
+      if (type !== 'ed25519' && type !== 'rsa') throw new ApiError(400, 'invalid-body', 'type must be "ed25519" or "rsa"');
+      const bits = body['bits'];
+      if (type === 'rsa' && !(RSA_BITS as readonly unknown[]).includes(bits)) throw new ApiError(400, 'invalid-body', `bits must be ${RSA_BITS.join(', ')} for RSA`);
+      const use = body['use'];
+      if (use !== 'hopdeck' && use !== 'config') throw new ApiError(400, 'invalid-body', 'use must be "hopdeck" or "config"');
+      const seconds = lifetime(body['seconds']);
+      const spec = {
+        type,
+        bits: type === 'rsa' ? (bits as number) : undefined,
+        name: requiredString(body, 'name', 64),
+        comment: optionalString(body, 'comment', 200) ?? '',
+        // Empty: a key without a passphrase.
+        passphrase: optionalString(body, 'passphrase', 1024) ?? '',
+      } as const;
+      return { body: found(await ctx.hosts.generateKey(id!, spec, use, seconds)) };
+    },
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/hosts\/([^/]+)\/ssh-keys\/remembered$/,
+    async handle(_req, [id], ctx) {
+      return { body: { keys: found(await ctx.hosts.forgetKey(id!)) } };
     },
   },
   {
@@ -300,6 +326,8 @@ function hostErrorStatus(error: HostError): number {
     case 'wrong-passphrase':
     case 'login-password-rejected':
       return 400;
+    case 'key-exists':
+      return 409;
     case 'password-required':
     case 'password-login-disabled':
     case 'no-privileges':
@@ -402,6 +430,13 @@ function stringList(body: Record<string, unknown>, key: string): string[] {
     throw new ApiError(400, 'invalid-body', `${key} must be a list of strings`);
   }
   return value as string[];
+}
+
+/** How long the agent keeps an unlocked key: null for as long as it runs. */
+function lifetime(seconds: unknown): number | undefined {
+  if (seconds === null) return undefined;
+  if (typeof seconds === 'number' && Number.isInteger(seconds) && seconds > 0 && seconds <= MAX_KEY_LIFETIME) return seconds;
+  throw new ApiError(400, 'invalid-body', `seconds must be null or a whole number from 1 to ${MAX_KEY_LIFETIME}`);
 }
 
 function asObject(value: unknown): Record<string, unknown> {

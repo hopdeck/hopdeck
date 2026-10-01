@@ -3,7 +3,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { hostname, userInfo } from 'node:os';
+import { homedir, hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 import type {
   DeploymentView,
@@ -16,8 +16,10 @@ import type {
   HostKeyCheck,
   HostKind,
   HostStatus,
+  GeneratedKey,
   HostSummary,
   KeySetupResult,
+  KeyUse,
   PersistenceStatus,
   PersistResult,
   RulesetSnapshot,
@@ -42,7 +44,8 @@ import { isValidDestination, SshExecutor } from './ssh.ts';
 import { KeyLogin } from './key-login.ts';
 import { LoginGuard } from './login-guard.ts';
 import { SessionExecutor, sshSessionsWanted } from './ssh-session.ts';
-import { SshKeys } from './ssh-keys.ts';
+import { addIdentityToConfig } from './ssh-config.ts';
+import { SshKeys, type KeySpec, type SshTarget } from './ssh-keys.ts';
 
 interface Entry {
   id: string;
@@ -56,6 +59,8 @@ interface Entry {
   manualOverride: boolean;
   /** The last CPU reading, so the next one measures the time in between. */
   cpu?: CpuSample & { at: number };
+  /** SSH only: a key hopdeck adds for this host (ssh -i), as hosts.json keeps it. */
+  identityFile?: string | undefined;
 }
 
 /** What hosts.json stores: SSH hosts only; localhost and the sandbox are built in. */
@@ -63,6 +68,8 @@ interface StoredHost {
   id: string;
   destination: string;
   name?: string;
+  /** A key hopdeck adds for this host, apart from ~/.ssh/config. */
+  identityFile?: string;
 }
 
 export interface HostManagerOptions {
@@ -77,7 +84,7 @@ export interface HostManagerOptions {
   /** Who runs hopdeck, and on which computer; recorded as the author of changes. Defaults to this process's user and machine. */
   operator?: { user: string; computer: string };
   /** Replaces the SSH executor, for tests; `shared: false` asks for a connection that shares nothing. */
-  createSshExecutor?: (destination: string, options?: { shared: boolean }) => Executor;
+  createSshExecutor?: (destination: string, options?: { shared: boolean; identityFile?: string | undefined }) => Executor;
   /** Seconds until a host rolls back an unconfirmed change. */
   rollbackSeconds?: number;
   /** Replaces host key handling, for tests. */
@@ -364,15 +371,17 @@ export class HostManager {
       platform: this.#platform(entry),
       systemd: status.facts.systemd,
       manualOverride: entry.manualOverride,
-      freshExecutor: entry.kind === 'ssh' ? this.#freshExecutor(entry.destination!) : undefined,
+      freshExecutor: entry.kind === 'ssh' ? this.#freshExecutor(entry) : undefined,
     };
   }
 
-  #freshExecutor(destination: string): Executor {
+  #freshExecutor(entry: Entry): Executor {
+    const { destination, identityFile } = this.#sshTarget(entry);
     return (
-      this.#options.createSshExecutor?.(destination, { shared: false }) ??
+      this.#options.createSshExecutor?.(destination, { shared: false, identityFile }) ??
       new SshExecutor({
         destination,
+        identityFile,
         controlDir: this.#options.controlDir,
         configFile: this.#options.sshConfigFile,
         env: this.#sshKeys.env,
@@ -397,13 +406,13 @@ export class HostManager {
   /** The private keys ssh would offer an SSH host, and which of them need a passphrase. */
   async sshKeys(id: string): Promise<SshKeysView | undefined> {
     const entry = this.#entries.get(id);
-    return entry === undefined ? undefined : this.#sshKeys.list(this.#destination(entry));
+    return entry === undefined ? undefined : this.#sshKeys.list(this.#sshTarget(entry));
   }
 
   /** Puts a key into the agent with its passphrase, for `seconds` or as long as the agent runs; the passphrase is kept nowhere. */
   async unlockSshKey(id: string, file: string, passphrase: string, seconds: number | undefined): Promise<SshKeysView | undefined> {
     const entry = this.#entries.get(id);
-    return entry === undefined ? undefined : this.#sshKeys.unlock(this.#destination(entry), file, passphrase, seconds);
+    return entry === undefined ? undefined : this.#sshKeys.unlock(this.#sshTarget(entry), file, passphrase, seconds);
   }
 
   /**
@@ -413,7 +422,45 @@ export class HostManager {
    */
   async setUpKeyLogin(id: string, file: string, password: string, allow: boolean): Promise<KeySetupResult | undefined> {
     const entry = this.#entries.get(id);
-    return entry === undefined ? undefined : this.#keyLogin.setUp(this.#destination(entry), file, password, { allow });
+    return entry === undefined ? undefined : this.#keyLogin.setUp(this.#sshTarget(entry), file, password, { allow });
+  }
+
+  /**
+   * Generates a key for an SSH host and makes ssh offer it there: hopdeck adds
+   * it itself (hosts.json, ssh -i), or a Host block in ~/.ssh/config names it.
+   * With a passphrase, the key goes to the agent at once, for `seconds`.
+   */
+  async generateKey(id: string, spec: KeySpec, use: KeyUse, seconds: number | undefined): Promise<{ key: GeneratedKey; keys: SshKeysView } | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    const destination = this.#destination(entry);
+    const comment = spec.comment.trim() || `${userInfo().username}@${hostname()}`;
+    const made = await this.#sshKeys.generate({ ...spec, comment });
+    let config: GeneratedKey['config'];
+    if (use === 'hopdeck') {
+      await this.#rememberKey(entry, made.file);
+    } else {
+      config = await addIdentityToConfig({ configFile: this.#options.sshConfigFile ?? join(homedir(), '.ssh', 'config'), destination, identityFile: made.file });
+    }
+    if (spec.passphrase !== '') await this.#sshKeys.unlock(this.#sshTarget(entry), made.file, spec.passphrase, seconds);
+    return { key: { ...made, use, ...(config !== undefined && { config }) }, keys: await this.#sshKeys.list(this.#sshTarget(entry)) };
+  }
+
+  /** Stops adding the key hopdeck remembers for an SSH host; ~/.ssh/config decides alone again. */
+  async forgetKey(id: string): Promise<SshKeysView | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    this.#destination(entry);
+    await this.#rememberKey(entry, undefined);
+    return this.#sshKeys.list(this.#sshTarget(entry));
+  }
+
+  /** Changes the key hopdeck adds for a host: a new executor with it, kept in hosts.json. */
+  async #rememberKey(entry: Entry, file: string | undefined): Promise<void> {
+    closeExecutor(entry.executor);
+    entry.identityFile = file;
+    entry.executor = this.#sshExecutor(entry.destination!, file);
+    await this.#save();
   }
 
   /** Ends what hopdeck started for its hosts: its own ssh-agent, if any. */
@@ -435,6 +482,11 @@ export class HostManager {
     if (entry === undefined) return undefined;
     await this.#hostKeys.trust(this.#destination(entry), fingerprint, replace);
     return this.connect(id);
+  }
+
+  /** How ssh reaches an SSH host: its destination, and the key hopdeck adds for it. */
+  #sshTarget(entry: Entry): SshTarget {
+    return { destination: this.#destination(entry), identityFile: entry.identityFile };
   }
 
   #destination(entry: Entry): string {
@@ -527,21 +579,26 @@ export class HostManager {
   }
 
   #sshEntry(host: StoredHost): Entry {
-    const connection = { destination: host.destination, configFile: this.#options.sshConfigFile, env: this.#sshKeys.env };
-    const executor = new LoginGuard(
-      this.#options.createSshExecutor?.(host.destination) ??
-        // Where ssh has no ControlMaster (Windows), one long session per host does its work.
-        (sshSessionsWanted() ? new SessionExecutor(connection) : new SshExecutor({ ...connection, controlDir: this.#options.controlDir })),
-    );
     return {
       id: host.id,
       kind: 'ssh',
       name: host.name ?? host.destination,
       destination: host.destination,
-      executor,
+      executor: this.#sshExecutor(host.destination, host.identityFile),
       status: { state: 'new' },
       manualOverride: false,
+      identityFile: host.identityFile,
     };
+  }
+
+  /** The shared executor of an SSH host. */
+  #sshExecutor(destination: string, identityFile: string | undefined): Executor {
+    const connection = { destination, identityFile, configFile: this.#options.sshConfigFile, env: this.#sshKeys.env };
+    return new LoginGuard(
+      this.#options.createSshExecutor?.(destination, { shared: true, identityFile }) ??
+        // Where ssh has no ControlMaster (Windows), one long session per host does its work.
+        (sshSessionsWanted() ? new SessionExecutor(connection) : new SshExecutor({ ...connection, controlDir: this.#options.controlDir })),
+    );
   }
 
   #put(entry: Entry): void {
@@ -551,7 +608,12 @@ export class HostManager {
   async #save(): Promise<void> {
     const hosts: StoredHost[] = [...this.#entries.values()]
       .filter((entry) => entry.kind === 'ssh')
-      .map((entry) => ({ id: entry.id, destination: entry.destination!, name: entry.name }));
+      .map((entry) => ({
+        id: entry.id,
+        destination: entry.destination!,
+        name: entry.name,
+        ...(entry.identityFile !== undefined && { identityFile: entry.identityFile }),
+      }));
     await writeInventory(this.#options.configDir, hosts);
   }
 }
@@ -589,7 +651,11 @@ async function readInventory(configDir: string): Promise<StoredHost[]> {
   }
   const data = JSON.parse(text) as { hosts?: StoredHost[] };
   return (data.hosts ?? []).filter(
-    (host) => typeof host.id === 'string' && typeof host.destination === 'string' && isValidDestination(host.destination),
+    (host) =>
+      typeof host.id === 'string' &&
+      typeof host.destination === 'string' &&
+      isValidDestination(host.destination) &&
+      (host.identityFile === undefined || typeof host.identityFile === 'string'),
   );
 }
 

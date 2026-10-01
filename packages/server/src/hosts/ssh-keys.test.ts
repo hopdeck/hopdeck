@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Mateusz T (Tenir)
 
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,7 +20,7 @@ describe('SshKeys with hopdeck\'s own agent', () => {
     execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-C', 'open key', '-f', join(dir, 'open')]);
     execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-C', 'other key', '-f', join(dir, 'other')]);
     await writeFile(join(dir, 'config'), `Host fw1\n\tIdentityFile ${dir}/locked\n\tIdentityFile ${dir}/open\n\tIdentityFile ${dir}/missing\n`);
-    keys = new SshKeys({ configFile: join(dir, 'config'), runtimeDir: dir, sessionAgent: false });
+    keys = new SshKeys({ configFile: join(dir, 'config'), runtimeDir: dir, sessionAgent: false, sshDir: join(dir, 'ssh') });
     await keys.start();
   });
 
@@ -35,7 +35,7 @@ describe('SshKeys with hopdeck\'s own agent', () => {
   });
 
   it('lists the keys ssh would offer the host, and which need a passphrase', async () => {
-    const view = await keys.list('fw1');
+    const view = await keys.list({ destination: 'fw1' });
     expect(view.agent).toBe('hopdeck');
     expect(view.keys.map(({ file, type, comment, encrypted, loaded }) => ({ file, type, comment, encrypted, loaded }))).toEqual([
       { file: join(dir, 'locked'), type: 'ED25519', comment: 'locked key', encrypted: true, loaded: false },
@@ -45,12 +45,12 @@ describe('SshKeys with hopdeck\'s own agent', () => {
   });
 
   it('says so when the passphrase is wrong, without asking again and again', async () => {
-    await expect(keys.unlock('fw1', join(dir, 'locked'), 'wrong', 60)).rejects.toMatchObject({ code: 'wrong-passphrase' });
-    expect((await keys.list('fw1')).keys[0]!.loaded).toBe(false);
+    await expect(keys.unlock({ destination: 'fw1' }, join(dir, 'locked'), 'wrong', 60)).rejects.toMatchObject({ code: 'wrong-passphrase' });
+    expect((await keys.list({ destination: 'fw1' })).keys[0]!.loaded).toBe(false);
   });
 
   it('adds a key to the agent for as long as asked', async () => {
-    const view = await keys.unlock('fw1', join(dir, 'locked'), 'right passphrase', 120);
+    const view = await keys.unlock({ destination: 'fw1' }, join(dir, 'locked'), 'right passphrase', 120);
     expect(view.keys[0]!.loaded).toBe(true);
     const listed = execFileSync('ssh-add', ['-l'], { env: { ...process.env, ...keys.env }, encoding: 'utf8' });
     expect(listed).toContain('locked key');
@@ -68,19 +68,49 @@ describe('SshKeys with hopdeck\'s own agent', () => {
       if (session === undefined) delete process.env['SSH_AUTH_SOCK'];
       else process.env['SSH_AUTH_SOCK'] = session;
     }
-    const loaded = async () => (await keys.list('fw1')).keys[0]!.loaded;
+    const loaded = async () => (await keys.list({ destination: 'fw1' })).keys[0]!.loaded;
     execFileSync('ssh-add', ['-D'], { env: { ...process.env, SSH_AUTH_SOCK: agent }, stdio: 'ignore' });
 
-    await windowsLike.unlock('fw1', join(dir, 'locked'), 'right passphrase', 1);
+    await windowsLike.unlock({ destination: 'fw1' }, join(dir, 'locked'), 'right passphrase', 1);
     expect(await loaded()).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 1600));
     expect(await loaded()).toBe(false);
 
     // What is still timed goes when hopdeck stops.
-    await windowsLike.unlock('fw1', join(dir, 'locked'), 'right passphrase', 3600);
+    await windowsLike.unlock({ destination: 'fw1' }, join(dir, 'locked'), 'right passphrase', 3600);
     expect(await loaded()).toBe(true);
     await windowsLike.close();
     expect(await loaded()).toBe(false);
+  });
+
+  it('generates an Ed25519 key with a passphrase, never on the command line, and never over a file', async () => {
+    const key = await keys.generate({ type: 'ed25519', name: 'id_ed25519_hopdeck', comment: 'ada@desk', passphrase: 'a long passphrase' });
+    expect(key).toMatchObject({ file: join(dir, 'ssh', 'id_ed25519_hopdeck'), type: 'ED25519', comment: 'ada@desk', encrypted: true });
+    expect(key.publicKey).toMatch(/^ssh-ed25519 \S+ ada@desk$/);
+    expect((statSync(join(dir, 'ssh')).mode & 0o777).toString(8)).toBe('700');
+    expect((statSync(key.file).mode & 0o777).toString(8)).toBe('600');
+    // The passphrase opens it.
+    expect(execFileSync('ssh-keygen', ['-y', '-P', 'a long passphrase', '-f', key.file], { encoding: 'utf8' })).toContain(key.publicKey.split(' ')[1]);
+    expect(() => execFileSync('ssh-keygen', ['-y', '-P', 'wrong', '-f', key.file], { stdio: 'ignore' })).toThrow();
+    await expect(keys.generate({ type: 'ed25519', name: 'id_ed25519_hopdeck', comment: '', passphrase: '' })).rejects.toMatchObject({ code: 'key-exists' });
+  });
+
+  it('generates RSA keys of 2048 bits and more only, and takes plain names only', async () => {
+    const key = await keys.generate({ type: 'rsa', bits: 3072, name: 'id_rsa_hopdeck', comment: 'ada@desk', passphrase: '' });
+    expect(key).toMatchObject({ type: 'RSA', encrypted: false });
+    expect(execFileSync('ssh-keygen', ['-l', '-f', key.file], { encoding: 'utf8' })).toMatch(/^3072 /);
+    await expect(keys.generate({ type: 'rsa', bits: 1024, name: 'weak', comment: '', passphrase: '' })).rejects.toThrow(/2048, 3072, 4096/);
+    for (const name of ['../escape', '.hidden', 'key.pub', 'a b', '']) {
+      await expect(keys.generate({ type: 'ed25519', name, comment: '', passphrase: '' }), name).rejects.toThrow(/name/);
+    }
+  });
+
+  it('offers the key hopdeck keeps for a host besides those ssh config names', async () => {
+    const extra = join(dir, 'other');
+    expect((await keys.list({ destination: 'fw1' })).keys.map((key) => key.file)).not.toContain(extra);
+    const view = await keys.list({ destination: 'fw1', identityFile: extra });
+    expect(view.keys.map((key) => key.file)).toContain(extra);
+    expect(view.remembered).toBe(extra);
   });
 
   it('runs without an agent when there is none to be had, and says why unlocking cannot work', async () => {
@@ -94,14 +124,14 @@ describe('SshKeys with hopdeck\'s own agent', () => {
       process.env['PATH'] = path;
     }
     expect(without.env).toEqual({});
-    expect(await without.list('fw1')).toMatchObject({ agent: 'none', agentError: expect.stringMatching(/ssh-agent is not installed/) });
-    await expect(without.unlock('fw1', join(dir, 'locked'), 'right passphrase', 60)).rejects.toMatchObject({ code: 'spawn-failed' });
+    expect(await without.list({ destination: 'fw1' })).toMatchObject({ agent: 'none', agentError: expect.stringMatching(/ssh-agent is not installed/) });
+    await expect(without.unlock({ destination: 'fw1' }, join(dir, 'locked'), 'right passphrase', 60)).rejects.toMatchObject({ code: 'spawn-failed' });
     await without.close();
   });
 
   it('refuses a key ssh would not offer the host, and a lifetime out of range', async () => {
-    await expect(keys.unlock('fw1', join(dir, 'other'), '', 60)).rejects.toThrow(/not a key ssh offers fw1/);
-    await expect(keys.unlock('fw1', join(dir, 'open'), '', 0)).rejects.toThrow(/lifetime/);
+    await expect(keys.unlock({ destination: 'fw1' }, join(dir, 'other'), '', 60)).rejects.toThrow(/not a key ssh offers fw1/);
+    await expect(keys.unlock({ destination: 'fw1' }, join(dir, 'open'), '', 0)).rejects.toThrow(/lifetime/);
   });
 
   it('takes its agent and keys with it when it closes', async () => {

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import type { SshKeyInfo, SshKeysView } from '@hopdeck/core';
+import { RSA_BITS, type KeyType, type SshKeyInfo, type SshKeysView } from '@hopdeck/core';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { isSea } from 'node:sea';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { HostError } from './errors.ts';
@@ -24,6 +24,26 @@ export interface SshKeysOptions {
    * default, hopdeck for Windows' agent and the agent otherwise.
    */
   lifetimes?: 'agent' | 'hopdeck';
+  /** Where new keys go; ~/.ssh by default. */
+  sshDir?: string;
+}
+
+/** An SSH host as ssh reaches it: its destination, and the key hopdeck adds for it, if any (ssh -i). */
+export interface SshTarget {
+  destination: string;
+  identityFile?: string | undefined;
+}
+
+/** What a new key is to be. */
+export interface KeySpec {
+  type: KeyType;
+  /** RSA only: 2048, 3072 or 4096. */
+  bits?: number | undefined;
+  /** Its file's name in ~/.ssh, e.g. id_ed25519_hopdeck. */
+  name: string;
+  comment: string;
+  /** Empty: none, so whoever has the file can use the key. */
+  passphrase: string;
 }
 
 /** Lifetimes a key may be given in an agent, in seconds; no lifetime keeps it as long as the agent runs. */
@@ -100,22 +120,58 @@ export class SshKeys {
     return this.#socket === undefined ? {} : { SSH_AUTH_SOCK: this.#socket };
   }
 
-  /** The keys ssh would offer the destination, with what they need. */
-  async list(destination: string): Promise<SshKeysView> {
-    const files = await this.#identityFiles(destination);
+  /** The keys ssh would offer the host, with what they need. */
+  async list(target: SshTarget): Promise<SshKeysView> {
+    const files = await this.#identityFiles(target);
     const loaded = this.#kind === 'none' ? new Set<string>() : await this.#loaded();
     const keys: SshKeyInfo[] = [];
     for (const file of files) keys.push({ file, ...(await describe(file)), loaded: false });
     for (const key of keys) key.loaded = loaded.has(key.fingerprint);
-    return { agent: this.#kind, ...(this.#unavailable !== undefined && { agentError: this.#unavailable }), keys };
+    return {
+      agent: this.#kind,
+      ...(this.#unavailable !== undefined && { agentError: this.#unavailable }),
+      keys,
+      ...(target.identityFile !== undefined && { remembered: target.identityFile }),
+    };
+  }
+
+  /**
+   * Generates a key in ~/.ssh with ssh-keygen, never over an existing file.
+   * The passphrase goes to ssh-keygen through askpass, which it asks twice
+   * (the passphrase, then again to confirm), never on its command line.
+   */
+  async generate(spec: KeySpec): Promise<{ file: string; type: string; fingerprint: string; comment: string; publicKey: string; encrypted: boolean }> {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(spec.name) || spec.name.endsWith('.pub')) {
+      throw new HostError('command-failed', `a key's name is 1 to 64 letters, digits, ".", "_" or "-", not ending in .pub: ${JSON.stringify(spec.name)}`);
+    }
+    if (spec.type === 'rsa' && !(RSA_BITS as readonly number[]).includes(spec.bits ?? 0)) {
+      throw new HostError('command-failed', `an RSA key has ${RSA_BITS.join(', ')} bits, not ${spec.bits}`);
+    }
+    if (/[\r\n]/.test(spec.comment) || spec.comment.length > 200) throw new HostError('command-failed', 'a key\'s comment is one line of up to 200 characters');
+    const dir = this.#options.sshDir ?? join(homedir(), '.ssh');
+    await mkdir(dir, { recursive: true, mode: 0o700 });
+    const file = join(dir, spec.name);
+    for (const taken of [file, `${file}.pub`]) {
+      if (existsSync(taken)) throw new HostError('key-exists', taken);
+    }
+    const args = ['-q', '-t', spec.type, ...(spec.type === 'rsa' ? ['-b', String(spec.bits)] : []), '-C', spec.comment, '-f', file];
+    const made =
+      spec.passphrase === ''
+        ? await runProcess('ssh-keygen', [...args, '-N', ''], { timeoutMs: 60_000 })
+        : (await withAskpass(spec.passphrase, (askpass) => runProcess('ssh-keygen', args, { timeoutMs: 60_000, env: askpass }), { answers: 2 })).result;
+    if (made.exitCode !== 0 || !existsSync(file)) {
+      throw new HostError('command-failed', made.stderr.trim() || `ssh-keygen exited with code ${made.exitCode}`);
+    }
+    const described = await describe(file);
+    return { file, ...described, publicKey: (await readFile(`${file}.pub`, 'utf8')).trim() };
   }
 
   /**
    * Adds a key to the agent with its passphrase, for `seconds` or as long as
-   * the agent runs. Only a key ssh would offer the destination.
+   * the agent runs. Only a key ssh would offer the host.
    */
-  async unlock(destination: string, file: string, passphrase: string, seconds: number | undefined): Promise<SshKeysView> {
-    await this.#offered(destination, file);
+  async unlock(target: SshTarget, file: string, passphrase: string, seconds: number | undefined): Promise<SshKeysView> {
+    await this.#offered(target, file);
     if (this.#unavailable !== undefined) throw new HostError('spawn-failed', `no ssh-agent can hold the key: ${this.#unavailable}`);
     if (seconds !== undefined && !(Number.isInteger(seconds) && seconds > 0 && seconds <= MAX_KEY_LIFETIME)) {
       throw new HostError('command-failed', `a key's lifetime must be 1 to ${MAX_KEY_LIFETIME} seconds`);
@@ -146,7 +202,7 @@ export class SshKeys {
         this.#expiring.set(fingerprint, { file, timer });
       }
     }
-    return this.list(destination);
+    return this.list(target);
   }
 
   /** Takes a key hopdeck timed out of the agent, by its public half. */
@@ -187,8 +243,8 @@ export class SshKeys {
    * line: from its .pub file, from the agent that holds it, or from the key
    * itself when it has no passphrase.
    */
-  async publicKey(destination: string, file: string): Promise<{ line: string; key: SshKeyInfo }> {
-    await this.#offered(destination, file);
+  async publicKey(target: SshTarget, file: string): Promise<{ line: string; key: SshKeyInfo }> {
+    await this.#offered(target, file);
     const key = { file, ...(await describe(file)), loaded: false };
     const candidates: string[] = [];
     if (existsSync(`${file}.pub`)) candidates.push((await readFile(`${file}.pub`, 'utf8')).trim());
@@ -208,17 +264,18 @@ export class SshKeys {
     );
   }
 
-  /** Throws unless ssh offers the destination this key. */
-  async #offered(destination: string, file: string): Promise<void> {
-    if (!(await this.#identityFiles(destination)).includes(file)) {
-      throw new HostError('command-failed', `${file} is not a key ssh offers ${destination}`);
+  /** Throws unless ssh offers the host this key. */
+  async #offered(target: SshTarget, file: string): Promise<void> {
+    if (!(await this.#identityFiles(target)).includes(file)) {
+      throw new HostError('command-failed', `${file} is not a key ssh offers ${target.destination}`);
     }
   }
 
-  /** IdentityFile values ssh uses for the destination (ssh -G), those that exist. */
-  async #identityFiles(destination: string): Promise<string[]> {
+  /** IdentityFile values ssh uses for the host (ssh -G), with hopdeck's own (-i) first, those that exist. */
+  async #identityFiles(target: SshTarget): Promise<string[]> {
     const config = this.#options.configFile === undefined ? [] : ['-F', this.#options.configFile];
-    const shown = await runProcess('ssh', [...config, '-G', '--', destination], { timeoutMs: 10_000 });
+    const extra = target.identityFile === undefined ? [] : ['-i', target.identityFile];
+    const shown = await runProcess('ssh', [...config, ...extra, '-G', '--', target.destination], { timeoutMs: 10_000 });
     if (shown.exitCode !== 0) throw new HostError('command-failed', shown.stderr.trim() || `ssh -G exited with code ${shown.exitCode}`);
     const files = shown.stdout
       .split('\n')
@@ -269,9 +326,10 @@ async function describe(file: string): Promise<Omit<SshKeyInfo, 'file' | 'loaded
 }
 
 /**
- * Runs `run` with SSH_ASKPASS set up to answer `secret` once, for ssh-add or
- * ssh; `asked` says whether it was asked, `askedAgain` whether it was asked a
- * second time, as after a wrong secret. It answers no yes/no question, so a
+ * Runs `run` with SSH_ASKPASS set up to answer `secret` once (or `answers`
+ * times), for ssh-add, ssh or ssh-keygen; `asked` says whether it was asked,
+ * `askedAgain` whether it was asked once more than it answers, as after a
+ * wrong secret. It answers no yes/no question, so a
  * host key to accept never gets the secret for an answer. The secret travels
  * in the environment of the program and the answering one only.
  *
@@ -282,6 +340,7 @@ async function describe(file: string): Promise<Omit<SshKeyInfo, 'file' | 'loaded
 export async function withAskpass<T>(
   secret: string,
   run: (env: Record<string, string>) => Promise<T>,
+  options: { answers?: number } = {},
 ): Promise<{ result: T; asked: boolean; askedAgain: boolean }> {
   const dir = await mkdtemp(join(tmpdir(), 'hopdeck-askpass-'));
   try {
@@ -300,15 +359,17 @@ export async function withAskpass<T>(
       if (process.env['DISPLAY'] === undefined) extra['DISPLAY'] = 'hopdeck:0';
     } else {
       askpass = join(dir, 'askpass');
-      // After a wrong secret the program asks again; the second time the answer is no.
-      await writeFile(
-        askpass,
-        '#!/bin/sh\ncase "${1-}" in *"(yes/no"*) exit 1 ;; esac\n[ -e "$HOPDECK_ASKPASS_DIR/asked" ] && { : > "$HOPDECK_ASKPASS_DIR/asked-again"; exit 1; }\n: > "$HOPDECK_ASKPASS_DIR/asked"\nprintf \'%s\\n\' "$HOPDECK_ASKPASS_SECRET"\n',
-        { mode: 0o700 },
-      );
+      await writeFile(askpass, ASKPASS_SCRIPT, { mode: 0o700 });
     }
-    const result = await run({ SSH_ASKPASS: askpass, SSH_ASKPASS_REQUIRE: 'force', HOPDECK_ASKPASS_DIR: dir, HOPDECK_ASKPASS_SECRET: secret, ...extra });
-    return { result, asked: existsSync(join(dir, 'asked')), askedAgain: existsSync(join(dir, 'asked-again')) };
+    const result = await run({
+      SSH_ASKPASS: askpass,
+      SSH_ASKPASS_REQUIRE: 'force',
+      HOPDECK_ASKPASS_DIR: dir,
+      HOPDECK_ASKPASS_SECRET: secret,
+      HOPDECK_ASKPASS_ANSWERS: String(options.answers ?? 1),
+      ...extra,
+    });
+    return { result, asked: existsSync(join(dir, 'asked.1')), askedAgain: existsSync(join(dir, 'asked-again')) };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -327,15 +388,33 @@ export function answerAskpass(
   const dir = env['HOPDECK_ASKPASS_DIR'];
   const secret = env['HOPDECK_ASKPASS_SECRET'];
   if (dir === undefined || secret === undefined || (prompt ?? '').includes('(yes/no')) return 1;
-  const asked = join(dir, 'asked');
-  if (existsSync(asked)) {
+  let answer = 1;
+  while (existsSync(join(dir, `asked.${answer}`))) answer += 1;
+  if (answer > Number(env['HOPDECK_ASKPASS_ANSWERS'] ?? 1)) {
     writeFileSync(join(dir, 'asked-again'), '');
     return 1;
   }
-  writeFileSync(asked, '');
+  writeFileSync(join(dir, `asked.${answer}`), '');
   write(`${secret}\n`);
   return 0;
 }
+
+/**
+ * The askpass script on Linux: the secret as many times as it may answer
+ * (once, or twice where ssh-keygen asks to confirm a new passphrase), then
+ * no, noted in "asked-again"; never an answer to a yes/no question.
+ */
+const ASKPASS_SCRIPT = [
+  '#!/bin/sh',
+  'case "${1-}" in *"(yes/no"*) exit 1 ;; esac',
+  'd=$HOPDECK_ASKPASS_DIR',
+  'n=1',
+  'while [ -e "$d/asked.$n" ]; do n=$((n + 1)); done',
+  'if [ "$n" -gt "${HOPDECK_ASKPASS_ANSWERS:-1}" ]; then : > "$d/asked-again"; exit 1; fi',
+  ': > "$d/asked.$n"',
+  "printf '%s\\n' \"$HOPDECK_ASKPASS_SECRET\"",
+  '',
+].join('\n');
 
 /** A public key as one authorized_keys line: type, key, and a comment without control characters. */
 export function authorizedKeyLine(text: string): string | undefined {

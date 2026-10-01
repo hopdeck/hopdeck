@@ -225,7 +225,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
         )}
 
         {status.state === 'error' && host.kind === 'ssh' && status.error.code === 'ssh-auth' && (
-          <SshKeyPanel hostId={host.id} onUnlocked={onConnect} />
+          <SshKeyPanel hostId={host.id} destination={host.destination ?? host.name} onUnlocked={onConnect} />
         )}
 
         {loginLost !== undefined && (
@@ -234,7 +234,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
               <p>{t('host.loginLostHint')}</p>
               <pre className="details">{loginLost.message}</pre>
             </Callout>
-            <SshKeyPanel hostId={host.id} onUnlocked={onConnect} />
+            <SshKeyPanel hostId={host.id} destination={host.destination ?? host.name} onUnlocked={onConnect} />
           </>
         )}
 

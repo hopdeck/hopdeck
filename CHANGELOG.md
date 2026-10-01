@@ -16,6 +16,11 @@
 - `HOPDECK_SSH_SESSIONS=1` uses these sessions on Linux too, where ssh's
   ControlMaster does not work.
 - The startup message links to the source code.
+- SSH keys are generated in the panel: Ed25519, or RSA of 2048, 3072 or 4096
+  bits, with a passphrase or, with a warning, without. hopdeck keeps the new
+  key for its host, or adds it to `~/.ssh/config` (keeping a copy of the file
+  as it was); with a passphrase it goes to the agent at once, and the key
+  setup below puts it on the host.
 
 ### Fixed
 
