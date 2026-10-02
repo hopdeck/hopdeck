@@ -165,6 +165,12 @@
   margin-bottom: 8px;
 }
 
+/* What a <details> holds: not every browser lays out <details> itself as a grid. */
+.body {
+  display: grid;
+  gap: 8px;
+}
+
 .choices {
   display: grid;
   gap: 4px;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import { HISTORY_MAX_BYTES, RSA_BITS, validMaxBytes, type Family, type TableChange, type TraceFilter } from '@hopdeck/core';
+import { HISTORY_MAX_BYTES, RSA_BITS, validMaxBytes, type Family, type KeyUse, type TableChange, type TraceFilter } from '@hopdeck/core';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HostError } from './hosts/errors.ts';
 import { HostStateError, InvalidHostError, type HostManager } from './hosts/manager.ts';
@@ -249,8 +249,7 @@ const ROUTES: Route[] = [
       if (type !== 'ed25519' && type !== 'rsa') throw new ApiError(400, 'invalid-body', 'type must be "ed25519" or "rsa"');
       const bits = body['bits'];
       if (type === 'rsa' && !(RSA_BITS as readonly unknown[]).includes(bits)) throw new ApiError(400, 'invalid-body', `bits must be ${RSA_BITS.join(', ')} for RSA`);
-      const use = body['use'];
-      if (use !== 'hopdeck' && use !== 'config') throw new ApiError(400, 'invalid-body', 'use must be "hopdeck" or "config"');
+      const use = keyUse(body['use']);
       const seconds = lifetime(body['seconds']);
       const spec = {
         type,
@@ -261,6 +260,23 @@ const ROUTES: Route[] = [
         passphrase: optionalString(body, 'passphrase', 1024) ?? '',
       } as const;
       return { body: found(await ctx.hosts.generateKey(id!, spec, use, seconds)) };
+    },
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/ssh-keys$/,
+    async handle(_req, _params, ctx) {
+      return { body: await ctx.hosts.availableKeys() };
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/hosts\/([^/]+)\/ssh-keys\/use$/,
+    async handle(req, [id], ctx) {
+      const body = asObject(await readJson(req));
+      const file = requiredString(body, 'file', 4096);
+      const use = keyUse(body['use']);
+      return { body: found(await ctx.hosts.useKey(id!, file, use)) };
     },
   },
   {
@@ -437,6 +453,12 @@ function lifetime(seconds: unknown): number | undefined {
   if (seconds === null) return undefined;
   if (typeof seconds === 'number' && Number.isInteger(seconds) && seconds > 0 && seconds <= MAX_KEY_LIFETIME) return seconds;
   throw new ApiError(400, 'invalid-body', `seconds must be null or a whole number from 1 to ${MAX_KEY_LIFETIME}`);
+}
+
+/** How ssh is to offer a host its key: hopdeck adds it, or ~/.ssh/config names it. */
+function keyUse(use: unknown): KeyUse {
+  if (use === 'hopdeck' || use === 'config') return use;
+  throw new ApiError(400, 'invalid-body', 'use must be "hopdeck" or "config"');
 }
 
 function asObject(value: unknown): Record<string, unknown> {

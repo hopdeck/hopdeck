@@ -21,11 +21,19 @@
   key for its host, or adds it to `~/.ssh/config` (keeping a copy of the file
   as it was); with a passphrase it goes to the agent at once, and the key
   setup below puts it on the host.
-- `HOPDECK_SSH_DIR` puts generated keys elsewhere than `~/.ssh`.
+- A key already in `~/.ssh` can be given to a host instead of a new one,
+  kept by hopdeck or added to `~/.ssh/config` in the same way; the panel
+  lists the private keys there that ssh does not offer the host yet.
+- `HOPDECK_SSH_DIR` puts generated keys elsewhere than `~/.ssh`, and is
+  where hopdeck looks for existing ones.
+- Password fields can show what they hold, and say when Caps Lock is on or
+  the value begins or ends with a space.
 
 ### Fixed
 
 - A key the agent refused was reported as a wrong passphrase.
+- A key unlocked for a host that still refused the login went on showing as
+  needing its passphrase.
 
 ## 0.1.1 (2026-09-28)
 

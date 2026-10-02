@@ -135,9 +135,19 @@ export const RSA_BITS = [2048, 3072, 4096] as const;
 /** Where a new key is used for its host: hopdeck adds it itself, or ~/.ssh/config names it. */
 export type KeyUse = 'hopdeck' | 'config';
 
-/** A key hopdeck generated. */
-export interface GeneratedKey {
+/** A private key in ~/.ssh, which hopdeck can make ssh offer a host. */
+export type AvailableKey = Omit<SshKeyInfo, 'loaded'>;
+
+/** A key ssh now offers a host, and how. */
+export interface UsedKey {
   file: string;
+  use: KeyUse;
+  /** For "config": the file the Host block went into, and the copy of it as it was. */
+  config?: { file: string; backup?: string; block: string };
+}
+
+/** A key hopdeck generated. */
+export interface GeneratedKey extends UsedKey {
   /** e.g. "ED25519", as ssh-keygen -l prints it. */
   type: string;
   fingerprint: string;
@@ -145,9 +155,6 @@ export interface GeneratedKey {
   /** The public half, one authorized_keys line. */
   publicKey: string;
   encrypted: boolean;
-  use: KeyUse;
-  /** For "config": the file the Host block went into, and the copy of it as it was. */
-  config?: { file: string; backup?: string; block: string };
 }
 
 /** The live ruleset as nft prints it; the UI parses it with parseRuleset() and parseListing(). */

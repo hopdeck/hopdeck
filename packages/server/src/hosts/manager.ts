@@ -6,6 +6,7 @@ import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises
 import { homedir, hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 import type {
+  AvailableKey,
   DeploymentView,
   HistoryState,
   HistoryVersionDetail,
@@ -28,6 +29,7 @@ import type {
   LiveState,
   TraceFilter,
   TraceView,
+  UsedKey,
 } from '@hopdeck/core';
 import { cpuPercent, liveState, parseUsage, platform, USAGE_COMMAND, type CpuSample, type HostUsage } from '@hopdeck/core';
 import { HostError } from './errors.ts';
@@ -438,14 +440,36 @@ export class HostManager {
     const destination = this.#destination(entry);
     const comment = spec.comment.trim() || `${userInfo().username}@${hostname()}`;
     const made = await this.#sshKeys.generate({ ...spec, comment });
-    let config: GeneratedKey['config'];
-    if (use === 'hopdeck') {
-      await this.#rememberKey(entry, made.file);
-    } else {
-      config = await addIdentityToConfig({ configFile: this.#options.sshConfigFile ?? join(homedir(), '.ssh', 'config'), destination, identityFile: made.file });
-    }
+    const used = await this.#offerKey(entry, destination, made.file, use);
     if (spec.passphrase !== '') await this.#sshKeys.unlock(this.#sshTarget(entry), made.file, spec.passphrase, seconds);
-    return { key: { ...made, use, ...(config !== undefined && { config }) }, keys: await this.#sshKeys.list(this.#sshTarget(entry)) };
+    return { key: { ...made, ...used }, keys: await this.#sshKeys.list(this.#sshTarget(entry)) };
+  }
+
+  /** The private keys in ~/.ssh (or HOPDECK_SSH_DIR), which a host can be given instead of a new one. */
+  async availableKeys(): Promise<{ dir: string; keys: AvailableKey[] }> {
+    return { dir: this.#sshKeys.sshDir, keys: await this.#sshKeys.available() };
+  }
+
+  /** Makes ssh offer an SSH host one of the keys availableKeys() lists, as generateKey() does a new one. */
+  async useKey(id: string, file: string, use: KeyUse): Promise<{ used: UsedKey; keys: SshKeysView } | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    const destination = this.#destination(entry);
+    if (!(await this.#sshKeys.available()).some((key) => key.file === file)) {
+      throw new HostError('command-failed', `${file} is not a private key in ${this.#sshKeys.sshDir}`);
+    }
+    const used = await this.#offerKey(entry, destination, file, use);
+    return { used, keys: await this.#sshKeys.list(this.#sshTarget(entry)) };
+  }
+
+  /** Makes ssh offer the host the key: hopdeck adds it itself (hosts.json, ssh -i), or a Host block in ~/.ssh/config names it. */
+  async #offerKey(entry: Entry, destination: string, file: string, use: KeyUse): Promise<UsedKey> {
+    if (use === 'hopdeck') {
+      await this.#rememberKey(entry, file);
+      return { file, use };
+    }
+    const config = await addIdentityToConfig({ configFile: this.#options.sshConfigFile ?? join(homedir(), '.ssh', 'config'), destination, identityFile: file });
+    return { file, use, config };
   }
 
   /** Stops adding the key hopdeck remembers for an SSH host; ~/.ssh/config decides alone again. */

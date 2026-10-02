@@ -3,7 +3,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -103,6 +103,25 @@ describe('SshKeys with hopdeck\'s own agent', () => {
     for (const name of ['../escape', '.hidden', 'key.pub', 'a b', '']) {
       await expect(keys.generate({ type: 'ed25519', name, comment: '', passphrase: '' }), name).rejects.toThrow(/name/);
     }
+  });
+
+  it('lists the private keys in its ssh directory, and nothing else there', async () => {
+    const listed = join(dir, 'listed');
+    await mkdir(join(listed, 'subdir'), { recursive: true });
+    execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', 'a passphrase', '-C', 'new format', '-f', join(listed, 'id_ed25519')]);
+    execFileSync('ssh-keygen', ['-q', '-t', 'rsa', '-b', '2048', '-m', 'PEM', '-N', '', '-C', 'pem format', '-f', join(listed, 'legacy_rsa')]);
+    // A key without its .pub file still shows its public half.
+    await rm(join(listed, 'legacy_rsa.pub'));
+    await writeFile(join(listed, 'config'), 'Host *\n');
+    await writeFile(join(listed, 'known_hosts'), 'fw1 ssh-ed25519 AAAA\n');
+    await writeFile(join(listed, 'notes'), `-----BEGIN NOTHING-----\n${'x'.repeat(100_000)}\n`);
+    const available = await new SshKeys({ runtimeDir: dir, sessionAgent: false, sshDir: listed }).available();
+    expect(available.map(({ file, type, comment, encrypted }) => ({ file, type, comment, encrypted }))).toEqual([
+      { file: join(listed, 'id_ed25519'), type: 'ED25519', comment: 'new format', encrypted: true },
+      { file: join(listed, 'legacy_rsa'), type: 'RSA', comment: '', encrypted: false },
+    ]);
+    expect(available.every((key) => key.fingerprint.startsWith('SHA256:'))).toBe(true);
+    expect(await new SshKeys({ runtimeDir: dir, sshDir: join(dir, 'nowhere') }).available()).toEqual([]);
   });
 
   it('offers the key hopdeck keeps for a host besides those ssh config names', async () => {

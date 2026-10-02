@@ -92,8 +92,13 @@
 
 .passwordForm {
   display: flex;
+  align-items: start;
   gap: 8px;
   max-width: 420px;
+}
+
+.passwordField {
+  flex: 1;
 }
 
 .error {

@@ -129,6 +129,23 @@ describe('HostManager', () => {
       expect(named?.key).toMatchObject({ use: 'config', config: { file: sshConfig } });
       expect(await readFile(sshConfig, 'utf8')).toContain(`Host fw1\n    IdentityFile ${join(keysDir, 'ssh', 'id_fw1_rsa')}\n`);
       expect(named?.keys.keys.map((key) => key.file)).toContain(join(keysDir, 'ssh', 'id_fw1_rsa'));
+
+      // A second host gets a key already made, instead of a new one.
+      const { id: other } = await hosts.add({ destination: 'fw2' });
+      const available = await hosts.availableKeys();
+      expect(available).toMatchObject({ dir: join(keysDir, 'ssh') });
+      expect(available.keys.map((key) => key.file)).toEqual([file, join(keysDir, 'ssh', 'id_fw1_rsa')]);
+      const used = await hosts.useKey(other, file, 'hopdeck');
+      expect(used?.used).toEqual({ file, use: 'hopdeck' });
+      expect(used?.keys).toMatchObject({ remembered: file });
+      expect(made.at(-1)).toEqual({ destination: 'fw2', identityFile: file });
+      const config = await hosts.useKey(other, join(keysDir, 'ssh', 'id_fw1_rsa'), 'config');
+      expect(config?.used).toMatchObject({ use: 'config', config: { file: sshConfig } });
+      expect(await readFile(sshConfig, 'utf8')).toContain(`Host fw2\n    IdentityFile ${join(keysDir, 'ssh', 'id_fw1_rsa')}\n`);
+      // Only a key from that list: not any file hopdeck can read.
+      for (const notKey of [sshConfig, `${file}.pub`, `${keysDir}/ssh/../ssh/id_fw1`]) {
+        await expect(hosts.useKey(other, notKey, 'hopdeck'), notKey).rejects.toThrow(/is not a private key in/);
+      }
     } finally {
       await keys.close();
       await rm(keysDir, { recursive: true, force: true });

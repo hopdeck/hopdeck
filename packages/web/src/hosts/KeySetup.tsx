@@ -6,6 +6,7 @@ import { useState, type FormEvent } from 'react';
 import { api } from '../api.ts';
 import { Callout } from '../components/Callout.tsx';
 import { ErrorCallout, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
+import { PasswordField } from '../components/PasswordField.tsx';
 import { AlertIcon, CheckIcon, InfoIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import type { MessageKey } from '../i18n/locales.ts';
@@ -39,9 +40,22 @@ const CHECK_COMMAND = "sshd -T | grep -iE '^(pubkeyauthentication|authentication
  * working. The password stays in this form until the key works, for that
  * second step, and goes to hopdeck only for those logins.
  */
-export function KeySetup({ path, keys, user, onWorks }: { path: string; keys: SshKeyInfo[]; user?: string | undefined; onWorks(): void }) {
+export function KeySetup({
+  path,
+  keys,
+  chosen,
+  user,
+  onWorks,
+}: {
+  path: string;
+  keys: SshKeyInfo[];
+  /** The key to start with, such as one just generated; the first otherwise. */
+  chosen?: string | undefined;
+  user?: string | undefined;
+  onWorks(): void;
+}) {
   const { t } = useI18n();
-  const [file, setFile] = useState(keys[0]?.file ?? '');
+  const [file, setFile] = useState(keys.find((key) => key.file === chosen)?.file ?? keys[0]?.file ?? '');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState<'setup' | 'allow'>();
   const [result, setResult] = useState<KeySetupResult>();
@@ -86,11 +100,15 @@ export function KeySetup({ path, keys, user, onWorks }: { path: string; keys: Ss
             ))}
           </select>
         </label>
-        <label className={styles.field}>
-          <span>{user === undefined ? t('keySetup.password') : t('keySetup.passwordOf', { user })}</span>
-          {/* "new-password": browsers fill "off" fields with saved passwords anyway, such as a key's passphrase. */}
-          <input className="input" type="password" autoComplete="new-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
-        </label>
+        {/* "new-password": browsers fill "off" fields with saved passwords anyway, such as a key's passphrase. */}
+        <PasswordField
+          className={styles.field}
+          label={user === undefined ? t('keySetup.password') : t('keySetup.passwordOf', { user })}
+          autoComplete="new-password"
+          required
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
         <button type="submit" className="btn" disabled={busy !== undefined || password === '' || file === ''}>
           {busy === 'setup' && <span className="spinner" aria-hidden="true" />}
           {t('keySetup.run')}

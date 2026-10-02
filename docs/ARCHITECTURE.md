@@ -149,6 +149,14 @@ host, the file is put back. A key with a passphrase goes to the agent at
 once. FIDO keys (`ed25519-sk`) are not generated yet: they want a touch, and
 often a PIN, while ssh-keygen runs.
 
+**Existing keys** (`SshKeys.available()`). One key can open any number of
+hosts, so a host can be given a key already in `~/.ssh` (or
+`HOPDECK_SSH_DIR`) instead of a new one, in either of the two ways above.
+The panel lists the files there that begin as an OpenSSH or PEM private key
+does, with what `ssh-keygen -l` says of their public half, and leaves out
+those ssh offers the host already. Only a file from that list is accepted,
+so the API names no other file for hopdeck to hand to ssh.
+
 **Putting a key on a host** (`hosts/key-login.ts`). For a host that has no
 key yet, the panel asks for the account's password once. hopdeck logs in with
 it alone (`PubkeyAuthentication=no`, one prompt, the same one-shot askpass,

@@ -5,8 +5,10 @@ import type { SshKeyInfo, SshKeysView } from '@hopdeck/core';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api.ts';
 import { ErrorCallout, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
+import { PasswordField } from '../components/PasswordField.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import type { MessageKey } from '../i18n/locales.ts';
+import { KeyExisting } from './KeyExisting.tsx';
 import { KeyGenerate } from './KeyGenerate.tsx';
 import { KeySetup } from './KeySetup.tsx';
 import styles from './SshKeyPanel.module.css';
@@ -44,11 +46,14 @@ export function storedLifetime(): string {
  * The private keys ssh offers an SSH host that refused the login, and a way to
  * unlock one: its passphrase goes to ssh-add once, and the agent keeps the key
  * for as long as the user chose. hopdeck keeps the passphrase nowhere. Below
- * them, a way to put a key on the host.
+ * them, ways to give the host another key, one already in ~/.ssh or a new
+ * one, and to put a key on the host.
  */
 export function SshKeyPanel({ hostId, destination, onUnlocked }: { hostId: string; destination: string; onUnlocked(): void }) {
   const { t } = useI18n();
   const [view, setView] = useState<SshKeysView>();
+  // The key last generated or chosen here, which the key setup then puts on the host.
+  const [latest, setLatest] = useState<string>();
   const [error, setError] = useState<ErrorInfo>();
   const path = `/hosts/${encodeURIComponent(hostId)}/ssh-keys`;
 
@@ -74,6 +79,11 @@ export function SshKeyPanel({ hostId, destination, onUnlocked }: { hostId: strin
     }
   }
 
+  function offer(next: SshKeysView, file: string) {
+    setView(next);
+    setLatest(file);
+  }
+
   if (view === undefined) return error === undefined ? null : <ErrorCallout error={error} />;
   const locked = view.keys.filter((key) => key.encrypted && !key.loaded);
 
@@ -89,7 +99,17 @@ export function SshKeyPanel({ hostId, destination, onUnlocked }: { hostId: strin
           <p className={styles.text}>{t(locked.length > 0 ? 'sshKeys.intro' : 'sshKeys.allOpen')}</p>
           <ul className={styles.keys}>
             {view.keys.map((key) => (
-              <Key key={key.file} sshKey={key} view={view} path={path} onUnlocked={onUnlocked} />
+              <Key
+                key={key.file}
+                sshKey={key}
+                view={view}
+                path={path}
+                onUnlocked={(next) => {
+                  // In the agent now, whether or not the host takes the key.
+                  setView(next);
+                  onUnlocked();
+                }}
+              />
             ))}
           </ul>
           {view.agent === 'none' ? (
@@ -110,14 +130,15 @@ export function SshKeyPanel({ hostId, destination, onUnlocked }: { hostId: strin
           )}
         </>
       )}
-      <KeyGenerate path={path} agent={view.agent} destination={destination} onGenerated={setView} />
-      {view.keys.length > 0 && <KeySetup path={path} keys={view.keys} user={view.user} onWorks={onUnlocked} />}
+      <KeyExisting path={path} offered={view.keys.map((key) => key.file)} destination={destination} onUsed={offer} onConnect={onUnlocked} />
+      <KeyGenerate path={path} agent={view.agent} destination={destination} onGenerated={offer} />
+      {view.keys.length > 0 && <KeySetup key={latest} path={path} keys={view.keys} chosen={latest} user={view.user} onWorks={onUnlocked} />}
       {error !== undefined && <ErrorCallout error={error} />}
     </section>
   );
 }
 
-function Key({ sshKey, view, path, onUnlocked }: { sshKey: SshKeyInfo; view: SshKeysView; path: string; onUnlocked(): void }) {
+function Key({ sshKey, view, path, onUnlocked }: { sshKey: SshKeyInfo; view: SshKeysView; path: string; onUnlocked(view: SshKeysView): void }) {
   const { t } = useI18n();
   const [passphrase, setPassphrase] = useState('');
   const [lifetime, setLifetime] = useState(storedLifetime);
@@ -135,13 +156,13 @@ function Key({ sshKey, view, path, onUnlocked }: { sshKey: SshKeyInfo; view: Ssh
       // Remembered or not, the choice applies now.
     }
     try {
-      await api.post<{ keys: SshKeysView }>(`${path}/unlock`, {
+      const { keys } = await api.post<{ keys: SshKeysView }>(`${path}/unlock`, {
         file: sshKey.file,
         passphrase,
         seconds: lifetime === 'none' ? null : Number(lifetime),
       });
       setPassphrase('');
-      onUnlocked();
+      onUnlocked(keys);
     } catch (caught) {
       setError(toErrorInfo(caught));
     } finally {
@@ -160,17 +181,14 @@ function Key({ sshKey, view, path, onUnlocked }: { sshKey: SshKeyInfo; view: Ssh
       </div>
       {sshKey.encrypted && !sshKey.loaded && view.agent !== 'none' && (
         <form className={styles.unlock} onSubmit={(event) => void unlock(event)}>
-          <label className={styles.field}>
-            <span>{t('sshKeys.passphrase')}</span>
-            <input
-              className="input"
-              type="password"
-              autoComplete="off"
-              required
-              value={passphrase}
-              onChange={(event) => setPassphrase(event.target.value)}
-            />
-          </label>
+          <PasswordField
+            className={styles.field}
+            label={t('sshKeys.passphrase')}
+            autoComplete="off"
+            required
+            value={passphrase}
+            onChange={(event) => setPassphrase(event.target.value)}
+          />
           <label className={styles.field}>
             <span>{t('sshKeys.lifetime')}</span>
             <select className="input" value={lifetime} onChange={(event) => setLifetime(event.target.value)}>

@@ -701,7 +701,7 @@
   "keySetup.allowed.reload-failed": "sshd would not reload, so hopdeck removed the file again:",
   "keySetup.allowed.unknown": "The lines were not applied:",
   "error.login-password-rejected.title": "The host did not take the password",
-  "error.login-password-rejected.hint": "The account's password on the host is asked for here, not the passphrase of the key; check it and the keyboard layout, and that the browser did not fill the field with a saved password. The host may also refuse passwords for this account only: sshd lets root log in with a key alone by default (PermitRootLogin prohibit-password).",
+  "error.login-password-rejected.hint": "The account's password on the host is asked for here, not the passphrase of the key; check it and the keyboard layout (the eye in the field shows what it holds), and that the browser did not fill the field with a saved password. The host may also refuse passwords for this account only: sshd lets root log in with a key alone by default (PermitRootLogin prohibit-password).",
   "error.password-login-disabled.title": "The host takes no passwords",
   "error.password-login-disabled.hint": "sshd accepts keys only (PasswordAuthentication no), so hopdeck cannot log in to put the key there. Add it to the account's ~/.ssh/authorized_keys another way, for example from your provider's console.",
   "clamp.more": "Show all",
@@ -740,5 +740,18 @@
   "keyGen.noPassphraseTitle": "Generate the key without a passphrase?",
   "keyGen.withoutPassphrase": "Generate without a passphrase",
   "keyGen.setPassphrase": "Set a passphrase",
-  "keySetup.passwordOf": "The password of {{user}} on the host"
+  "keySetup.passwordOf": "The password of {{user}} on the host",
+  "password.show": "Show the password",
+  "password.capsLock": "Caps Lock is on",
+  "password.spaceStart": "Begins with a space",
+  "password.spaceEnd": "Ends with a space",
+  "password.spaceBoth": "Begins and ends with a space",
+  "keyUse.title": "Use a key you already have",
+  "keyUse.intro": "Private keys in {{dir}} that ssh does not offer this host yet. One key can open any number of hosts, so there is no need for a new one each time.",
+  "keyUse.key": "Key",
+  "keyUse.submit": "Use it for this host",
+  "keyUse.done": "ssh now offers {{file}} to this host",
+  "keyUse.next": "If the key is on the host already, connect with it. If not, put it there below, with the account's password.",
+  "keyUse.nextLocked": "It needs its passphrase: unlock it in the list above. Then, if the key is not on the host yet, put it there below, with the account's password.",
+  "keyUse.connect": "Connect"
 }

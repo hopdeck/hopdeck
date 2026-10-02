@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import { RSA_BITS, type KeyType, type SshKeyInfo, type SshKeysView } from '@hopdeck/core';
+import { RSA_BITS, type AvailableKey, type KeyType, type SshKeyInfo, type SshKeysView } from '@hopdeck/core';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { isSea } from 'node:sea';
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { HostError } from './errors.ts';
@@ -136,6 +136,32 @@ export class SshKeys {
     };
   }
 
+  /** Where hopdeck generates keys and looks for them: ~/.ssh, or HOPDECK_SSH_DIR. */
+  get sshDir(): string {
+    return this.#options.sshDir ?? join(homedir(), '.ssh');
+  }
+
+  /**
+   * The private keys in ~/.ssh, by name: files that begin as an OpenSSH or
+   * PEM private key does. Only their public half is read.
+   */
+  async available(): Promise<AvailableKey[]> {
+    let names: string[];
+    try {
+      names = await readdir(this.sshDir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw error;
+    }
+    const keys: AvailableKey[] = [];
+    for (const name of names.sort()) {
+      const file = join(this.sshDir, name);
+      if (name.endsWith('.pub') || !(await isPrivateKey(file))) continue;
+      keys.push({ file, ...(await describe(file)) });
+    }
+    return keys;
+  }
+
   /**
    * Generates a key in ~/.ssh with ssh-keygen, never over an existing file.
    * The passphrase goes to ssh-keygen through askpass, which it asks twice
@@ -149,7 +175,7 @@ export class SshKeys {
       throw new HostError('command-failed', `an RSA key has ${RSA_BITS.join(', ')} bits, not ${spec.bits}`);
     }
     if (/[\r\n]/.test(spec.comment) || spec.comment.length > 200) throw new HostError('command-failed', 'a key\'s comment is one line of up to 200 characters');
-    const dir = this.#options.sshDir ?? join(homedir(), '.ssh');
+    const dir = this.sshDir;
     await mkdir(dir, { recursive: true, mode: 0o700 });
     const file = join(dir, spec.name);
     for (const taken of [file, `${file}.pub`]) {
@@ -315,6 +341,28 @@ async function reachable(socket: string | undefined): Promise<boolean> {
   // 0: keys, 1: no keys, 2: no agent there.
   const listed = await runProcess('ssh-add', ['-l'], { timeoutMs: 5_000, env: socket === undefined ? undefined : { SSH_AUTH_SOCK: socket } }).catch(() => undefined);
   return listed !== undefined && listed.exitCode !== 2;
+}
+
+/** How private keys begin: OpenSSH's own format, or PEM (RSA, EC, DSA, PKCS#8). */
+const PRIVATE_KEY_START = /^-----BEGIN (?:OPENSSH |RSA |EC |DSA |ENCRYPTED )?PRIVATE KEY-----/;
+
+/** Whether the file is a private key, by its first line; no key is anywhere near 64 KiB. */
+async function isPrivateKey(file: string): Promise<boolean> {
+  try {
+    const info = await stat(file);
+    if (!info.isFile() || info.size > 65_536) return false;
+    const handle = await open(file, 'r');
+    try {
+      const start = Buffer.alloc(64);
+      const { bytesRead } = await handle.read(start, 0, start.length, 0);
+      return PRIVATE_KEY_START.test(start.subarray(0, bytesRead).toString('latin1'));
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    // Unreadable, or gone since the listing: not a key hopdeck can offer.
+    return false;
+  }
 }
 
 /** A key's type, fingerprint and comment, and whether it needs a passphrase. */

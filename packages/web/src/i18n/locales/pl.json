@@ -749,7 +749,7 @@
   "keySetup.allowed.reload-failed": "Nie udało się przeładować sshd, więc hopdeck usunął plik:",
   "keySetup.allowed.unknown": "Linie nie zostały zastosowane:",
   "error.login-password-rejected.title": "Host nie przyjął hasła",
-  "error.login-password-rejected.hint": "Tu potrzebne jest hasło konta na hoście, a nie hasło klucza; sprawdź je i układ klawiatury, i czy przeglądarka nie wpisała w pole zapisanego hasła. Host może też nie przyjmować hasła tylko dla tego konta: sshd domyślnie wpuszcza roota wyłącznie kluczem (PermitRootLogin prohibit-password).",
+  "error.login-password-rejected.hint": "Tu potrzebne jest hasło konta na hoście, a nie hasło klucza; sprawdź je i układ klawiatury (oko w polu pokazuje, co w nim jest), i czy przeglądarka nie wpisała w pole zapisanego hasła. Host może też nie przyjmować hasła tylko dla tego konta: sshd domyślnie wpuszcza roota wyłącznie kluczem (PermitRootLogin prohibit-password).",
   "error.password-login-disabled.title": "Host nie przyjmuje haseł",
   "error.password-login-disabled.hint": "sshd przyjmuje tylko klucze (PasswordAuthentication no), więc hopdeck nie zaloguje się, żeby wgrać klucz. Dopisz go do ~/.ssh/authorized_keys konta inną drogą, np. z konsoli dostawcy serwera.",
   "clamp.more": "Pokaż całość",
@@ -788,5 +788,18 @@
   "keyGen.noPassphraseTitle": "Wygenerować klucz bez hasła?",
   "keyGen.withoutPassphrase": "Wygeneruj bez hasła",
   "keyGen.setPassphrase": "Ustaw hasło",
-  "keySetup.passwordOf": "Hasło konta {{user}} na hoście"
+  "keySetup.passwordOf": "Hasło konta {{user}} na hoście",
+  "password.show": "Pokaż hasło",
+  "password.capsLock": "Caps Lock jest włączony",
+  "password.spaceStart": "Zaczyna się spacją",
+  "password.spaceEnd": "Kończy się spacją",
+  "password.spaceBoth": "Zaczyna się i kończy spacją",
+  "keyUse.title": "Użyj klucza, który już masz",
+  "keyUse.intro": "Klucze prywatne z {{dir}}, których ssh jeszcze nie proponuje temu hostowi. Jeden klucz może otwierać dowolnie wiele hostów, więc nie trzeba za każdym razem generować nowego.",
+  "keyUse.key": "Klucz",
+  "keyUse.submit": "Użyj go dla tego hosta",
+  "keyUse.done": "ssh proponuje teraz {{file}} temu hostowi",
+  "keyUse.next": "Jeśli klucz już jest na hoście, połącz się nim. Jeśli nie, wgraj go poniżej, hasłem konta.",
+  "keyUse.nextLocked": "Klucz ma hasło: odblokuj go na liście powyżej. Potem, jeśli klucza nie ma jeszcze na hoście, wgraj go poniżej, hasłem konta.",
+  "keyUse.connect": "Połącz"
 }

@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import { ErrorBody, ErrorCallout, ErrorVarsProvider, errorTitle, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
 import { AlertIcon, CheckIcon, HostKindIcon, LockIcon, RefreshIcon, SandboxIcon, TrashIcon } from '../components/icons.tsx';
+import { PasswordField } from '../components/PasswordField.tsx';
 import { Tabs } from '../components/Tabs.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import type { MessageKey } from '../i18n/locales.ts';
@@ -486,14 +487,12 @@ function PasswordPrompt({ onUnlock }: { onUnlock: HostViewProps['onUnlock'] }) {
     <Callout tone="warn" icon={<LockIcon />} title={t('access.passwordTitle')}>
       <p>{t('access.passwordHint')}</p>
       <form className={styles.passwordForm} onSubmit={submit}>
-        <label className="visually-hidden" htmlFor="sudo-password">
-          {t('access.passwordLabel')}
-        </label>
-        <input
-          id="sudo-password"
+        <PasswordField
+          className={styles.passwordField}
+          wide
+          hiddenLabel
+          label={t('access.passwordLabel')}
           name="password"
-          type="password"
-          className="input"
           placeholder={t('access.passwordLabel')}
           autoComplete="off"
           required
