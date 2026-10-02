@@ -122,7 +122,7 @@ export class SshKeys {
 
   /** The keys ssh would offer the host, with what they need. */
   async list(target: SshTarget): Promise<SshKeysView> {
-    const files = await this.#identityFiles(target);
+    const { files, user } = await this.#effective(target);
     const loaded = this.#kind === 'none' ? new Set<string>() : await this.#loaded();
     const keys: SshKeyInfo[] = [];
     for (const file of files) keys.push({ file, ...(await describe(file)), loaded: false });
@@ -132,6 +132,7 @@ export class SshKeys {
       ...(this.#unavailable !== undefined && { agentError: this.#unavailable }),
       keys,
       ...(target.identityFile !== undefined && { remembered: target.identityFile }),
+      ...(user !== undefined && { user }),
     };
   }
 
@@ -273,21 +274,28 @@ export class SshKeys {
 
   /** IdentityFile values ssh uses for the host (ssh -G), with hopdeck's own (-i) first, those that exist. */
   async #identityFiles(target: SshTarget): Promise<string[]> {
+    return (await this.#effective(target)).files;
+  }
+
+  /** What ssh -G says of the host: its key files that exist, and the account it logs in as. */
+  async #effective(target: SshTarget): Promise<{ files: string[]; user: string | undefined }> {
     const config = this.#options.configFile === undefined ? [] : ['-F', this.#options.configFile];
     const extra = target.identityFile === undefined ? [] : ['-i', target.identityFile];
     const shown = await runProcess('ssh', [...config, ...extra, '-G', '--', target.destination], { timeoutMs: 10_000 });
     if (shown.exitCode !== 0) throw new HostError('command-failed', shown.stderr.trim() || `ssh -G exited with code ${shown.exitCode}`);
-    const files = shown.stdout
-      .split('\n')
-      .filter((line) => line.startsWith('identityfile '))
-      .map((line) => expandHome(line.slice('identityfile '.length).trim()));
-    return [...new Set(files)].filter((file) => {
-      try {
-        return statSync(file).isFile();
-      } catch {
-        return false;
-      }
-    });
+    const lines = shown.stdout.split('\n');
+    const files = lines.filter((line) => line.startsWith('identityfile ')).map((line) => expandHome(line.slice('identityfile '.length).trim()));
+    const user = lines.find((line) => line.startsWith('user '))?.slice('user '.length).trim();
+    return {
+      files: [...new Set(files)].filter((file) => {
+        try {
+          return statSync(file).isFile();
+        } catch {
+          return false;
+        }
+      }),
+      user,
+    };
   }
 
   /** Fingerprints of the keys in the agent. */

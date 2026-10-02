@@ -190,3 +190,9 @@
   color: var(--warn);
   font-size: var(--text-sm);
 }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

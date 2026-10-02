@@ -6,7 +6,7 @@ import { useState, type FormEvent } from 'react';
 import { api } from '../api.ts';
 import { Callout } from '../components/Callout.tsx';
 import { ErrorCallout, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
-import { CheckIcon } from '../components/icons.tsx';
+import { AlertIcon, CheckIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import { LIFETIME_KEY, LIFETIMES, storedLifetime } from './SshKeyPanel.tsx';
 import styles from './SshKeyPanel.module.css';
@@ -47,14 +47,21 @@ export function KeyGenerate({ path, agent, destination, onGenerated }: KeyGenera
   const [use, setUse] = useState<KeyUse>('hopdeck');
   const [lifetime, setLifetime] = useState(storedLifetime);
   const [busy, setBusy] = useState(false);
+  // A key without a passphrase is made only once that is confirmed.
+  const [askingEmpty, setAskingEmpty] = useState(false);
   const [error, setError] = useState<ErrorInfo>();
   const [made, setMade] = useState<GeneratedKey>();
   const chosen = KINDS.find((option) => option.value === kind)!;
   const mismatch = passphrase !== repeat;
 
-  async function generate(event: FormEvent) {
+  async function generate(event: FormEvent, withoutPassphrase = false) {
     event.preventDefault();
     if (mismatch || name === '') return;
+    if (passphrase === '' && !withoutPassphrase) {
+      setAskingEmpty(true);
+      return;
+    }
+    setAskingEmpty(false);
     setBusy(true);
     setError(undefined);
     try {
@@ -129,7 +136,16 @@ export function KeyGenerate({ path, agent, destination, onGenerated }: KeyGenera
         </label>
         <label className={styles.field}>
           <span>{t('keyGen.passphrase')}</span>
-          <input className="input" type="password" autoComplete="new-password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} />
+          <input
+            className="input"
+            type="password"
+            autoComplete="new-password"
+            value={passphrase}
+            onChange={(event) => {
+              setPassphrase(event.target.value);
+              setAskingEmpty(false);
+            }}
+          />
         </label>
         <label className={styles.field}>
           <span>{t('keyGen.repeat')}</span>
@@ -151,8 +167,7 @@ export function KeyGenerate({ path, agent, destination, onGenerated }: KeyGenera
         )}
       </form>
       {mismatch && repeat !== '' && <p className={styles.warning}>{t('keyGen.mismatch')}</p>}
-      {/* Emptied after a key was made: no warning about that one. */}
-      {passphrase === '' && made === undefined && <p className={styles.warning}>{t('keyGen.noPassphrase')}</p>}
+
       <fieldset className={styles.choices}>
         <legend className={styles.text}>{t('keyGen.use')}</legend>
         {(['hopdeck', 'config'] as const).map((option) => (
@@ -163,11 +178,25 @@ export function KeyGenerate({ path, agent, destination, onGenerated }: KeyGenera
         ))}
       </fieldset>
       <div>
-        <button type="button" className="btn btn-primary" disabled={busy || mismatch || name === ''} onClick={(event) => void generate(event)}>
+        <button type="button" className="btn btn-primary" disabled={busy || mismatch || name === '' || askingEmpty} onClick={(event) => void generate(event)}>
           {busy && <span className="spinner" aria-hidden="true" />}
           {t('keyGen.generate')}
         </button>
       </div>
+      {askingEmpty && (
+        <Callout tone="warn" icon={<AlertIcon />} title={t('keyGen.noPassphraseTitle')} role="alert">
+          <p>{t('keyGen.noPassphrase')}</p>
+          <div className={styles.actions}>
+            <button type="button" className="btn btn-danger-solid" disabled={busy} onClick={(event) => void generate(event, true)}>
+              {busy && <span className="spinner" aria-hidden="true" />}
+              {t('keyGen.withoutPassphrase')}
+            </button>
+            <button type="button" className="btn" onClick={() => setAskingEmpty(false)}>
+              {t('keyGen.setPassphrase')}
+            </button>
+          </div>
+        </Callout>
+      )}
       {made !== undefined && (
         <Callout tone="ok" icon={<CheckIcon />} title={t('keyGen.done', { file: made.file })} role="status">
           <p className="mono">

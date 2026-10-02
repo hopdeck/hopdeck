@@ -39,7 +39,7 @@ const CHECK_COMMAND = "sshd -T | grep -iE '^(pubkeyauthentication|authentication
  * working. The password stays in this form until the key works, for that
  * second step, and goes to hopdeck only for those logins.
  */
-export function KeySetup({ path, keys, onWorks }: { path: string; keys: SshKeyInfo[]; onWorks(): void }) {
+export function KeySetup({ path, keys, user, onWorks }: { path: string; keys: SshKeyInfo[]; user?: string | undefined; onWorks(): void }) {
   const { t } = useI18n();
   const [file, setFile] = useState(keys[0]?.file ?? '');
   const [password, setPassword] = useState('');
@@ -87,8 +87,9 @@ export function KeySetup({ path, keys, onWorks }: { path: string; keys: SshKeyIn
           </select>
         </label>
         <label className={styles.field}>
-          <span>{t('keySetup.password')}</span>
-          <input className="input" type="password" autoComplete="off" required value={password} onChange={(event) => setPassword(event.target.value)} />
+          <span>{user === undefined ? t('keySetup.password') : t('keySetup.passwordOf', { user })}</span>
+          {/* "new-password": browsers fill "off" fields with saved passwords anyway, such as a key's passphrase. */}
+          <input className="input" type="password" autoComplete="new-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
         </label>
         <button type="submit" className="btn" disabled={busy !== undefined || password === '' || file === ''}>
           {busy === 'setup' && <span className="spinner" aria-hidden="true" />}

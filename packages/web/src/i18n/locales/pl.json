@@ -689,7 +689,7 @@
   "usage.stale": "Nie odświeżono",
   "sshKeys.title": "Klucze SSH dla tego hosta",
   "sshKeys.intro": "Te klucze ssh proponuje hostowi. Klucz z hasłem potrzebuje go raz: potem agent trzyma go odblokowanym tak długo, jak wybierzesz. hopdeck nigdzie nie zachowuje hasła.",
-  "sshKeys.allOpen": "Te klucze ssh proponuje hostowi i żaden nie wymaga hasła, więc host nie przyjmuje żadnego z nich. Wgraj któryś na hosta poniżej albo sprawdź użytkownika w konfiguracji SSH.",
+  "sshKeys.allOpen": "Te klucze ssh proponuje hostowi i żaden nie jest zablokowany (każdy jest bez hasła albo odblokowany w agencie), a mimo to host nie przyjmuje żadnego z nich. Wgraj któryś na hosta poniżej albo sprawdź użytkownika w konfiguracji SSH.",
   "sshKeys.none": "Twoja konfiguracja SSH nie wskazuje dla tego hosta żadnego klucza, który istnieje na tym komputerze (ssh -G pokazuje, które pliki ssh próbuje).",
   "sshKeys.state.locked": "wymaga hasła",
   "sshKeys.state.loaded": "w agencie",
@@ -749,7 +749,7 @@
   "keySetup.allowed.reload-failed": "Nie udało się przeładować sshd, więc hopdeck usunął plik:",
   "keySetup.allowed.unknown": "Linie nie zostały zastosowane:",
   "error.login-password-rejected.title": "Host nie przyjął hasła",
-  "error.login-password-rejected.hint": "Sprawdź hasło i układ klawiatury. Host może też nie przyjmować hasła tylko dla tego konta: sshd domyślnie wpuszcza roota wyłącznie kluczem (PermitRootLogin prohibit-password).",
+  "error.login-password-rejected.hint": "Tu potrzebne jest hasło konta na hoście, a nie hasło klucza; sprawdź je i układ klawiatury, i czy przeglądarka nie wpisała w pole zapisanego hasła. Host może też nie przyjmować hasła tylko dla tego konta: sshd domyślnie wpuszcza roota wyłącznie kluczem (PermitRootLogin prohibit-password).",
   "error.password-login-disabled.title": "Host nie przyjmuje haseł",
   "error.password-login-disabled.hint": "sshd przyjmuje tylko klucze (PasswordAuthentication no), więc hopdeck nie zaloguje się, żeby wgrać klucz. Dopisz go do ~/.ssh/authorized_keys konta inną drogą, np. z konsoli dostawcy serwera.",
   "clamp.more": "Pokaż całość",
@@ -770,7 +770,7 @@
   "keyGen.passphrase": "Hasło klucza",
   "keyGen.repeat": "Hasło ponownie",
   "keyGen.mismatch": "Hasła się różnią.",
-  "keyGen.noPassphrase": "Bez hasła każdy, kto zdobędzie plik, może użyć klucza.",
+  "keyGen.noPassphrase": "Bez hasła każdy, kto zdobędzie plik klucza, zaloguje się nim wszędzie, gdzie go wgrasz, i nic go nie zatrzyma. Z hasłem sam plik nie wystarczy, a agent i tak oszczędzi ci wpisywania go za każdym razem.",
   "keyGen.use": "Użyj go dla tego hosta:",
   "keyGen.use.hopdeck": "hopdeck go proponuje i sam to pamięta; ~/.ssh/config zostaje bez zmian",
   "keyGen.use.config": "dopisz go do ~/.ssh/config, żeby proponował go też ssh w terminalu",
@@ -784,5 +784,9 @@
   "sshKeys.remembered": "hopdeck proponuje temu hostowi także {{file}} (pamięta to hopdeck, nie ~/.ssh/config).",
   "sshKeys.forget": "Przestań proponować",
   "error.key-exists.title": "Plik o tej nazwie już istnieje",
-  "error.key-exists.hint": "hopdeck nigdy nie nadpisuje klucza. Wybierz inną nazwę."
+  "error.key-exists.hint": "hopdeck nigdy nie nadpisuje klucza. Wybierz inną nazwę.",
+  "keyGen.noPassphraseTitle": "Wygenerować klucz bez hasła?",
+  "keyGen.withoutPassphrase": "Wygeneruj bez hasła",
+  "keyGen.setPassphrase": "Ustaw hasło",
+  "keySetup.passwordOf": "Hasło konta {{user}} na hoście"
 }

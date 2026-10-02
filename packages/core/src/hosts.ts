@@ -124,6 +124,8 @@ export interface SshKeysView {
   keys: SshKeyInfo[];
   /** The key hopdeck itself adds for this host (ssh -i), apart from ~/.ssh/config. */
   remembered?: string;
+  /** The account ssh logs in as there (ssh -G). */
+  user?: string;
 }
 
 /** Key types hopdeck generates: Ed25519, or RSA of at least 2048 bits. */

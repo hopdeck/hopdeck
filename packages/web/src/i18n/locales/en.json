@@ -641,7 +641,7 @@
   "usage.stale": "Not updated",
   "sshKeys.title": "SSH keys for this host",
   "sshKeys.intro": "ssh offers these keys to the host. A key with a passphrase needs it once: the agent then keeps the key unlocked for as long as you choose. hopdeck keeps the passphrase nowhere.",
-  "sshKeys.allOpen": "ssh offers these keys to the host, and none needs a passphrase, so the host accepts none of them. Put one on the host below, or check the user in your SSH configuration.",
+  "sshKeys.allOpen": "ssh offers these keys to the host, and none is locked (each has no passphrase, or is unlocked in the agent), yet the host accepts none of them. Put one on the host below, or check the user in your SSH configuration.",
   "sshKeys.none": "Your SSH configuration names no key for this host that exists on this computer (ssh -G shows which files ssh tries).",
   "sshKeys.state.locked": "needs its passphrase",
   "sshKeys.state.loaded": "in the agent",
@@ -701,7 +701,7 @@
   "keySetup.allowed.reload-failed": "sshd would not reload, so hopdeck removed the file again:",
   "keySetup.allowed.unknown": "The lines were not applied:",
   "error.login-password-rejected.title": "The host did not take the password",
-  "error.login-password-rejected.hint": "Check the password and the keyboard layout. The host may also refuse passwords for this account only: sshd lets root log in with a key alone by default (PermitRootLogin prohibit-password).",
+  "error.login-password-rejected.hint": "The account's password on the host is asked for here, not the passphrase of the key; check it and the keyboard layout, and that the browser did not fill the field with a saved password. The host may also refuse passwords for this account only: sshd lets root log in with a key alone by default (PermitRootLogin prohibit-password).",
   "error.password-login-disabled.title": "The host takes no passwords",
   "error.password-login-disabled.hint": "sshd accepts keys only (PasswordAuthentication no), so hopdeck cannot log in to put the key there. Add it to the account's ~/.ssh/authorized_keys another way, for example from your provider's console.",
   "clamp.more": "Show all",
@@ -722,7 +722,7 @@
   "keyGen.passphrase": "Passphrase",
   "keyGen.repeat": "Passphrase again",
   "keyGen.mismatch": "The passphrases differ.",
-  "keyGen.noPassphrase": "Without a passphrase, anyone who gets the file can use the key.",
+  "keyGen.noPassphrase": "Without a passphrase, anyone who gets the key's file can log in with it wherever it is put, with nothing to stop them. With one, the file alone is not enough, and the agent still spares you typing it each time.",
   "keyGen.use": "Use it for this host:",
   "keyGen.use.hopdeck": "hopdeck offers it, and keeps that itself; ~/.ssh/config stays as it is",
   "keyGen.use.config": "add it to ~/.ssh/config, so that ssh in a terminal offers it too",
@@ -736,5 +736,9 @@
   "sshKeys.remembered": "hopdeck also offers {{file}} to this host (kept in hopdeck, not in ~/.ssh/config).",
   "sshKeys.forget": "Stop offering it",
   "error.key-exists.title": "A file of that name exists",
-  "error.key-exists.hint": "hopdeck never writes over a key. Choose another name."
+  "error.key-exists.hint": "hopdeck never writes over a key. Choose another name.",
+  "keyGen.noPassphraseTitle": "Generate the key without a passphrase?",
+  "keyGen.withoutPassphrase": "Generate without a passphrase",
+  "keyGen.setPassphrase": "Set a passphrase",
+  "keySetup.passwordOf": "The password of {{user}} on the host"
 }

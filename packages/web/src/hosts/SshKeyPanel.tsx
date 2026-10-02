@@ -111,7 +111,7 @@ export function SshKeyPanel({ hostId, destination, onUnlocked }: { hostId: strin
         </>
       )}
       <KeyGenerate path={path} agent={view.agent} destination={destination} onGenerated={setView} />
-      {view.keys.length > 0 && <KeySetup path={path} keys={view.keys} onWorks={onUnlocked} />}
+      {view.keys.length > 0 && <KeySetup path={path} keys={view.keys} user={view.user} onWorks={onUnlocked} />}
       {error !== undefined && <ErrorCallout error={error} />}
     </section>
   );
