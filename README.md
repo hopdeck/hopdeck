@@ -246,8 +246,14 @@ hopdeck was created by Mateusz T ([Tenir](https://github.com/Tenirrr)), who main
 Copyright (C) 2026 Mateusz T (Tenir)
 
 This program is free software: you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation, either version 3 of the License, or (at your option) any later
-version. It is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE. See [LICENSE](LICENSE) for the full text.
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. It is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE. See [LICENSE](LICENSE) for the full text.
+
+If you change hopdeck and let others use it over a network, offer them the
+source of your version (section 13 of the licence): the panel links to it at
+the foot of the host list, from `SOURCE_REPOSITORY` in
+[packages/core/src/legal.ts](packages/core/src/legal.ts). hopdeck 0.1.0 and
+0.1.1 were released under the GNU General Public License, version 3 or later.

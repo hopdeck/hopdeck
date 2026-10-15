@@ -2,7 +2,7 @@
   "name": "hopdeck-workspace",
   "private": true,
   "type": "module",
-  "license": "GPL-3.0-or-later",
+  "license": "AGPL-3.0-or-later",
   "author": { "name": "Mateusz T (Tenir)", "url": "https://github.com/Tenirrr" },
   "packageManager": "pnpm@12.6.0",
   "engines": {

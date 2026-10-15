@@ -29,6 +29,14 @@
 - Password fields can show what they hold, and say when Caps Lock is on or
   the value begins or ends with a space.
 
+### Changed
+
+- hopdeck is now under the GNU Affero General Public License, version 3 or
+  later, instead of the GNU General Public License: whoever lets others use
+  a changed hopdeck over a network must offer them its source. 0.1.0 and
+  0.1.1 stay under the GPL. The panel and the startup message link to the
+  source of the running version.
+
 ### Fixed
 
 - A key the agent refused was reported as a wrong passphrase.

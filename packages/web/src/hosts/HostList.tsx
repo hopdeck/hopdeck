@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import type { HostSummary } from '@hopdeck/core';
+import { sourceUrl, type HostSummary } from '@hopdeck/core';
 import { HostKindIcon, PlusIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import styles from './HostList.module.css';
@@ -10,13 +10,15 @@ import { COPYRIGHT, LICENSE_URL } from '../legal.ts';
 
 interface HostListProps {
   hosts: readonly HostSummary[];
+  /** hopdeck's version, for the link to its source. */
+  version: string;
   selectedId: string | undefined;
   connecting: ReadonlySet<string>;
   onSelect(id: string): void;
   onAdd(): void;
 }
 
-export function HostList({ hosts, selectedId, connecting, onSelect, onAdd }: HostListProps) {
+export function HostList({ hosts, version, selectedId, connecting, onSelect, onAdd }: HostListProps) {
   const { t } = useI18n();
   return (
     <nav className={styles.sidebar} aria-label={t('hosts.title')}>
@@ -59,7 +61,7 @@ export function HostList({ hosts, selectedId, connecting, onSelect, onAdd }: Hos
         <PlusIcon />
         {t('hosts.add')}
       </button>
-      {/* The Appropriate Legal Notices of GPL-3.0: authors, licence, no warranty. */}
+      {/* The Appropriate Legal Notices of AGPL-3.0 (authors, licence, no warranty), and the source it offers every user. */}
       <footer className={styles.legal}>
         <span>
           Copyright (C) {COPYRIGHT.year}{' '}
@@ -71,6 +73,10 @@ export function HostList({ hosts, selectedId, connecting, onSelect, onAdd }: Hos
           {t('legal.license')}{' '}
           <a href={LICENSE_URL} target="_blank" rel="noopener noreferrer">
             {t('legal.licenseLink')}
+          </a>
+          {' · '}
+          <a href={sourceUrl(version)} target="_blank" rel="noopener noreferrer">
+            {t('legal.source')}
           </a>
         </span>
       </footer>

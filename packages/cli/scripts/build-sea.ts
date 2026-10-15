@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
 /**
@@ -253,7 +253,7 @@ for (const file of await files(webDist)) {
 
 const licenses = [
   `# Licenses of what hopdeck ${pkg.version} contains\n`,
-  'hopdeck itself: GNU General Public License, version 3 or later (LICENSE).\n',
+  'hopdeck itself: GNU Affero General Public License, version 3 or later (LICENSE).\n',
   `## Node.js ${NODE.version}, which runs it\n`,
   await readFile(license, 'utf8'),
   '\n## The packages bundled into the web UI\n',

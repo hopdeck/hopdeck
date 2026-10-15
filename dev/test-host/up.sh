@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Mateusz T (Tenir)
 
 # Starts a container that plays a remote host for hopdeck: sshd (dropbear on

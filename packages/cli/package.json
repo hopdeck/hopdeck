@@ -3,7 +3,7 @@
   "version": "0.2.0-dev",
   "private": true,
   "type": "module",
-  "license": "GPL-3.0-or-later",
+  "license": "AGPL-3.0-or-later",
   "author": { "name": "Mateusz T (Tenir)", "url": "https://github.com/Tenirrr" },
   "bin": {
     "hopdeck": "./src/main.ts"
@@ -14,6 +14,7 @@
     "build:sea": "node scripts/build-sea.ts"
   },
   "dependencies": {
+    "@hopdeck/core": "workspace:*",
     "@hopdeck/server": "workspace:*"
   },
   "devDependencies": {

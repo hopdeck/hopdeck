@@ -178,6 +178,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@hopdeck/core':
+        specifier: workspace:*
+        version: link:../core
       '@hopdeck/server':
         specifier: workspace:*
         version: link:../server

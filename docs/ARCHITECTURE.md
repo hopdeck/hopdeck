@@ -42,7 +42,7 @@ tools, such as a topology view, come later.
 | UI languages | English and Polish | One JSON file per language; adding one needs no code changes |
 | Styling | Plain CSS with design tokens, light and dark theme, system fonts; the look of a network tool: dense, hairlines instead of cards, 2 px corners, no shadows, monospace for data, one signal colour (amber) | No UI framework to trust or update; the CSP blocks external fonts anyway. Dense and plain like Wireshark or htop, not a generic dashboard |
 | Managed hosts | Debian 11+ (nft 0.9.8), RHEL 9+, Alpine; OpenWrt read-only for now | Each is tested with `pnpm test:hosts` (containers: Debian 11, 12, 13, AlmaLinux 9, 10, Alpine, OpenWrt 24.10). Admin machine: Linux; macOS likely works; Windows later |
-| License | GPL-3.0-or-later | |
+| License | AGPL-3.0-or-later (since 2026-10-15; 0.1.0 and 0.1.1 are GPL-3.0-or-later) | hopdeck may come to serve many people from a server. Under the GPL a changed version run as a service would need to share nothing; the AGPL makes it offer its source to its users. The panel links to the source of its version. |
 
 ## Components
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
 import { readFile } from 'node:fs/promises';
@@ -22,14 +22,15 @@ import {
   webFilesIn,
   webFilesInExecutable,
 } from '@hopdeck/server';
+import { sourceUrl } from '@hopdeck/core';
 import pkg from '../package.json' with { type: 'json' };
 
-// GPL-3.0's notice for programs that talk to a terminal; copies must keep it.
+// The Appropriate Legal Notices (AGPL-3.0, section 5d) and where the source is (section 13); copies must keep them.
 const NOTICE = `hopdeck  Copyright (C) 2026 Mateusz T (Tenir), https://github.com/Tenirrr
 This program comes with ABSOLUTELY NO WARRANTY. It is free software, and you
-are welcome to redistribute it under the terms of the GNU GPL, version 3 or
-later: https://www.gnu.org/licenses/gpl-3.0.html
-Source code: https://github.com/hopdeck/hopdeck
+are welcome to redistribute it under the terms of the GNU AGPL, version 3 or
+later: https://www.gnu.org/licenses/agpl-3.0.html
+Source code: ${sourceUrl(pkg.version)}
 `;
 
 const HELP = `Usage: hopdeck [options]
@@ -162,11 +163,19 @@ if (sshConfig) process.stdout.write(`SSH hosts come from ${sshConfig} (HOPDECK_S
  * would cut it off after 64 KiB, and the licenses are longer.
  */
 async function print(text: string): Promise<never> {
-  await new Promise<void>((resolve, reject) => process.stdout.write(text, (error) => (error ? reject(error) : resolve())));
+  const error = await new Promise<NodeJS.ErrnoException | null | undefined>((resolve) => {
+    process.stdout.on('error', resolve);
+    process.stdout.write(text, resolve);
+  });
+  // A reader that stops early, as head or less does, closes the pipe: that is no failure.
+  if (error && error.code !== 'EPIPE') {
+    process.stderr.write(`hopdeck: cannot write the output: ${error.message}\n`);
+    process.exit(1);
+  }
   process.exit(0);
 }
 
-/** GPL-3.0 for hopdeck, and in the executable, those of Node.js and of the UI's packages. */
+/** AGPL-3.0 for hopdeck, and in the executable, those of Node.js and of the UI's packages. */
 async function licenses(): Promise<string> {
   const own = embedded('LICENSE')?.toString('utf8') ?? (await readFile(new URL('../../../LICENSE', import.meta.url), 'utf8'));
   const others = embedded('THIRD-PARTY-LICENSES.md')?.toString('utf8');
