@@ -513,9 +513,9 @@ hopdeck ships as one executable file, a Node.js single executable application
 - The build ends by starting the executable and asking it for its UI, API and
   licenses, another architecture's under QEMU. CI builds and checks both on
   every push; a tag `vVERSION` publishes them as a GitHub release
-  ([`release.yml`](../.github/workflows/release.yml)), with `SHA256SUMS` and,
-  once the repository is public, signed build provenance (`actions/attest`)
-  that `gh attestation verify` checks.
+  ([`release.yml`](../.github/workflows/release.yml)), with `SHA256SUMS` and
+  signed build provenance (`actions/attest`) that `gh attestation verify`
+  checks; GitHub signs it for public repositories only.
 
 Development and the tests stay on Node.js 24.
 

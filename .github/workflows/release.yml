@@ -3,8 +3,9 @@
 
 # A tag vVERSION, where VERSION is the cli package's version, makes a GitHub
 # release: the executables for Linux x64 and arm64 and Windows x64 and arm64,
-# their SHA256SUMS, signed attestations of where they come from (once the
-# repository is public), and the notes of that version from CHANGELOG.md. The same
+# their SHA256SUMS, signed attestations of where they come from (GitHub
+# makes them for public repositories), and the notes of that version from
+# CHANGELOG.md. The same
 # checks as CI run first. Every executable is started and checked before
 # anything is published: Linux arm64 under QEMU, Windows x64 on Windows;
 # Windows arm64 only builds, as no runner here can start it.

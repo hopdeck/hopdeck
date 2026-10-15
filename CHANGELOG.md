@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-10-15)
 
 ### Added
 
@@ -10,12 +10,15 @@
   a passphrase are unlocked into Windows' OpenSSH agent service; as that
   agent takes no time limit, hopdeck removes a key itself when its time is
   up, or when hopdeck stops. The Windows machine itself is no host, and there
-  is no sandbox there. The x64 executable was tested on Windows 10; the
-  arm64 one is built the same way, but has not been tried on such a machine
-  yet.
+  is no sandbox there. The x64 executable was tried on Windows 10: adding a
+  host, editing rules, history, CPU and memory. Not tried on Windows yet:
+  unlocking a key into its agent since that first try (which failed with
+  "agent refused operation", now fixed), generating keys, and the arm64
+  executable, which is built the same way.
 - `HOPDECK_SSH_SESSIONS=1` uses these sessions on Linux too, where ssh's
   ControlMaster does not work.
-- The startup message links to the source code.
+- The panel and the startup message link to the source code of the running
+  version.
 - SSH keys are generated in the panel: Ed25519, or RSA of 2048, 3072 or 4096
   bits, with a passphrase or, with a warning, without. hopdeck keeps the new
   key for its host, or adds it to `~/.ssh/config` (keeping a copy of the file
@@ -34,8 +37,7 @@
 - hopdeck is now under the GNU Affero General Public License, version 3 or
   later, instead of the GNU General Public License: whoever lets others use
   a changed hopdeck over a network must offer them its source. 0.1.0 and
-  0.1.1 stay under the GPL. The panel and the startup message link to the
-  source of the running version.
+  0.1.1 stay under the GPL.
 
 ### Security
 
@@ -51,13 +53,14 @@
   escapes in quoted names, and a line break ends a statement.
 - A key file whose path ssh config cannot hold, or in which ssh would read
   `%` as a token, is not offered.
-- Releases carry signed attestations of where their archives were built,
-  once the repository is public; README says how to check them.
+- Releases carry signed attestations of where their archives were built;
+  README says how to check them.
 - SECURITY.md says how to report a vulnerability.
 
 ### Fixed
 
-- A key the agent refused was reported as a wrong passphrase.
+- A key the agent refused was reported as a wrong passphrase; the agent's
+  own message is shown now.
 - A key unlocked for a host that still refused the login went on showing as
   needing its passphrase.
 
