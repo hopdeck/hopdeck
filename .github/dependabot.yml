@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Mateusz T (Tenir)
+
+# Keeps the actions the workflows use up to date. They are pinned to commit
+# SHAs, so a tag moved by whoever controls an action changes nothing until a
+# pull request here says so. A release becomes an update only after 7 days,
+# as pnpm takes npm packages (minimumReleaseAge): time for a bad one to be
+# noticed and pulled.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ['*']

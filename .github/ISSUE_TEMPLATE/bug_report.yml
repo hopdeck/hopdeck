@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Mateusz T (Tenir)
+
+name: Bug report
+description: Something in hopdeck does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting it. A **security problem** goes to the
+        Security tab's "Report a vulnerability" instead, never to an issue.
+
+        Before you paste anything, take out what you would rather not
+        publish, such as public addresses or host names.
+  - type: input
+    id: version
+    attributes:
+      label: hopdeck version
+      description: '`hopdeck --version`, or the version next to the name at the top of the panel.'
+      placeholder: 0.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: machine
+    attributes:
+      label: The machine hopdeck runs on
+      options:
+        - Linux x64
+        - Linux arm64
+        - Windows x64
+        - Windows arm64
+        - Other, or from source (say which below)
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: The managed host
+      description: Its system and version, and `nft --version` there; or "the sandbox", or "none".
+      placeholder: Debian 13, nftables v1.1.3
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: message
+    attributes:
+      label: The error message
+      description: |
+        As the panel shows it under "Original message", whole. Or what
+        hopdeck printed in the terminal.
+      render: text
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      description: Steps, ideally in the sandbox (`hopdeck --sandbox`) or on a test host, and the rules involved.
