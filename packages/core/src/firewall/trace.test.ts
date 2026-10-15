@@ -92,6 +92,9 @@ describe('trace filters', () => {
     expect(traceFilterProblem({ protocol: 'tcp', dport: '22, 80-90', saddr: '10.0.0.0/24' })).toBeUndefined();
     expect(traceFilterProblem({ protocol: 'tcp', dport: '22 drop' })).toMatch(/not a value/);
     expect(traceFilterProblem({ protocol: 'tcp', dport: '22;flush ruleset' })).toMatch(/not a value/);
+    // A line break ends a statement in nft, even after a comma.
+    expect(traceFilterProblem({ protocol: 'tcp', dport: '22,\nflush' })).toMatch(/not a value/);
+    expect(traceFilterProblem({ protocol: 'tcp', dport: '22,\t80' })).toMatch(/not a value/);
     expect(traceFilterProblem({ dport: '22' })).toMatch(/ports need/);
     expect(traceFilterProblem({ saddr: '10.0.0.1', daddr: 'fe80::1' })).toMatch(/both/);
     expect(traceFilterProblem({ protocol: 'tcp; drop' })).toMatch(/unknown protocol/);

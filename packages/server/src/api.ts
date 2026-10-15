@@ -8,6 +8,7 @@ import { HostStateError, InvalidHostError, type HostManager } from './hosts/mana
 import { ApiError, readJson, sendError, sendJson } from './http.ts';
 import { MAX_KEY_LIFETIME } from './hosts/ssh-keys.ts';
 import { SECURITY_HEADERS } from './security.ts';
+import { errorForTerminal } from './terminal.ts';
 
 export interface ApiContext {
   hosts: HostManager;
@@ -331,7 +332,8 @@ function toApiError(error: unknown): ApiError {
   if (error instanceof HostStateError) return new ApiError(409, 'host-state-changed', error.message);
   if (error instanceof HostError) return new ApiError(hostErrorStatus(error), error.code, error.detail || error.code);
   // The panel is local and for its owner only; the real message helps more than hiding it.
-  console.error(error);
+  // It may quote a host's output, so it reaches the terminal escaped.
+  console.error(errorForTerminal(error));
   return new ApiError(500, 'internal-error', error instanceof Error ? error.message : String(error));
 }
 
@@ -406,7 +408,7 @@ function toChange(value: unknown): TableChange {
   if (typeof family !== 'string' || !FAMILIES.includes(family as Family)) {
     throw new ApiError(400, 'invalid-body', `family must be one of ${FAMILIES.join(', ')}`);
   }
-  const table = requiredString(change, 'table', 256);
+  const table = nftObjectName(change, 'table');
   switch (change['kind']) {
     case 'adopt':
     case 'delete':
@@ -428,7 +430,7 @@ function toChange(value: unknown): TableChange {
         kind: 'elements',
         family: family as Family,
         table,
-        set: requiredString(change, 'set', 256),
+        set: nftObjectName(change, 'set'),
         setKind,
         add: stringList(change, 'add'),
         remove: stringList(change, 'remove'),
@@ -437,6 +439,18 @@ function toChange(value: unknown): TableChange {
     default:
       throw new ApiError(400, 'invalid-body', 'kind must be adopt, replace, delete or elements');
   }
+}
+
+/**
+ * A table's or set's name as nft input can hold it: a name in quotes ends at
+ * the next '"', as nft knows no escapes, and no name holds control characters.
+ */
+function nftObjectName(body: Record<string, unknown>, key: string): string {
+  const name = requiredString(body, key, 256);
+  if (/["\u0000-\u001f\u007f]/.test(name)) {
+    throw new ApiError(400, 'invalid-body', `${key} ${JSON.stringify(name)} cannot be written in nft input: it holds a double quote or a control character`);
+  }
+  return name;
 }
 
 /** Elements: nft syntax each, checked in full when the change is planned. */

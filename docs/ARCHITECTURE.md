@@ -23,7 +23,9 @@ tools, such as a topology view, come later.
 5. **Agentless.** Hosts need `nft`, `sh` and optionally systemd. Nothing is
    installed on them.
 6. **Host output is untrusted.** A compromised host must not be able to attack
-   the admin's browser or machine through what it prints.
+   the admin's browser, terminal or machine through what it prints: the UI
+   shows it as text, what reaches the terminal has its control characters
+   escaped, and what hopdeck reads from a host is bounded in size.
 
 ## Decisions
 
@@ -161,7 +163,8 @@ so the API names no other file for hopdeck to hand to ssh.
 key yet, the panel asks for the account's password once. hopdeck logs in with
 it alone (`PubkeyAuthentication=no`, one prompt, the same one-shot askpass,
 which answers no yes/no question, so a host key is never accepted with the
-password) and appends the public key to `~/.ssh/authorized_keys` as
+password; `StrictHostKeyChecking=yes` whatever the ssh config says, so the
+password goes only to a host whose key known_hosts has) and appends the public key to `~/.ssh/authorized_keys` as
 ssh-copy-id does: `mkdir`, `chmod go-w`, no duplicate, `restorecon` where
 SELinux has it. For root on OpenWrt's dropbear the file is
 `/etc/dropbear/authorized_keys`. A new connection with that key alone
@@ -446,7 +449,10 @@ Implemented in [`packages/server/src/security.ts`](../packages/server/src/securi
   frame-ancestors 'none'`, plus `nosniff` and `no-referrer`.
 - **WebSocket (later):** same checks. Browsers cannot set headers on
   WebSocket connections, so the token goes in the first message.
-- **Host output:** rendered as text, never as HTML and never evaluated.
+- **Host output:** rendered as text, never as HTML and never evaluated. On
+  its way to the terminal, in error messages, its control characters are
+  shown escaped (`server/src/terminal.ts`), so a host cannot clear the
+  screen, hide text or set the clipboard (OSC 52).
 - **Browser console:** the panel warns there, in the UI language, not to
   paste anything: pasted code runs with the panel's token (self-XSS scams).
 - **Weak tokens:** a `HOPDECK_TOKEN` shorter than 32 characters draws a warning.
@@ -507,7 +513,9 @@ hopdeck ships as one executable file, a Node.js single executable application
 - The build ends by starting the executable and asking it for its UI, API and
   licenses, another architecture's under QEMU. CI builds and checks both on
   every push; a tag `vVERSION` publishes them as a GitHub release
-  ([`release.yml`](../.github/workflows/release.yml)).
+  ([`release.yml`](../.github/workflows/release.yml)), with `SHA256SUMS` and,
+  once the repository is public, signed build provenance (`actions/attest`)
+  that `gh attestation verify` checks.
 
 Development and the tests stay on Node.js 24.
 

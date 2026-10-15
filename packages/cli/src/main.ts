@@ -12,6 +12,8 @@ import {
   demoRuleset,
   embedded,
   ensureControlDir,
+  errorForTerminal,
+  forTerminal,
   generateToken,
   HostManager,
   inExecutable,
@@ -64,6 +66,14 @@ const DEV_UI_ORIGINS = [`http://127.0.0.1:${devUiPort}`, `http://localhost:${dev
 
 // Run by ssh as SSH_ASKPASS on Windows (see withAskpass()): answer, and nothing else.
 if (process.env['HOPDECK_ASKPASS'] === '1') process.exit(answerAskpass(process.argv[2]));
+
+// An error nothing caught may quote a host's output: print it escaped, then end as Node.js would.
+for (const event of ['uncaughtException', 'unhandledRejection'] as const) {
+  process.on(event, (error: unknown) => {
+    process.stderr.write(`hopdeck: ${errorForTerminal(error)}\n`);
+    process.exit(1);
+  });
+}
 
 const { values } = parseArgs({
   options: {
@@ -188,6 +198,6 @@ function holder({ port: taken, by }: TakenPort): string {
 }
 
 function fail(message: string): never {
-  process.stderr.write(`hopdeck: ${message}\n`);
+  process.stderr.write(`hopdeck: ${forTerminal(message)}\n`);
   process.exit(2);
 }

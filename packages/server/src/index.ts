@@ -3,6 +3,7 @@
 
 export * from './security.ts';
 export * from './server.ts';
+export * from './terminal.ts';
 export * from './web-files.ts';
 export { HostError } from './hosts/errors.ts';
 export { LocalExecutor } from './hosts/local.ts';

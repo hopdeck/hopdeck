@@ -90,6 +90,11 @@ describe.skipIf(!USERNS)('deployments API', { timeout: 30_000 }, () => {
 
   it('needs Manual override for tables hopdeck does not manage', async () => {
     await call('POST', '/hosts/sandbox/deployments', { changes: [] }).then((r) => expect(r.status).toBe(400));
+    // nft has no escapes in quoted names: a '"' would end the name and let the rest act as commands.
+    for (const table of ['a" ; flush ruleset ; #', 'line\nbreak']) {
+      const odd = await call('POST', '/hosts/sandbox/deployments', { changes: [{ kind: 'delete', family: 'inet', table }] });
+      expect(odd, table).toMatchObject({ status: 400, body: { error: { code: 'invalid-body', message: expect.stringContaining('cannot be written in nft input') } } });
+    }
     const other = { kind: 'replace', family: 'inet', table: 'other', definition: 'table inet other {\n}\n' };
     // Creating a table is fine: hopdeck manages what it creates.
     expect((await call('POST', '/hosts/sandbox/deployments', { changes: [other] })).body.deployment.tables[0]?.action).toBe('create');

@@ -241,7 +241,8 @@ export class KeyLogin {
    * Logs in with the password alone and runs `script` under sh with `args`.
    * ssh's own failures throw: a password the host refused, a host that takes
    * no passwords, or what SshExecutor reports; the script's exit code is
-   * returned as is.
+   * returned as is. The password goes only to a host whose key known_hosts
+   * has, whatever the ssh config says: the panel confirms keys itself.
    */
   async #withPassword(destination: string, password: string, script: string, args: string[], stdin: string): Promise<ExecResult> {
     const { configFile, keys } = this.#options;
@@ -249,6 +250,7 @@ export class KeyLogin {
       ...(configFile === undefined ? [] : ['-F', configFile]),
       '-T',
       ...['-o', 'BatchMode=no'],
+      ...['-o', 'StrictHostKeyChecking=yes'],
       ...['-o', 'PubkeyAuthentication=no'],
       ...['-o', 'GSSAPIAuthentication=no'],
       ...['-o', 'PasswordAuthentication=yes'],

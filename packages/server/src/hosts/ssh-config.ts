@@ -26,6 +26,8 @@ export interface AddIdentityOptions {
  */
 export async function addIdentityToConfig(options: AddIdentityOptions): Promise<{ file: string; backup?: string; block: string }> {
   const { configFile, destination, identityFile } = options;
+  const problem = keyPathProblem(identityFile);
+  if (problem !== undefined) throw new HostError('command-failed', problem);
   // ssh matches Host patterns against the host, without the user.
   const host = destination.slice(destination.lastIndexOf('@') + 1);
   if (!/^[A-Za-z0-9._:[\]%-]+$/.test(host)) throw new HostError('command-failed', `hopdeck adds no Host block for ${JSON.stringify(host)}`);
@@ -58,6 +60,18 @@ export async function addIdentityToConfig(options: AddIdentityOptions): Promise<
     );
   }
   return { file: configFile, ...(backup !== undefined && { backup }), block };
+}
+
+/**
+ * Why ssh cannot be given this key file, if it cannot: a line break or '"'
+ * would end the IdentityFile line or its quotes in ssh config, letting the
+ * rest of the name act as settings, and ssh reads "%" in it, and in -i, as a
+ * token such as %h.
+ */
+export function keyPathProblem(path: string): string | undefined {
+  if (/[\u0000-\u001f\u007f"]/.test(path)) return `${JSON.stringify(path)} holds a line break, another control character or '"', which ssh config cannot hold`;
+  if (path.includes('%')) return `${JSON.stringify(path)} holds "%", which ssh reads as a token such as %h`;
+  return undefined;
 }
 
 /** A path as ssh config takes it: ~/... under the home directory, quoted when it has spaces. */

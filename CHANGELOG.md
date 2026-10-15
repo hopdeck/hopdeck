@@ -37,6 +37,24 @@
   0.1.1 stay under the GPL. The panel and the startup message link to the
   source of the running version.
 
+### Security
+
+- What a host prints can no longer drive the terminal hopdeck runs in: in
+  error messages, its control characters are shown escaped, so a host
+  cannot clear the screen, hide text or set the clipboard (OSC 52).
+- A host printing one line without end over an SSH session (Windows) ends
+  the session instead of filling this machine's memory.
+- The password for the key setup goes only to a host whose key known_hosts
+  has, even where the ssh config would take any host key.
+- Names of tables and sets that nft input cannot hold (with `"` or control
+  characters) are refused, as is a line break in a trace filter: nft knows no
+  escapes in quoted names, and a line break ends a statement.
+- A key file whose path ssh config cannot hold, or in which ssh would read
+  `%` as a token, is not offered.
+- Releases carry signed attestations of where their archives were built,
+  once the repository is public; README says how to check them.
+- SECURITY.md says how to report a vulnerability.
+
 ### Fixed
 
 - A key the agent refused was reported as a wrong passphrase.

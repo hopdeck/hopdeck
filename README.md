@@ -43,6 +43,15 @@ tar xf hopdeck-0.1.1-linux-x64.tar.xz
 hopdeck-0.1.1-linux-x64/hopdeck
 ```
 
+The sums show the download is whole. That it was built by this repository's
+release workflow, from the version's tag, is what its attestation shows,
+from versions released while the repository is public; with the
+[GitHub CLI](https://cli.github.com/):
+
+```sh
+gh attestation verify hopdeck-0.2.0-linux-x64.tar.xz --repo hopdeck/hopdeck
+```
+
 It prints the address of the panel; open it in a browser on the same
 machine. It listens on 127.0.0.1 only, on port 7400, or the next free one up
 to 7419 when that is taken (it says by what: another hopdeck, with its
@@ -237,6 +246,11 @@ add a language:
    language needs.
 
 No code changes are needed: every file in that directory becomes a language.
+
+## Security
+
+Report security problems privately, as [SECURITY.md](SECURITY.md) says, not
+in public issues.
 
 ## Author and license
 

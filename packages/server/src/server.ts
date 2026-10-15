@@ -8,6 +8,7 @@ import { handleApi } from './api.ts';
 import type { HostManager } from './hosts/manager.ts';
 import { ApiError, sendError } from './http.ts';
 import { checkAccess, createAccessPolicy, SECURITY_HEADERS, type AccessPolicy } from './security.ts';
+import { errorForTerminal } from './terminal.ts';
 import type { WebFiles } from './web-files.ts';
 
 export interface ServerOptions {
@@ -91,7 +92,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   let policy: AccessPolicy | undefined;
   const server = createServer((req, res) => {
     handle(req, res, policy!, options).catch((error: unknown) => {
-      console.error(error);
+      console.error(errorForTerminal(error));
       if (res.headersSent) res.destroy();
       else sendError(res, new ApiError(500, 'internal-error', error instanceof Error ? error.message : String(error)));
     });

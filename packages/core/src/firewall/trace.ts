@@ -26,8 +26,8 @@ export interface TraceFilter {
 export const TRACE_PROTOCOLS = ['tcp', 'udp', 'icmp', 'icmpv6', 'sctp', 'udplite', 'dccp', 'gre', 'esp', 'ah'];
 const PORT_PROTOCOLS = ['tcp', 'udp', 'sctp', 'udplite', 'dccp'];
 // Values only: addresses, prefixes, ranges, lists, set references. No spaces but after commas,
-// so a value cannot smuggle in a statement such as a verdict.
-const VALUE = /^[\w.:/@*\[\]{}-]+(?:,\s*[\w.:/@*\[\]{}-]+)*$/;
+// and no line breaks, which end a statement in nft, so a value cannot smuggle in a statement such as a verdict.
+const VALUE = /^[\w.:/@*\[\]{}-]+(?:, *[\w.:/@*\[\]{}-]+)*$/;
 
 /** Why the filter cannot be used; undefined when it can. */
 export function traceFilterProblem(filter: TraceFilter): string | undefined {

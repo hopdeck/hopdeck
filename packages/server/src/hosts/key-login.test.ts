@@ -67,8 +67,12 @@ describe.skipIf(host === undefined)('KeyLogin on the test host', { timeout: 60_0
         ['bare', join(dir, 'no-key-yet')],
       ].map(([name, key]) => `Host ${name}-${account}\n\tUser ${account}\n\tIdentityFile ${key}\n`),
     );
+    // And one whose ssh config would take any host key: a password must not go there.
+    const unverified = ['root', 'admin', 'plain'].map(
+      (account) => `Host unverified-${account}\n\tUser ${account}\n\tIdentityFile ${fresh()}\n\tUserKnownHostsFile /dev/null\n\tStrictHostKeyChecking no\n`,
+    );
     const common = `Host *\n\tHostName 127.0.0.1\n\tPort ${port}\n\tIdentitiesOnly yes\n\tUserKnownHostsFile ${state}/known_hosts\n\tStrictHostKeyChecking yes\n`;
-    await writeFile(join(dir, 'config'), `${entries.join('')}${common}`);
+    await writeFile(join(dir, 'config'), `${entries.join('')}${unverified.join('')}${common}`);
     keys = new SshKeys({ configFile: join(dir, 'config'), runtimeDir: dir, sessionAgent: false, sshDir: join(dir, 'generated') });
     await keys.start();
     login = new KeyLogin({ keys, configFile: join(dir, 'config') });
@@ -95,6 +99,11 @@ describe.skipIf(host === undefined)('KeyLogin on the test host', { timeout: 60_0
     expect(await login.setUp(target, key.file, PASSWORD)).toMatchObject({ added: true, outcome: 'works' });
     const executor = new SshExecutor({ ...target, controlDir: dir, configFile: join(dir, 'config'), env: keys.env, shareConnection: false });
     expect((await executor.exec(['id', '-un'])).stdout).toBe(`${account}\n`);
+  });
+
+  it('sends no password to a host whose key is unknown, even where the ssh config would take any', async () => {
+    const account = host!.platform === 'openwrt' ? 'root' : 'plain';
+    await expect(login.setUp({ destination: `unverified-${account}` }, fresh(), PASSWORD)).rejects.toMatchObject({ code: 'ssh-host-key' });
   });
 
   it('says so when the password is wrong, and installs nothing', async () => {

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Mateusz T (Tenir)
 
 import type { Executor } from '@hopdeck/core';
+import { forTerminal } from '../terminal.ts';
 
 /**
  * Adds a line to the host's system log, so `journalctl -t hopdeck` (or syslog)
@@ -13,5 +14,6 @@ export async function journal(executor: Executor, message: string): Promise<void
     (result) => (result.exitCode === 0 ? undefined : result.stderr.trim() || `logger exited with code ${result.exitCode}`),
     (error: unknown) => (error instanceof Error ? error.message : String(error)),
   );
-  if (failure !== undefined) console.warn(`hopdeck: could not write to the system log of ${executor.host}: ${failure}`);
+  // logger's message comes from the host: escaped, it cannot drive this terminal.
+  if (failure !== undefined) console.warn(forTerminal(`hopdeck: could not write to the system log of ${executor.host}: ${failure}`));
 }

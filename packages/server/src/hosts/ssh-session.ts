@@ -20,6 +20,12 @@ export function sshSessionsWanted(): boolean {
 /** How the first line the host prints once the session is ready begins; before it may come what login scripts print. */
 const READY = 'hopdeck-session 1 ';
 
+/** The longest line login scripts may print before the session is ready; a host printing without end is stopped. */
+const MAX_PREAMBLE_LINE = 64 * 1024;
+
+/** Encoded, the output is up to about twice as long (hex) as the bytes it holds. */
+const MAX_ENCODED_BYTES = MAX_OUTPUT_BYTES * 2.5;
+
 /**
  * What the host runs for the session, in its sh: a private directory, an
  * encoder for what commands print, then awk, which reads the requests. awk
@@ -184,7 +190,9 @@ class Session {
   #ready = false;
   /** How the host encodes what commands print; known once the session is ready. */
   #encoding: 'base64' | 'hex' = 'base64';
-  #rest = Buffer.alloc(0);
+  /** The pieces of a line not ended yet, kept apart so that a long line is joined once. */
+  #partial: Buffer[] = [];
+  #partialBytes = 0;
   #stderr = '';
   /** What login scripts printed before the session began, for when it fails to. */
   #preamble: string[] = [];
@@ -256,14 +264,25 @@ class Session {
   }
 
   #read(chunk: Buffer): void {
-    let data = this.#rest.length === 0 ? chunk : Buffer.concat([this.#rest, chunk]);
-    for (let end = data.indexOf(0x0a); end !== -1; end = data.indexOf(0x0a)) {
+    let start = 0;
+    for (let end = chunk.indexOf(0x0a); end !== -1; end = chunk.indexOf(0x0a, start)) {
+      const piece = chunk.subarray(start, end);
+      const line = this.#partial.length === 0 ? piece : Buffer.concat([...this.#partial, piece]);
+      this.#partial = [];
+      this.#partialBytes = 0;
       // UTF-8 never has a line break inside a character, so lines decode on their own.
-      this.#line(data.subarray(0, end).toString('utf8'));
-      data = data.subarray(end + 1);
+      this.#line(line.toString('utf8'));
       if (!this.open && this.#failure !== undefined) return;
+      start = end + 1;
     }
-    this.#rest = Buffer.from(data);
+    if (start === chunk.length) return;
+    this.#partial.push(chunk.subarray(start));
+    this.#partialBytes += chunk.length - start;
+    // A host that never ends its line could otherwise fill this machine's memory.
+    const limit = this.#ready ? MAX_ENCODED_BYTES : MAX_PREAMBLE_LINE;
+    if (this.#partialBytes > limit) {
+      this.#fail(new HostError('command-failed', `${this.#options.destination}: the host printed a line of more than ${limit} bytes, so its SSH session was ended`));
+    }
   }
 
   #line(line: string): void {
@@ -310,8 +329,7 @@ class Session {
       return;
     }
     answer.bytes += line.length;
-    // Encoded, the output is up to about twice as long (hex) as the bytes it holds.
-    if (answer.bytes > MAX_OUTPUT_BYTES * 2.5) {
+    if (answer.bytes > MAX_ENCODED_BYTES) {
       this.#fail(new HostError('command-failed', `${this.#options.destination}: a command printed more than ${MAX_OUTPUT_BYTES} bytes, so its SSH session was ended`));
       return;
     }

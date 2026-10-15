@@ -115,6 +115,10 @@ describe('SshKeys with hopdeck\'s own agent', () => {
     await writeFile(join(listed, 'config'), 'Host *\n');
     await writeFile(join(listed, 'known_hosts'), 'fw1 ssh-ed25519 AAAA\n');
     await writeFile(join(listed, 'notes'), `-----BEGIN NOTHING-----\n${'x'.repeat(100_000)}\n`);
+    // Keys whose names ssh config cannot hold, or ssh would read as tokens.
+    for (const odd of ['id_%h', 'a"b', 'line\nHost *']) {
+      execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', join(listed, odd)]);
+    }
     const available = await new SshKeys({ runtimeDir: dir, sessionAgent: false, sshDir: listed }).available();
     expect(available.map(({ file, type, comment, encrypted }) => ({ file, type, comment, encrypted }))).toEqual([
       { file: join(listed, 'id_ed25519'), type: 'ED25519', comment: 'new format', encrypted: true },

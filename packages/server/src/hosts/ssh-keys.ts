@@ -9,6 +9,7 @@ import { chmod, mkdir, mkdtemp, open, readdir, readFile, rm, stat, writeFile } f
 import { homedir, tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { HostError } from './errors.ts';
+import { keyPathProblem } from './ssh-config.ts';
 import { runProcess } from './process.ts';
 
 export interface SshKeysOptions {
@@ -143,7 +144,8 @@ export class SshKeys {
 
   /**
    * The private keys in ~/.ssh, by name: files that begin as an OpenSSH or
-   * PEM private key does. Only their public half is read.
+   * PEM private key does, and whose path ssh can be given. Only their public
+   * half is read.
    */
   async available(): Promise<AvailableKey[]> {
     let names: string[];
@@ -156,7 +158,7 @@ export class SshKeys {
     const keys: AvailableKey[] = [];
     for (const name of names.sort()) {
       const file = join(this.sshDir, name);
-      if (name.endsWith('.pub') || !(await isPrivateKey(file))) continue;
+      if (name.endsWith('.pub') || keyPathProblem(file) !== undefined || !(await isPrivateKey(file))) continue;
       keys.push({ file, ...(await describe(file)) });
     }
     return keys;
@@ -408,7 +410,9 @@ export async function withAskpass<T>(
         askpass = process.execPath;
       } else {
         askpass = join(dir, 'askpass.cmd');
-        await writeFile(askpass, `@echo off\r\n"${process.execPath}" "${process.argv[1]}" %*\r\n`);
+        // cmd expands %NAME% even in quotes; %% is a "%" in a path.
+        const literal = (path: string) => path.replaceAll('%', '%%');
+        await writeFile(askpass, `@echo off\r\n"${literal(process.execPath)}" "${literal(process.argv[1]!)}" %*\r\n`);
       }
       extra['HOPDECK_ASKPASS'] = '1';
       // OpenSSH before 8.4, as in Windows 10, knows no SSH_ASKPASS_REQUIRE and wants a DISPLAY.

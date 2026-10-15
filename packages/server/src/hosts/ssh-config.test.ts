@@ -49,6 +49,14 @@ describe('addIdentityToConfig', () => {
     expect(named(config, 'root@10.0.0.1')).toContain(`identityfile ${key}`);
   });
 
+  it('writes no key whose path would end the line or be read as tokens', async () => {
+    const config = join(dir, 'config');
+    for (const odd of [`${key}\nHost *\n    ProxyCommand evil`, `${dir}/a"b`, `${dir}/id_%h`]) {
+      await expect(addIdentityToConfig({ configFile: config, destination: 'serwer1', identityFile: odd, now }), odd).rejects.toThrow(/ssh config cannot hold|token/);
+    }
+    await expect(stat(config)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('puts the file back when ssh does not take it', async () => {
     const config = join(dir, 'config');
     const broken = 'Host serwer1\n    NoSuchOption yes\n';

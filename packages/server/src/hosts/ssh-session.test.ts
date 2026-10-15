@@ -10,7 +10,8 @@ import { SessionExecutor } from './ssh-session.ts';
 
 /**
  * An ssh that runs the "remote" command here, counts its starts, and on
- * request refuses the login or prints what login scripts might.
+ * request refuses the login, prints what login scripts might, or prints one
+ * line without end, as a hostile host could.
  */
 const FAKE_SSH = `#!/bin/sh
 echo start >> "$FAKE_DIR/starts"
@@ -19,6 +20,7 @@ shift 2
 case "\${FAKE_MODE:-}" in
 deny) echo 'admin@fw1: Permission denied (publickey).' >&2; exit 255 ;;
 chatty) echo 'Welcome to fw1'; echo 'R 1 0 0' ;;
+endless) head -c 1000000 /dev/zero | tr '\\0' x; sleep 5; exit 0 ;;
 esac
 exec sh -c "$1"
 `;
@@ -97,6 +99,13 @@ describe.each(['base64', 'hex'])('SessionExecutor, output in %s', (encoding) => 
     const session = executor({ env: { FAKE_MODE: 'chatty' } });
     expect((await session.exec(['echo', 'fine'])).stdout).toBe('fine\n');
     session.close();
+  });
+
+  it('ends the session when the host prints a line without end, before this machine runs out of memory', async () => {
+    await expect(executor({ env: { FAKE_MODE: 'endless' } }).exec(['true'])).rejects.toMatchObject({
+      code: 'command-failed',
+      detail: expect.stringContaining('a line of more than 65536 bytes'),
+    });
   });
 
   it('says so when the host refuses the login, as SshExecutor does', async () => {
