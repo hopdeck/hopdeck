@@ -117,7 +117,7 @@ export function RuleGrid({ rows, actions, onOpen, showRates = false, showHandles
                     ? styles.rowBusy
                     : undefined;
             return (
-              <tr key={row.key} className={state} onDoubleClick={onOpen && (() => onOpen(index))}>
+              <tr key={row.key} data-row={row.key} className={state} onDoubleClick={onOpen && (() => onOpen(index))}>
                 <td className={styles.index}>{index + 1}</td>
                 {cell === undefined ? (
                   <td colSpan={1 + columns.length} className={styles.textRule}>

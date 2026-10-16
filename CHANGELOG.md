@@ -13,6 +13,15 @@
 - "Log drops" in the editor, for a base chain with policy drop: a last rule
   that counts every packet the policy drops and logs them, at most 50 a
   second, so a flood cannot fill the host's log.
+- Where the main nftables configuration, such as `/etc/nftables.conf`,
+  defines a table hopdeck manages, a comment above it there says that
+  hopdeck's file replaces the table at boot, so changes made there have no
+  effect. It goes when that is no longer true.
+
+### Changed
+
+- A rule added in the editor, with "Add rule" or "Log drops", is scrolled
+  into view and flashes, as it lands at the end of its chain.
 
 ## 0.2.0 (2026-10-15)
 

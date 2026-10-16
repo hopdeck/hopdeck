@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Mateusz T (Tenir)
 
 import { dropLogPrefix, dropLogRule, parseSetBlock, renderRule, type Family } from '@hopdeck/core';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ArrowDownIcon, ArrowUpIcon, CopyIcon, EditIcon, PlusIcon, TrashIcon } from '../../components/icons.tsx';
 import { useI18n } from '../../i18n/I18nProvider.tsx';
 import styles from './Editor.module.css';
@@ -34,6 +34,18 @@ export function VisualEditor({ family, table, chains, sets, counters, counterOf,
   const [addingChain, setAddingChain] = useState(false);
   const [addingSet, setAddingSet] = useState(false);
   const [editingSet, setEditingSet] = useState<SetState>();
+  // A rule just added at the end of its chain, to bring into view: it may land below the screen.
+  const [reveal, setReveal] = useState<string>();
+
+  useEffect(() => {
+    if (reveal === undefined) return;
+    setReveal(undefined);
+    const row = document.querySelector(`[data-row="${CSS.escape(reveal)}"]`);
+    if (row === null) return;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    row.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+    if (!reduceMotion) row.animate([{ backgroundColor: 'var(--accent-soft)' }, { backgroundColor: 'transparent' }], { duration: 1800 });
+  }, [reveal]);
   const names = chains.map((state) => state.chain.name);
   const setInfos = sets.flatMap((state) => {
     const { kind, name, lines } = state.block;
@@ -49,7 +61,9 @@ export function VisualEditor({ family, table, chains, sets, counters, counterOf,
   const logDrops = (index: number) => {
     const state = chains[index]!;
     const form = dropLogRule(dropLogPrefix(family, table, state.chain.name));
-    setRows(index, [...state.rows, { key: newRowKey(), handle: undefined, text: renderRule(form, family), form, status: 'new' }]);
+    const key = newRowKey();
+    setRows(index, [...state.rows, { key, handle: undefined, text: renderRule(form, family), form, status: 'new' }]);
+    setReveal(key);
   };
   const logsDrops = (state: ChainState) => {
     const prefix = dropLogPrefix(family, table, state.chain.name);
@@ -67,7 +81,9 @@ export function VisualEditor({ family, table, chains, sets, counters, counterOf,
     const rows = [...chains[editing.chain]!.rows];
     const form = 'form' in rule ? rule.form : undefined;
     if (editing.row === 'new') {
-      rows.push({ key: newRowKey(), handle: undefined, text: rule.text, form, status: 'new' });
+      const key = newRowKey();
+      rows.push({ key, handle: undefined, text: rule.text, form, status: 'new' });
+      setReveal(key);
     } else {
       const row = rows[editing.row]!;
       if (row.text !== rule.text || row.form === undefined !== (form === undefined)) {

@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Deployments, readTable, type DeployTarget } from './deploy.ts';
 import { parseFacts } from '../hosts/facts.ts';
-import { addInclude, bootDefinition, bootDirectory, includeLine, persistenceStatus, persistTables, tableFile, type PersistTarget } from './persist.ts';
+import { addInclude, bootDefinition, bootDirectory, includeLine, mainConfigNote, persistenceStatus, persistTables, tableFile, withTableNotes, type PersistTarget } from './persist.ts';
 import { DEBIAN_FACTS, FakeExecutor } from '../testing/fake-executor.ts';
 import { hasAccount, hostTarget, testHost, type Account } from '../testing/test-host.ts';
 
@@ -37,6 +37,57 @@ describe('tableFile and bootDefinition', () => {
     expect(boot).toContain('packets 0 bytes 0');
     expect(boot).toContain('10.0.0.1 timeout 1h }');
     expect(boot.startsWith('# Written by hopdeck')).toBe(true);
+  });
+});
+
+describe('withTableNotes', () => {
+  const include = includeLine('/etc/hopdeck/firewall');
+  const filter = { family: 'inet' as const, name: 'filter', file: '/etc/hopdeck/firewall/inet-filter.nft' };
+  // As Debian ships it, with hopdeck's include added at the end.
+  const main = [
+    '#!/usr/sbin/nft -f',
+    '',
+    'flush ruleset',
+    '',
+    'table inet filter {',
+    '\tchain input {',
+    '\t\ttype filter hook input priority filter;',
+    '\t}',
+    '}',
+    'table ip nat {',
+    '}',
+    '',
+    '# Added by hopdeck: the tables it manages are in /etc/hopdeck/firewall.',
+    include,
+    '',
+  ].join('\n');
+
+  it('notes above a table it defines that hopdeck\'s file replaces at boot, once', () => {
+    const noted = withTableNotes(main, include, [filter]);
+    const lines = noted.split('\n');
+    const at = lines.indexOf('table inet filter {');
+    expect(lines.slice(at - 2, at)).toEqual(mainConfigNote(filter.file));
+    expect(noted.split('\n').filter((line) => line.startsWith('# Managed by hopdeck'))).toHaveLength(1);
+    expect(withTableNotes(noted, include, [filter])).toBe(noted);
+    // Everything else stays as it was.
+    expect(noted.replace(`${mainConfigNote(filter.file).join('\n')}\n`, '')).toBe(main);
+  });
+
+  it('takes a note away once it is no longer true, and keeps the user\'s own comments', () => {
+    const noted = withTableNotes(`# Managed by hopdeck: my own words\n${main}`, include, [filter]);
+    expect(withTableNotes(noted, include, [])).toBe(`# Managed by hopdeck: my own words\n${main}`);
+  });
+
+  it('notes nothing after the include, nor without it: hopdeck\'s files do not replace those', () => {
+    const after = `${main}table inet late {\n}\n`;
+    expect(withTableNotes(after, include, [{ family: 'inet', name: 'late', file: 'x' }])).toBe(after);
+    const without = main.replace(include, '');
+    expect(withTableNotes(without, include, [filter])).toBe(without);
+  });
+
+  it('keeps the indent of the table it notes, and finds quoted names', () => {
+    const quoted = `${'\t'}table inet "my table" {\n${'\t'}}\n${include}\n`;
+    expect(withTableNotes(quoted, include, [{ family: 'inet', name: 'my table', file: 'f' }]).split('\n')[0]).toBe(`\t${mainConfigNote('f')[0]}`);
   });
 });
 
@@ -110,6 +161,27 @@ describe.skipIf(testHost?.platform !== 'linux')('persistence on the test host', 
     expect(deleted.persisted).toMatchObject({ written: [], removed: ['/etc/hopdeck/firewall/inet-hopdeck_boot.nft'] });
     await reload();
     expect(await readTable(root.access, 'inet', 'hopdeck_boot')).toBeUndefined();
+  });
+
+  it('notes in the main configuration that hopdeck\'s file replaces a table defined there, and takes the note away with the table', async () => {
+    const file = '/etc/hopdeck/firewall/inet-hopdeck_main.nft';
+    const read = async () => (await root.executor.exec(['cat', main])).stdout;
+    // The main configuration defines the table too, before the include, as Debian's does with inet filter.
+    const insert = 'awk -v inc="$2" \'$0 == inc { print "table inet hopdeck_main {"; print "}" } { print }\' "$1" > "$1.t" && cat "$1.t" > "$1" && rm "$1.t"';
+    await root.executor.exec(['sh', '-c', insert, 'sh', main, includeLine('/etc/hopdeck/firewall')]);
+    const mode = (await root.executor.exec(['stat', '-c', '%a', main])).stdout;
+
+    await change([{ kind: 'replace', family: 'inet', table: 'hopdeck_main', definition: 'table inet hopdeck_main {\n\tset s {\n\t\ttype ipv4_addr\n\t}\n}\n' }]);
+    const noted = (await read()).split('\n');
+    const at = noted.indexOf('table inet hopdeck_main {');
+    expect(noted.slice(at - 2, at)).toEqual(mainConfigNote(file));
+    expect((await root.executor.exec(['stat', '-c', '%a', main])).stdout).toBe(mode);
+    expect((await reload()).exitCode).toBe(0);
+
+    await change([{ kind: 'delete', family: 'inet', table: 'hopdeck_main' }]);
+    const after = await read();
+    expect(after).not.toContain('# Managed by hopdeck');
+    expect(after).toContain('table inet hopdeck_main {');
   });
 
   it.skipIf(!hasAccount('nopass'))('says why nothing can be saved when sudo allows only nft', async () => {

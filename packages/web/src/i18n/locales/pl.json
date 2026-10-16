@@ -130,7 +130,7 @@
   "persist.state.differs": "różni się od zapisanej wersji",
   "persist.state.missing": "niezapisana",
   "persist.state.orphaned": "plik bez zarządzanej tabeli",
-  "persist.alsoInMain": "Zdefiniowana też w {{file}}: przy starcie wersja z hopdecka zastępuje tamtą definicję, a usunięcie tabeli w hopdecku nie usuwa jej stamtąd.",
+  "persist.alsoInMain": "Zdefiniowana też w {{file}}: przy starcie wersja z hopdecka zastępuje tamtą definicję, o czym mówi komentarz nad nią w tym pliku. Usunięcie tabeli w hopdecku nie usuwa jej stamtąd.",
   "persist.saveAll": "Zapisz wszystko teraz",
   "table.adopt": "Zarządzaj w hopdecku",
   "table.adoptHint": "hopdeck oznaczy tabelę jako swoją i od teraz będzie mógł ją zmieniać. Poza tym w tabeli nic się nie zmieni.",

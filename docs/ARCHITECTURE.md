@@ -368,6 +368,12 @@ A change is a list of table operations: adopt, replace (or create), delete.
    if nft rejects it. Because the include comes last, hopdeck's copy of a table
    replaces a definition earlier in the file; the UI says when a table is
    defined there too, since deleting it in hopdeck does not remove it from there.
+   So does the file itself: above such a definition hopdeck keeps a two-line
+   comment saying its file replaces the table at boot, so changes there have no
+   effect. It adds the note once the include is there and the table is saved,
+   takes it away when that is no longer true, and changes nothing else in the
+   file; a dated copy and `nft -c` guard each change, and the file is written
+   over itself, keeping its mode, owner and SELinux label.
    Saving needs root: with sudo for nft only, the UI explains why it cannot.
    Tested with a real restart of the Debian test host.
 
