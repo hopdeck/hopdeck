@@ -124,7 +124,7 @@ describe('editableTable', () => {
     expect(renderTable(table)).toBe(stripHandles(rulesListing));
     expect(chains(table).map((chain) => [chain.name, chain.rules.length])).toEqual([
       ['other', 0],
-      ['c', 18],
+      ['c', 19],
       ['nat', 2],
       ['post', 2],
       ['lists', 6],

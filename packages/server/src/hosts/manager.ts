@@ -21,6 +21,7 @@ import type {
   HostSummary,
   KeySetupResult,
   KeyUse,
+  PacketLogView,
   PersistenceStatus,
   PersistResult,
   RulesetSnapshot,
@@ -37,6 +38,7 @@ import { Deployments, type DeployLogEntry, type DeployTarget } from '../firewall
 import { History, type HistoryTarget } from '../firewall/history.ts';
 import { journal } from './journal.ts';
 import { Traces, type TraceOptions } from '../firewall/trace.ts';
+import { readPacketLog } from '../firewall/packet-log.ts';
 import { collectFacts } from './facts.ts';
 import { HostKeys } from './host-keys.ts';
 import { addInclude, enableService, persistenceStatus, persistTables, saveAll, type PersistTarget } from '../firewall/persist.ts';
@@ -563,6 +565,19 @@ export class HostManager {
   /** Every look at the ruleset may find a change made outside hopdeck; see History.observe(). */
   async #observe(entry: Entry, json: unknown): Promise<void> {
     if (this.#platform(entry).firewall !== 'read-only') await this.#history.observe(this.#historyTarget(entry), json);
+  }
+
+  /**
+   * The packets log statements wrote to the host's kernel log, newest first;
+   * with `after`, those since that journal cursor. The sandbox has none: the
+   * kernel writes no packets from a network namespace of its own.
+   */
+  async packetLog(id: string, after: string | undefined): Promise<PacketLogView | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    // Its commands would read this machine's own kernel log, which is not the sandbox's.
+    if (entry.kind === 'sandbox') throw new HostStateError('the sandbox has no packet log: the kernel writes none from a network namespace of its own');
+    return readPacketLog(this.#access(entry), after);
   }
 
   /**

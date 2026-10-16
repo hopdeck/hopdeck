@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+
+- A Logs tab: the packets that rules with a log statement wrote to the
+  host's kernel log, newest first, read from the journal, a syslog file,
+  dmesg, or logread on OpenWrt. Each line names the rule its prefix belongs
+  to and what the rule did with the packet; the same packet again within a
+  second is one line with its count. hopdeck stores nothing: it reads the
+  host's log.
+- "Log drops" in the editor, for a base chain with policy drop: a last rule
+  that counts every packet the policy drops and logs them, at most 50 a
+  second, so a flood cannot fill the host's log.
+
 ## 0.2.0 (2026-10-15)
 
 ### Added

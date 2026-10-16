@@ -19,6 +19,7 @@ export * from './firewall/rule-form.ts';
 export * from './firewall/table-edit.ts';
 export * from './firewall/set-elements.ts';
 export * from './firewall/trace.ts';
+export * from './firewall/packet-log.ts';
 export * from './firewall/live.ts';
 export * from './firewall/history.ts';
 export * from './firewall/rule-commands.ts';

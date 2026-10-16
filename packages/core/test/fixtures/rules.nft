@@ -21,6 +21,7 @@ table inet t {
 		ip daddr 10.0.0.1-10.0.0.9 return
 		ip saddr 1.2.3.4 counter name "hits" drop
 		tcp dport 22 ip saddr 10.0.0.1 accept
+		counter limit rate 50/second burst 100 packets log prefix "hopdeck drop inet t c: "
 	}
 	counter hits { }
 	chain nat {

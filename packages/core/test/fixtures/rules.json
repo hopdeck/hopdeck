@@ -11,7 +11,7 @@
       "table": {
         "family": "inet",
         "name": "t",
-        "handle": 1
+        "handle": 13
       }
     },
     {
@@ -132,7 +132,7 @@
         "name": "m1",
         "table": "t",
         "type": "ipv4_addr",
-        "handle": 81,
+        "handle": 82,
         "size": 65535,
         "flags": [
           "dynamic"
@@ -735,8 +735,36 @@
       "rule": {
         "family": "inet",
         "table": "t",
-        "chain": "nat",
+        "chain": "c",
         "handle": 30,
+        "expr": [
+          {
+            "counter": {
+              "packets": 0,
+              "bytes": 0
+            }
+          },
+          {
+            "limit": {
+              "rate": 50,
+              "burst": 100,
+              "per": "second"
+            }
+          },
+          {
+            "log": {
+              "prefix": "hopdeck drop inet t c: "
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "t",
+        "chain": "nat",
+        "handle": 31,
         "expr": [
           {
             "match": {
@@ -765,7 +793,7 @@
         "family": "inet",
         "table": "t",
         "chain": "nat",
-        "handle": 31,
+        "handle": 32,
         "expr": [
           {
             "match": {
@@ -792,7 +820,7 @@
         "family": "inet",
         "table": "t",
         "chain": "post",
-        "handle": 32,
+        "handle": 33,
         "expr": [
           {
             "match": {
@@ -816,7 +844,7 @@
         "family": "inet",
         "table": "t",
         "chain": "post",
-        "handle": 33,
+        "handle": 34,
         "expr": [
           {
             "match": {
@@ -849,7 +877,7 @@
         "family": "inet",
         "table": "t",
         "chain": "lists",
-        "handle": 35,
+        "handle": 36,
         "expr": [
           {
             "match": {
@@ -878,7 +906,7 @@
         "family": "inet",
         "table": "t",
         "chain": "lists",
-        "handle": 37,
+        "handle": 38,
         "expr": [
           {
             "match": {
@@ -907,7 +935,7 @@
         "family": "inet",
         "table": "t",
         "chain": "lists",
-        "handle": 39,
+        "handle": 40,
         "expr": [
           {
             "match": {
@@ -937,7 +965,7 @@
         "family": "inet",
         "table": "t",
         "chain": "lists",
-        "handle": 41,
+        "handle": 42,
         "expr": [
           {
             "match": {
@@ -972,7 +1000,7 @@
         "family": "inet",
         "table": "t",
         "chain": "lists",
-        "handle": 43,
+        "handle": 44,
         "expr": [
           {
             "match": {
@@ -1002,7 +1030,7 @@
         "family": "inet",
         "table": "t",
         "chain": "lists",
-        "handle": 45,
+        "handle": 46,
         "expr": [
           {
             "match": {
@@ -1044,7 +1072,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 46,
+        "handle": 47,
         "expr": [
           {
             "match": {
@@ -1069,7 +1097,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 47,
+        "handle": 48,
         "expr": [
           {
             "match": {
@@ -1106,7 +1134,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 48,
+        "handle": 49,
         "expr": [
           {
             "match": {
@@ -1134,7 +1162,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 49,
+        "handle": 50,
         "expr": [
           {
             "match": {
@@ -1162,7 +1190,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 50,
+        "handle": 51,
         "expr": [
           {
             "match": {
@@ -1187,7 +1215,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 51,
+        "handle": 52,
         "expr": [
           {
             "match": {
@@ -1212,7 +1240,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 52,
+        "handle": 53,
         "expr": [
           {
             "match": {
@@ -1237,7 +1265,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 53,
+        "handle": 54,
         "expr": [
           {
             "match": {
@@ -1284,7 +1312,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 54,
+        "handle": 55,
         "expr": [
           {
             "limit": {
@@ -1305,7 +1333,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 55,
+        "handle": 56,
         "expr": [
           {
             "limit": {
@@ -1327,7 +1355,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 56,
+        "handle": 57,
         "expr": [
           {
             "limit": {
@@ -1349,7 +1377,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 57,
+        "handle": 58,
         "expr": [
           {
             "ct count": {
@@ -1371,7 +1399,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 58,
+        "handle": 59,
         "expr": [
           {
             "match": {
@@ -1400,7 +1428,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 59,
+        "handle": 60,
         "expr": [
           {
             "match": {
@@ -1424,7 +1452,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 60,
+        "handle": 61,
         "expr": [
           {
             "match": {
@@ -1448,7 +1476,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 61,
+        "handle": 62,
         "expr": [
           {
             "match": {
@@ -1472,7 +1500,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 62,
+        "handle": 63,
         "expr": [
           {
             "match": {
@@ -1496,7 +1524,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 63,
+        "handle": 64,
         "expr": [
           {
             "mangle": {
@@ -1516,7 +1544,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 64,
+        "handle": 65,
         "expr": [
           {
             "mangle": {
@@ -1539,7 +1567,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 65,
+        "handle": 66,
         "expr": [
           {
             "match": {
@@ -1563,7 +1591,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 67,
+        "handle": 68,
         "expr": [
           {
             "match": {
@@ -1592,7 +1620,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 68,
+        "handle": 69,
         "expr": [
           {
             "match": {
@@ -1620,7 +1648,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 69,
+        "handle": 70,
         "expr": [
           {
             "quota": {
@@ -1639,7 +1667,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 70,
+        "handle": 71,
         "expr": [
           {
             "quota": {
@@ -1659,7 +1687,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 71,
+        "handle": 72,
         "expr": [
           {
             "log": {
@@ -1674,7 +1702,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 72,
+        "handle": 73,
         "expr": [
           {
             "log": {
@@ -1693,7 +1721,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 73,
+        "handle": 74,
         "expr": [
           {
             "notrack": null
@@ -1706,7 +1734,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 74,
+        "handle": 75,
         "expr": [
           {
             "vmap": {
@@ -1727,7 +1755,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 76,
+        "handle": 77,
         "expr": [
           {
             "vmap": {
@@ -1771,7 +1799,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 78,
+        "handle": 79,
         "expr": [
           {
             "vmap": {
@@ -1806,7 +1834,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 79,
+        "handle": 80,
         "expr": [
           {
             "match": {
@@ -1864,7 +1892,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 80,
+        "handle": 81,
         "expr": [
           {
             "set": {
@@ -1904,7 +1932,7 @@
         "family": "inet",
         "table": "t",
         "chain": "more",
-        "handle": 82,
+        "handle": 83,
         "expr": [
           {
             "set": {

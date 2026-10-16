@@ -31,7 +31,7 @@ describe('initialChains', () => {
     const chains = chainsOf();
     expect(chains.map((state) => [state.chain.name, state.rows.length, state.policy, state.base?.priority])).toEqual([
       ['other', 0, undefined, undefined],
-      ['c', 18, 'drop', 'filter'],
+      ['c', 19, 'drop', 'filter'],
       ['nat', 2, 'accept', 'dstnat'],
       ['post', 2, 'accept', 'srcnat'],
       ['lists', 6, undefined, undefined],

@@ -136,6 +136,16 @@ const ROUTES: Route[] = [
   },
   {
     method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/packet-log$/,
+    async handle(req, [id], ctx) {
+      const after = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams.get('after') ?? undefined;
+      // A journal cursor: "s=…;i=…;b=…;m=…;t=…;x=…", hex digits and those letters.
+      if (after !== undefined && !/^[A-Za-z0-9=;_-]{1,512}$/.test(after)) throw new ApiError(400, 'invalid-query', 'after must be a journal cursor');
+      return { body: { log: found(await ctx.hosts.packetLog(id!, after)) } };
+    },
+  },
+  {
+    method: 'GET',
     pattern: /^\/api\/hosts\/([^/]+)\/usage$/,
     async handle(_req, [id], ctx) {
       return { body: { usage: found(await ctx.hosts.usage(id!)) } };

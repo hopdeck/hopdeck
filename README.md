@@ -14,14 +14,16 @@ only easier:
   tables it manages.
 - A packet path view (hooks and priorities across all tables), packet tracing
   and live counters.
+- A packet log: what rules with a log statement wrote to the host's kernel
+  log, each line linked to its rule, the same packet within a second folded
+  into one line; one click logs what a chain's policy drops.
 - A history of every change, kept on each host: who made it, from where and
   with which SSH key, changes made outside hopdeck, and a way back to any
   version.
 
 Planned: OpenWrt through UCI, and more network tools, such as a topology view.
 
-**Status:** 0.1.0, the first release: usable, and early. See
-[CHANGELOG.md](CHANGELOG.md).
+**Status:** 0.2.0: usable, and early. See [CHANGELOG.md](CHANGELOG.md).
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
 

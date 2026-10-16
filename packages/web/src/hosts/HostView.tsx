@@ -16,7 +16,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import { ErrorBody, ErrorCallout, ErrorVarsProvider, errorTitle, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
-import { AlertIcon, CheckIcon, HostKindIcon, LockIcon, RefreshIcon, SandboxIcon, TrashIcon } from '../components/icons.tsx';
+import { AlertIcon, CheckIcon, HostKindIcon, InfoIcon, LockIcon, RefreshIcon, SandboxIcon, TrashIcon } from '../components/icons.tsx';
 import { PasswordField } from '../components/PasswordField.tsx';
 import { Tabs } from '../components/Tabs.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
@@ -25,6 +25,7 @@ import { ListingView } from '../firewall/ruleset/ListingView.tsx';
 import { changedTables } from '../firewall/ruleset/model.ts';
 import { PacketPathView } from '../firewall/ruleset/PacketPathView.tsx';
 import { NEW_TRACE_SESSION, TracePanel, type TraceSession } from '../firewall/trace/TracePanel.tsx';
+import { PacketLogPanel } from '../firewall/log/PacketLogPanel.tsx';
 import { RulesetView } from '../firewall/ruleset/RulesetView.tsx';
 import { useRuleset, type RulesetState } from '../firewall/ruleset/useRuleset.ts';
 import { useLive } from '../firewall/ruleset/useLive.ts';
@@ -126,9 +127,9 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   const [creating, setCreating] = useState(false);
   const [traceSession, setTraceSession] = useState<TraceSession>(NEW_TRACE_SESSION);
   const [liveSeconds, setLiveSeconds] = useState(5);
-  // Counters and changes are read while the rules (or the editor) are in view.
+  // Counters and changes are read while the rules (or the editor) or the packet log are in view.
   // Paused while the host refuses the login: it would only repeat that.
-  const live = useLive(host.id, liveSeconds, readable && tab === 'rules' && ruleset.model !== undefined && loginLost === undefined);
+  const live = useLive(host.id, liveSeconds, readable && (tab === 'rules' || tab === 'logs') && ruleset.model !== undefined && loginLost === undefined);
   // While hopdeck applies a change itself, the host differing is expected.
   const changed =
     live.info === undefined || ruleset.model === undefined || changes !== undefined || ruleset.loading
@@ -342,6 +343,28 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                     }}
                   />
                 ),
+              },
+              {
+                id: 'logs',
+                group: t('tabs.group.firewall'),
+                label: t('tabs.logs'),
+                content:
+                  host.kind === 'sandbox' ? (
+                    <Callout tone="info" icon={<InfoIcon />} title={t('log.sandbox')}>
+                      {t('log.sandboxHint')}
+                    </Callout>
+                  ) : (
+                    <PacketLogPanel
+                      hostId={host.id}
+                      active={tab === 'logs' && loginLost === undefined}
+                      model={ruleset.model}
+                      live={live.info}
+                      onShowChain={(anchor) => {
+                        setScrollTarget(anchor);
+                        setTab('rules');
+                      }}
+                    />
+                  ),
               },
               {
                 id: 'history',

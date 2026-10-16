@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import { parseSetBlock, type Family } from '@hopdeck/core';
+import { dropLogPrefix, dropLogRule, parseSetBlock, renderRule, type Family } from '@hopdeck/core';
 import { useState, type ReactNode } from 'react';
 import { ArrowDownIcon, ArrowUpIcon, CopyIcon, EditIcon, PlusIcon, TrashIcon } from '../../components/icons.tsx';
 import { useI18n } from '../../i18n/I18nProvider.tsx';
@@ -14,6 +14,8 @@ import { addedChain, newRowKey, type ChainState, type RuleRow, type SetState } f
 
 interface VisualEditorProps {
   family: Family;
+  /** The table's name, for the prefix of the rule that logs what a chain drops. */
+  table: string;
   chains: ChainState[];
   sets: SetState[];
   counters: readonly string[];
@@ -26,7 +28,7 @@ interface VisualEditorProps {
 }
 
 /** The rules of each chain as a grid, MikroTik style. */
-export function VisualEditor({ family, chains, sets, counters, counterOf, errorRows, onChange, onSetsChange }: VisualEditorProps) {
+export function VisualEditor({ family, table, chains, sets, counters, counterOf, errorRows, onChange, onSetsChange }: VisualEditorProps) {
   const { t } = useI18n();
   const [editing, setEditing] = useState<{ chain: number; row: number | 'new' } | undefined>();
   const [addingChain, setAddingChain] = useState(false);
@@ -43,6 +45,16 @@ export function VisualEditor({ family, chains, sets, counters, counterOf, errorR
   const targets = chains.filter((state) => state.base === undefined).map((state) => state.chain.name);
 
   const setRows = (index: number, rows: RuleRow[]) => onChange(chains.map((state, at) => (at === index ? { ...state, rows } : state)));
+  /** Puts last in the chain the rule that counts and logs what its policy drops; see dropLogRule(). */
+  const logDrops = (index: number) => {
+    const state = chains[index]!;
+    const form = dropLogRule(dropLogPrefix(family, table, state.chain.name));
+    setRows(index, [...state.rows, { key: newRowKey(), handle: undefined, text: renderRule(form, family), form, status: 'new' }]);
+  };
+  const logsDrops = (state: ChainState) => {
+    const prefix = dropLogPrefix(family, table, state.chain.name);
+    return state.rows.some((row) => row.form?.log?.prefix === prefix || row.text.includes(`log prefix "${prefix}"`));
+  };
   const move = (index: number, from: number, to: number) => {
     const rows = [...chains[index]!.rows];
     const [row] = rows.splice(from, 1);
@@ -136,6 +148,17 @@ export function VisualEditor({ family, chains, sets, counters, counterOf, errorR
                   <option value="drop">drop</option>
                 </select>
               </label>
+            )}
+            {state.base !== undefined && state.policy === 'drop' && (
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={logsDrops(state)}
+                title={t(logsDrops(state) ? 'editor.logDropsDone' : 'editor.logDropsHint')}
+                onClick={() => logDrops(chainIndex)}
+              >
+                {t('editor.logDrops')}
+              </button>
             )}
             <button type="button" className="btn btn-sm" onClick={() => setEditing({ chain: chainIndex, row: 'new' })}>
               <PlusIcon />

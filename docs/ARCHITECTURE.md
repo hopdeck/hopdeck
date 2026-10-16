@@ -585,6 +585,32 @@ The npm supply chain is a real risk for a tool with this access.
     the lines; `-a` gives rule handles.
   - The sandbox brings up `lo` and can send test traffic, so tracing can be
     tried there.
+- **Packet log** (done): the Logs tab shows what rules with a log statement
+  wrote to the host's kernel log, newest first (`core/packet-log.ts`).
+  - hopdeck stores nothing: every few seconds it reads the host's log, as
+    root, or as the login user where sudo allows nft only. The source is the
+    journal (`journalctl -k`, read on from the last cursor), logread on
+    OpenWrt, else the first syslog file with such lines (`kern.log`,
+    `messages`, `syslog`), else `dmesg`; the tab says which. Syslog lines
+    without a year or zone are dated with the host's zone, dmesg's by the
+    boot time.
+  - A line belongs to the rule whose log prefix it starts with, when exactly
+    one rule has it; the line then links to the rule's chain and shows what
+    the rule did: its verdict, or the chain's policy for the last rule of a
+    base chain. Lines of other tools, such as iptables' LOG, show unlinked.
+  - The same packet again within a second (same prefix, interfaces,
+    protocol, addresses, destination port, ICMP type, TCP flags; the source
+    port may differ) is one line with its count.
+  - "Log drops" in the editor puts last in a base chain with policy drop
+    `counter limit rate 50/second burst 100 packets log prefix "hopdeck drop
+    FAMILY TABLE CHAIN: "`: the counter sees every packet the policy drops,
+    the log at most 50 a second, so a flood cannot fill the host's log. It
+    goes through the usual review and rollback.
+  - The kernel logs packets only from the host's own network namespace
+    (unless `net.netfilter.nf_log_all_netns` is 1), so containers, the test
+    hosts among them, and the sandbox log none; the sandbox's tab says so
+    instead of reading this machine's log. The parsing is tested on lines in
+    the kernel's format, and the sources on the test hosts.
 - **Host load** (done): the host's header shows CPU as top shows a process
   (100% per fully busy thread, up to 100% times the threads) and memory in
   use as free counts it (total less MemAvailable), with the share of it. The

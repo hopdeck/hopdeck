@@ -123,6 +123,7 @@ export function TableEditor({ family, name, source, initialMode, draft, onDraft,
       {mode === 'visual' ? (
         <VisualEditor
           family={family}
+          table={name}
           chains={chains}
           sets={sets}
           counters={source.counters}
