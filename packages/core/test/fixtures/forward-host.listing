@@ -1,0 +1,19 @@
+table inet filter { # handle 1
+	comment "managed by hopdeck"
+	chain input { # handle 1
+		type filter hook input priority filter; policy drop;
+		ct state established,related accept # handle 3
+		tcp dport 22 accept # handle 4
+	}
+
+	chain forward { # handle 2
+		type filter hook forward priority filter; policy drop;
+		iifname "lan0" oifname "eth0" accept # handle 5
+		counter packets 0 bytes 0 limit rate 50/second burst 100 packets log prefix "hopdeck drop inet filter forward: " # handle 6
+	}
+}
+table ip filter { # handle 2
+	chain FORWARD { # handle 1
+		type filter hook forward priority filter; policy drop;
+	}
+}

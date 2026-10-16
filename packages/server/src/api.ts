@@ -136,6 +136,34 @@ const ROUTES: Route[] = [
   },
   {
     method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/network$/,
+    async handle(_req, [id], ctx) {
+      return { body: { network: found(await ctx.hosts.network(id!)) } };
+    },
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/route$/,
+    async handle(req, [id], ctx) {
+      const to = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams.get('to') ?? '';
+      // An address only: it goes to ip route get as an argument.
+      if (!/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$|^(?=.*:)[0-9a-fA-F:.]{2,45}$/.test(to)) throw new ApiError(400, 'invalid-query', 'to must be an IPv4 or IPv6 address');
+      return { body: { route: found(await ctx.hosts.route(id!, to)) } };
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/hosts\/([^/]+)\/forwarding$/,
+    async handle(req, [id], ctx) {
+      const body = asObject(await readJson(req));
+      const version = body['version'];
+      if (version !== 'ip' && version !== 'ip6') throw new ApiError(400, 'invalid-body', 'version must be "ip" or "ip6"');
+      if (typeof body['persist'] !== 'boolean') throw new ApiError(400, 'invalid-body', 'persist must be true or false');
+      return { body: { network: found(await ctx.hosts.enableForwarding(id!, version, body['persist'])) } };
+    },
+  },
+  {
+    method: 'GET',
     pattern: /^\/api\/hosts\/([^/]+)\/packet-log$/,
     async handle(req, [id], ctx) {
       const after = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams.get('after') ?? undefined;

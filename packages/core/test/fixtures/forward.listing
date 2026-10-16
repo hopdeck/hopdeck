@@ -1,0 +1,28 @@
+table inet t { # handle 1
+	comment "managed by hopdeck"
+	chain prerouting { # handle 1
+		type nat hook prerouting priority dstnat; policy accept;
+		iifname { "wg0", "eth0" } fib daddr type local ip saddr { 10.0.0.0/24, 192.0.2.1 } meta l4proto { tcp, udp } th dport { 80, 8000-8010 } limit rate 10/second burst 5 packets log prefix "hopdeck forward web: " counter packets 0 bytes 0 dnat ip to 192.168.1.10:80 comment "hopdeck forward: web" # handle 9
+		ip saddr 192.168.1.0/24 fib daddr type local meta l4proto { tcp, udp } th dport { 80, 8000-8010 } counter packets 0 bytes 0 dnat ip to 192.168.1.10:80 comment "hopdeck forward: web (hairpin)" # handle 12
+		iifname "eth0" ip daddr 203.0.113.5 udp dport 27015 counter packets 0 bytes 0 dnat ip to 192.168.1.20 comment "hopdeck forward: game server" # handle 13
+		fib daddr type local ip6 saddr 2001:db8:1::/64 tcp dport 443 counter packets 0 bytes 0 dnat ip6 to [2001:db8::10]:8443 comment "hopdeck forward: v6" # handle 14
+	}
+
+	chain forward { # handle 2
+		type filter hook forward priority filter; policy drop;
+		oifname "lan0" ip daddr 192.168.1.10 meta l4proto { tcp, udp } th dport 80 ct status dnat counter packets 0 bytes 0 accept comment "hopdeck forward: web (accept)" # handle 16
+		ip daddr 192.168.1.20 udp dport 27015 ct status dnat counter packets 0 bytes 0 accept comment "hopdeck forward: game server (accept)" # handle 17
+		ip6 daddr 2001:db8::10 tcp dport 8443 ct status dnat counter packets 0 bytes 0 accept comment "hopdeck forward: v6 (accept)" # handle 18
+	}
+
+	chain postrouting { # handle 3
+		type nat hook postrouting priority srcnat; policy accept;
+		ip saddr 192.168.1.0/24 ip daddr 192.168.1.10 meta l4proto { tcp, udp } th dport 80 ct status dnat counter packets 0 bytes 0 masquerade comment "hopdeck forward: web (hairpin)" # handle 20
+		ip daddr 192.168.1.20 udp dport 27015 ct status dnat counter packets 0 bytes 0 masquerade comment "hopdeck forward: game server (masquerade)" # handle 21
+		ip6 saddr 2001:db8::/64 ip6 daddr 2001:db8::10 tcp dport 8443 ct status dnat counter packets 0 bytes 0 masquerade comment "hopdeck forward: v6 (hairpin)" # handle 22
+	}
+
+	chain other { # handle 4
+		meta mark 0x00000001 tcp dport 2222 dnat ip to 192.168.1.30 comment "hopdeck forward: by hand" # handle 23
+	}
+}

@@ -13,6 +13,19 @@
 - "Log drops" in the editor, for a base chain with policy drop: a last rule
   that counts every packet the policy drops and logs them, at most 50 a
   second, so a flood cannot fill the host's log.
+- A Port forwards tab with a wizard: the protocol and ports, the incoming
+  interfaces (chosen from the host's, with their addresses), the address of
+  the host, the sources allowed, the target and its port, the interfaces
+  towards it (suggested from the host's route), masquerade, hairpin NAT,
+  logging and a limit of new connections. hopdeck writes the DNAT, lets
+  the connections through every managed forward chain that would drop them
+  (with replies, where nothing let them through yet), and warns of a forward
+  chain of another tool, such as Docker's, that would drop them. Forwards
+  are listed with their connections, and can be changed and removed; the
+  changes go through the usual review and rollback.
+- When the host does not forward packets (`net.ipv4.ip_forward`), the tab
+  says so and offers to turn it on, now and at boot
+  (`/etc/sysctl.d/90-hopdeck-forwarding.conf`) or until the next boot.
 - Where the main nftables configuration, such as `/etc/nftables.conf`,
   defines a table hopdeck manages, a comment above it there says that
   hopdeck's file replaces the table at boot, so changes made there have no

@@ -462,7 +462,14 @@
 
 .fieldControl {
   display: grid;
+  gap: 3px;
   min-width: 0;
+}
+
+.fieldError {
+  color: var(--danger);
+  font-size: var(--text-xs);
+  font-weight: 500;
 }
 
 .inline {

@@ -20,6 +20,8 @@ import type {
   GeneratedKey,
   HostSummary,
   KeySetupResult,
+  HostNetwork,
+  HostRoute,
   KeyUse,
   PacketLogView,
   PersistenceStatus,
@@ -34,11 +36,12 @@ import type {
 } from '@hopdeck/core';
 import { cpuPercent, liveState, parseUsage, platform, USAGE_COMMAND, type CpuSample, type HostUsage } from '@hopdeck/core';
 import { HostError } from './errors.ts';
-import { Deployments, type DeployLogEntry, type DeployTarget } from '../firewall/deploy.ts';
+import { Deployments, firewallReadOnly, type DeployLogEntry, type DeployTarget } from '../firewall/deploy.ts';
 import { History, type HistoryTarget } from '../firewall/history.ts';
 import { journal } from './journal.ts';
 import { Traces, type TraceOptions } from '../firewall/trace.ts';
 import { readPacketLog } from '../firewall/packet-log.ts';
+import { enableForwarding, readNetwork, readRoute } from './network.ts';
 import { collectFacts } from './facts.ts';
 import { HostKeys } from './host-keys.ts';
 import { addInclude, enableService, persistenceStatus, persistTables, saveAll, type PersistTarget } from '../firewall/persist.ts';
@@ -565,6 +568,37 @@ export class HostManager {
   /** Every look at the ruleset may find a change made outside hopdeck; see History.observe(). */
   async #observe(entry: Entry, json: unknown): Promise<void> {
     if (this.#platform(entry).firewall !== 'read-only') await this.#history.observe(this.#historyTarget(entry), json);
+  }
+
+  /** The host's interfaces with their addresses, and whether it forwards packets. */
+  async network(id: string): Promise<HostNetwork | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    this.#access(entry);
+    return readNetwork(entry.executor);
+  }
+
+  /** Where the host sends packets for an address: which interface, through which gateway. */
+  async route(id: string, to: string): Promise<(HostRoute & { problem?: string }) | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    this.#access(entry);
+    return readRoute(entry.executor, to);
+  }
+
+  /**
+   * Turns on forwarding for IPv4 or IPv6, as port forwards need: now, and with
+   * `persist` at boot too. The sandbox forwards in its own namespace only, and
+   * keeps nothing for a boot it never has.
+   */
+  async enableForwarding(id: string, version: 'ip' | 'ip6', persist: boolean): Promise<HostNetwork | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    const access = this.#access(entry);
+    const readOnly = firewallReadOnly(this.#platform(entry));
+    if (readOnly !== undefined) throw new HostError('platform-read-only', readOnly);
+    if (entry.kind === 'sandbox' && persist) throw new HostStateError('the sandbox has no boot to keep forwarding for; it is on until hopdeck stops');
+    return enableForwarding({ executor: entry.executor, access }, version, persist);
   }
 
   /**

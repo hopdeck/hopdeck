@@ -6,21 +6,35 @@ import { ChevronRightIcon } from '../../components/icons.tsx';
 import { useI18n } from '../../i18n/I18nProvider.tsx';
 import styles from './Editor.module.css';
 
-/** A labelled row; `group` for several controls, which cannot share one <label>. */
-export function Field({ label, group = false, children }: { label: string; group?: boolean; children: ReactNode }) {
+/**
+ * A labelled row; `group` for several controls, which cannot share one <label>.
+ * An `error` shows under the control; the control itself says aria-invalid.
+ */
+export function Field({ label, group = false, error, children }: { label: string; group?: boolean; error?: string | undefined; children: ReactNode }) {
   const id = useId();
+  const message = error === undefined ? null : (
+    <span className={styles.fieldError} role="alert">
+      {error}
+    </span>
+  );
   if (group) {
     return (
       <div className={styles.field} role="group" aria-labelledby={id}>
         <span id={id} className={styles.fieldLabel}>{label}</span>
-        <span className={styles.fieldControl}>{children}</span>
+        <span className={styles.fieldControl}>
+          {children}
+          {message}
+        </span>
       </div>
     );
   }
   return (
     <label className={styles.field}>
       <span className={styles.fieldLabel}>{label}</span>
-      <span className={styles.fieldControl}>{children}</span>
+      <span className={styles.fieldControl}>
+        {children}
+        {message}
+      </span>
     </label>
   );
 }

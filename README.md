@@ -14,6 +14,8 @@ only easier:
   tables it manages.
 - A packet path view (hooks and priorities across all tables), packet tracing
   and live counters.
+- Port forwards with a wizard: DNAT, the accepts every forward chain needs,
+  masquerade and hairpin NAT, listed, changed and removed as one.
 - A packet log: what rules with a log statement wrote to the host's kernel
   log, each line linked to its rule, the same packet within a second folded
   into one line; one click logs what a chain's policy drops.

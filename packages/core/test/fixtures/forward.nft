@@ -1,0 +1,25 @@
+table inet t {
+	comment "managed by hopdeck"
+	chain prerouting {
+		type nat hook prerouting priority dstnat; policy accept;
+		iifname { "eth0", "wg0" } fib daddr type local ip saddr { 10.0.0.0/24, 192.0.2.1 } meta l4proto { tcp, udp } th dport { 80, 8000-8010 } limit rate 10/second log prefix "hopdeck forward web: " counter dnat ip to 192.168.1.10:80 comment "hopdeck forward: web"
+		ip saddr 192.168.1.0/24 fib daddr type local meta l4proto { tcp, udp } th dport { 80, 8000-8010 } counter dnat ip to 192.168.1.10:80 comment "hopdeck forward: web (hairpin)"
+		iifname "eth0" ip daddr 203.0.113.5 udp dport 27015 counter dnat ip to 192.168.1.20 comment "hopdeck forward: game server"
+		fib daddr type local ip6 saddr 2001:db8:1::/64 tcp dport 443 counter dnat ip6 to [2001:db8::10]:8443 comment "hopdeck forward: v6"
+	}
+	chain forward {
+		type filter hook forward priority filter; policy drop;
+		oifname "lan0" ip daddr 192.168.1.10 meta l4proto { tcp, udp } th dport 80 ct status dnat counter accept comment "hopdeck forward: web (accept)"
+		ip daddr 192.168.1.20 udp dport 27015 ct status dnat counter accept comment "hopdeck forward: game server (accept)"
+		ip6 daddr 2001:db8::10 tcp dport 8443 ct status dnat counter accept comment "hopdeck forward: v6 (accept)"
+	}
+	chain postrouting {
+		type nat hook postrouting priority srcnat; policy accept;
+		ip saddr 192.168.1.0/24 ip daddr 192.168.1.10 meta l4proto { tcp, udp } th dport 80 ct status dnat counter masquerade comment "hopdeck forward: web (hairpin)"
+		ip daddr 192.168.1.20 udp dport 27015 ct status dnat counter masquerade comment "hopdeck forward: game server (masquerade)"
+		ip6 saddr 2001:db8::/64 ip6 daddr 2001:db8::10 tcp dport 8443 ct status dnat counter masquerade comment "hopdeck forward: v6 (hairpin)"
+	}
+	chain other {
+		meta mark 0x1 tcp dport 2222 dnat ip to 192.168.1.30 comment "hopdeck forward: by hand"
+	}
+}

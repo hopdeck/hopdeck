@@ -591,6 +591,38 @@ The npm supply chain is a real risk for a tool with this access.
     the lines; `-a` gives rule handles.
   - The sandbox brings up `lo` and can send test traffic, so tracing can be
     tried there.
+- **Port forwards** (done): the Port forwards tab and its wizard
+  (`core/port-forward.ts`).
+  - A forward is DNAT on prerouting in a nat chain of a managed table (one
+    the user picks, a new `inet hopdeck_forward` by default when none fits),
+    and an accept in every forward chain that drops what it does not
+    accept: an accept in one table does not get past a drop in another.
+    The accept goes before the rules that end such a chain for every packet,
+    such as "Log drops"; a chain that lets no replies through gets
+    `ct state established,related accept` first. Forward chains of tables
+    hopdeck does not manage that would drop the packets are named in a
+    warning (Docker's FORWARD chain is the usual one).
+  - The DNAT matches only packets to the host itself (`fib daddr type
+    local`, or the address chosen): a DNAT on the port alone would also take
+    connections passing through to other hosts. The accept matches `ct
+    status dnat`.
+  - Masquerade rewrites the source for the target, for one whose answers
+    would not come back this way; hairpin NAT forwards clients on the
+    target's side that come to the host's own address, and masquerades them.
+  - Every rule names its forward in its comment (`hopdeck forward: NAME`,
+    with its part: accept, masquerade, hairpin), so the tab reads forwards
+    back from the rules, changes one in place (rules that stay the same keep
+    their counters) and removes it whole. A forward whose rules someone
+    changed by hand is listed as such, and only removed.
+  - The wizard reads the host's interfaces and addresses (`ip -o`), and
+    the route to the target (`ip route get`) to suggest the interface
+    towards it, warn when masquerade may be needed (a gateway or a tunnel in
+    between) and the clients for hairpin NAT (the target's network).
+  - Forwarding (`net.ipv4.ip_forward`, `net.ipv6.conf.all.forwarding`) is a
+    kernel setting, not a rule: no rollback covers it, so the tab only offers
+    it, now and at boot (`/etc/sysctl.d/90-hopdeck-forwarding.conf`) or until
+    the next boot, and the system log notes it. For IPv6 it warns that
+    forwarding stops router advertisements being taken where accept_ra is 1.
 - **Packet log** (done): the Logs tab shows what rules with a log statement
   wrote to the host's kernel log, newest first (`core/packet-log.ts`).
   - hopdeck stores nothing: every few seconds it reads the host's log, as

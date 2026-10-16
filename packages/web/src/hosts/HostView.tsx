@@ -26,6 +26,7 @@ import { changedTables } from '../firewall/ruleset/model.ts';
 import { PacketPathView } from '../firewall/ruleset/PacketPathView.tsx';
 import { NEW_TRACE_SESSION, TracePanel, type TraceSession } from '../firewall/trace/TracePanel.tsx';
 import { PacketLogPanel } from '../firewall/log/PacketLogPanel.tsx';
+import { ForwardsPanel } from '../firewall/forward/ForwardsPanel.tsx';
 import { RulesetView } from '../firewall/ruleset/RulesetView.tsx';
 import { useRuleset, type RulesetState } from '../firewall/ruleset/useRuleset.ts';
 import { useLive } from '../firewall/ruleset/useLive.ts';
@@ -129,7 +130,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   const [liveSeconds, setLiveSeconds] = useState(5);
   // Counters and changes are read while the rules (or the editor) or the packet log are in view.
   // Paused while the host refuses the login: it would only repeat that.
-  const live = useLive(host.id, liveSeconds, readable && (tab === 'rules' || tab === 'logs') && ruleset.model !== undefined && loginLost === undefined);
+  const live = useLive(host.id, liveSeconds, readable && (tab === 'rules' || tab === 'logs' || tab === 'forwards') && ruleset.model !== undefined && loginLost === undefined);
   // While hopdeck applies a change itself, the host differing is expected.
   const changed =
     live.info === undefined || ruleset.model === undefined || changes !== undefined || ruleset.loading
@@ -309,6 +310,30 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                       />
                     </div>
                   ),
+              },
+              {
+                id: 'forwards',
+                group: t('tabs.group.firewall'),
+                label: t('tabs.forwards'),
+                content: readOnly ? (
+                  <Callout tone="info" icon={<LockIcon />} title={t('platform.readOnly.title')}>
+                    {t('platform.readOnly.openwrt')}
+                  </Callout>
+                ) : ruleset.model !== undefined ? (
+                  <ForwardsPanel
+                    hostId={host.id}
+                    hostKind={host.kind}
+                    model={ruleset.model}
+                    live={live.info}
+                    onChange={setChanges}
+                    onShowChain={(anchor) => {
+                      setScrollTarget(anchor);
+                      setTab('rules');
+                    }}
+                  />
+                ) : (
+                  <Listing state={ruleset} />
+                ),
               },
               {
                 id: 'path',

@@ -313,6 +313,18 @@ pre,
   box-shadow: 0 0 0 1px var(--accent);
 }
 
+/* A field whose value is wrong; its form says why, under it. */
+.input[aria-invalid='true'],
+.select[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.input[aria-invalid='true']:focus,
+.select[aria-invalid='true']:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
+
 .select-compact {
   width: auto;
   height: 24px;
