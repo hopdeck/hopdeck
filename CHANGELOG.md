@@ -36,6 +36,14 @@
 - A rule added in the editor, with "Add rule" or "Log drops", is scrolled
   into view and flashes, as it lands at the end of its chain.
 
+### Fixed
+
+- On RHEL, AlmaLinux and others with SELinux enforcing, the watchdog that
+  systemd starts could not read its file: a change that cut hopdeck off was
+  not rolled back when time ran out, and a packet trace left its table on
+  the host. nft now reads the file from its standard input, which SELinux
+  allows.
+
 ## 0.2.0 (2026-10-15)
 
 ### Added

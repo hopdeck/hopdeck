@@ -100,6 +100,9 @@ const RACE_MARGIN_MS = 3000;
 // "confirmed" appears in its directory within $1 seconds, it restores the
 // tables from rollback.nft with the command in the other arguments and records
 // the outcome; confirmed or not, the directory is removed once it is done.
+// nft reads the file from its standard input, opened by the shell: started
+// by systemd under SELinux (RHEL), nft runs as iptables_t, which may not open
+// files in /tmp, but may read one handed to it.
 const WATCHDOG = `#!/bin/sh
 # hopdeck rollback watchdog; see packages/server/src/firewall/deploy.ts.
 dir=$(dirname "$0")
@@ -111,7 +114,7 @@ if [ -e "$dir/confirmed" ]; then
 	rm -rf "$dir"
 	exit 0
 fi
-"$@" -f "$dir/rollback.nft" > "$dir/rollback.log" 2>&1
+"$@" -f - > "$dir/rollback.log" 2>&1 < "$dir/rollback.nft"
 echo $? > "$dir/rolled-back"
 `;
 

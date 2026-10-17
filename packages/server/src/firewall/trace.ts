@@ -16,7 +16,8 @@ const MAX_PACKETS = 500;
 // Runs on the host as root (or as the login user with sudo for nft), started
 // the way the deployment watchdog is, before the tracing table exists. It
 // records the trace until $1 seconds pass, "stop" appears or the monitor ends,
-// then always removes the table with cleanup.nft and says so in "finished".
+// then always removes the table with cleanup.nft and says so in "finished";
+// nft reads it from its standard input, as the rollback watchdog's does.
 const TRACE_WATCHDOG = `#!/bin/sh
 # hopdeck trace watchdog; see packages/server/src/firewall/trace.ts.
 dir=$(dirname "$0")
@@ -32,7 +33,7 @@ while [ "$waited" -lt "$seconds" ] && [ ! -e "$dir/stop" ] && kill -0 "$monitor"
 	waited=$((waited + 1))
 done
 kill "$monitor" 2>/dev/null
-"$@" -f "$dir/cleanup.nft" > "$dir/cleanup.log" 2>&1
+"$@" -f - > "$dir/cleanup.log" 2>&1 < "$dir/cleanup.nft"
 echo $? > "$dir/finished"
 `;
 
