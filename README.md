@@ -31,7 +31,7 @@ only easier:
 Planned: more network tools, such as a topology view; IP sets and nftables
 includes on OpenWrt.
 
-**Status:** 0.3.0: usable, and early. See [CHANGELOG.md](CHANGELOG.md).
+**Status:** 0.4.0: usable, and early. See [CHANGELOG.md](CHANGELOG.md).
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
 
@@ -49,8 +49,8 @@ Download the archive for your machine and `SHA256SUMS` from the
 
 ```sh
 sha256sum -c --ignore-missing SHA256SUMS
-tar xf hopdeck-0.3.0-linux-x64.tar.xz
-hopdeck-0.3.0-linux-x64/hopdeck
+tar xf hopdeck-0.4.0-linux-x64.tar.xz
+hopdeck-0.4.0-linux-x64/hopdeck
 ```
 
 The sums show the download is whole. That it was built by this repository's
@@ -58,7 +58,7 @@ release workflow, from the version's tag, is what its attestation shows
 (from 0.2.0 on); with the [GitHub CLI](https://cli.github.com/):
 
 ```sh
-gh attestation verify hopdeck-0.3.0-linux-x64.tar.xz --repo hopdeck/hopdeck
+gh attestation verify hopdeck-0.4.0-linux-x64.tar.xz --repo hopdeck/hopdeck
 ```
 
 It prints the address of the panel; open it in a browser on the same
@@ -84,8 +84,8 @@ Download the zip for your machine and `SHA256SUMS`, extract the zip, and start
 `hopdeck.exe` from PowerShell:
 
 ```powershell
-Expand-Archive hopdeck-0.3.0-win-x64.zip -DestinationPath .
-.\hopdeck-0.3.0-win-x64\hopdeck.exe
+Expand-Archive hopdeck-0.4.0-win-x64.zip -DestinationPath .
+.\hopdeck-0.4.0-win-x64\hopdeck.exe
 ```
 
 To unlock SSH keys that have a passphrase, hopdeck uses Windows' OpenSSH
@@ -109,7 +109,7 @@ publisher. Check that the file is the released one, then start it anyway with
 in `SHA256SUMS`:
 
 ```powershell
-Get-FileHash hopdeck-0.3.0-win-x64.zip -Algorithm SHA256
+Get-FileHash hopdeck-0.4.0-win-x64.zip -Algorithm SHA256
 ```
 
 Rather not run a program without a signature? Run hopdeck from its source
@@ -121,7 +121,7 @@ executable you build yourself.
 
 All of hopdeck is in this repository: you can run it with Node.js instead of
 the executable, or build the executable yourself from it. Each release has a
-tag, `v0.3.0` for example; use the latest one from the
+tag, `v0.4.0` for example; use the latest one from the
 [releases](https://github.com/hopdeck/hopdeck/releases).
 
 ### On Linux
@@ -130,7 +130,7 @@ You need Node.js 24 or later from [nodejs.org](https://nodejs.org) (the
 Node.js of many distributions is older), git, and the OpenSSH client. Then:
 
 ```sh
-git clone --branch v0.3.0 https://github.com/hopdeck/hopdeck.git
+git clone --branch v0.4.0 https://github.com/hopdeck/hopdeck.git
 cd hopdeck
 npm install -g pnpm@12            # with sudo, if Node.js is installed system-wide
 pnpm install --frozen-lockfile
@@ -142,7 +142,7 @@ To build the executable instead, after `pnpm install`:
 
 ```sh
 pnpm build:sea
-dist/hopdeck-0.3.0-linux-x64/hopdeck
+dist/hopdeck-0.4.0-linux-x64/hopdeck
 ```
 
 The build downloads the official Node.js release the executable is made of
@@ -163,7 +163,7 @@ winget install Git.Git
 Then, in a new PowerShell window:
 
 ```powershell
-git clone --branch v0.3.0 https://github.com/hopdeck/hopdeck.git
+git clone --branch v0.4.0 https://github.com/hopdeck/hopdeck.git
 cd hopdeck
 npm install -g pnpm@12
 pnpm install --frozen-lockfile
@@ -180,7 +180,7 @@ To build the executable instead, after `pnpm install`:
 
 ```powershell
 pnpm build:sea
-dist\hopdeck-0.3.0-win-x64\hopdeck.exe
+dist\hopdeck-0.4.0-win-x64\hopdeck.exe
 ```
 
 ## Development

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-10-18)
 
 ### Added
 
@@ -13,8 +13,8 @@
   arms rpcd's own rollback, reloads the firewall and checks it, tries a new
   SSH connection, and shows the nftables fw4 made, before and after, until
   you keep the change. Changes made on a configuration that changed since
-  are refused. OpenWrt 22.03 and later; the nftables view stays read-only
-  there, as fw4 makes it.
+  are refused. OpenWrt 22.03 and later, tested on 24.10 and 25.12; the
+  nftables view stays read-only there, as fw4 makes it.
 - The host's header shows how long the host has been up, next to CPU and
   RAM, and when it booted on hover.
 
