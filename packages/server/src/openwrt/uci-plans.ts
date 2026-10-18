@@ -60,13 +60,22 @@ export class UciPlans {
     return [...this.#plans.values()].some(({ view }) => view.hostId === hostId && view.state === 'awaiting-confirmation');
   }
 
-  /** Stages the changes in a new rpcd session and lists them as rpcd will write them. Nothing changes on the router yet. */
-  async prepare(target: DeployTarget, config: string, changes: readonly UciChange[]): Promise<UciPlanView> {
+  /**
+   * Stages the changes in a new rpcd session and lists them as rpcd will write
+   * them. Nothing changes on the router yet. `base` is the hash of the
+   * configuration the changes were made on: UCI names anonymous sections by
+   * their place in the file, so after a change elsewhere the same name may
+   * mean another section, and the plan is refused.
+   */
+  async prepare(target: DeployTarget, config: string, changes: readonly UciChange[], options: { base?: string } = {}): Promise<UciPlanView> {
     if (target.platform.id !== 'openwrt') throw new HostError('platform-read-only', 'UCI is OpenWrt’s configuration; this host is not OpenWrt');
     if (!/^[a-z0-9_-]+$/.test(config)) throw new HostError('invalid-definition', `not a UCI configuration: ${config}`);
     if (changes.length === 0) throw new HostError('invalid-definition', 'no changes');
 
     const hashBefore = await configHash(target, config);
+    if (options.base !== undefined && options.base !== hashBefore) {
+      throw new HostError('ruleset-changed', `/etc/config/${config} changed since the panel read it, in LuCI or elsewhere; read it again and make the changes on what is there now`);
+    }
     const session = await openSession(target, config);
     const view: UciPlanView = {
       id: randomUUID(),
@@ -79,10 +88,19 @@ export class UciPlans {
       safety: { seconds: this.#seconds, freshConnectionCheck: target.freshExecutor !== undefined },
     };
     try {
+      // Sections the panel added go by their ref until rpcd names them.
+      const refs = new Map<string, string>();
+      const named = (section: string) => refs.get(section) ?? section;
       for (const change of changes) {
-        const { method, message } = uciCall(config, change);
+        const resolved: UciChange =
+          change.kind === 'order' ? { ...change, sections: change.sections.map(named) } : change.kind === 'add' ? change : { ...change, section: named(change.section) };
+        const { method, message } = uciCall(config, resolved);
         const refused = await ubus(target, 'uci', method, { ...message, ubus_rpc_session: session }).then(
-          () => undefined,
+          (answer) => {
+            const section = (answer as { section?: unknown } | undefined)?.section;
+            if (change.kind === 'add' && change.ref !== undefined && typeof section === 'string') refs.set(change.ref, section);
+            return undefined;
+          },
           (error: unknown) => {
             // rpcd's refusal is the plan's validation, as nft -c is a deployment's.
             if (error instanceof HostError && error.code === 'uci-failed') return error.detail;
@@ -317,7 +335,8 @@ export async function readConfig(target: DeployTarget, config: string, session: 
   }
 }
 
-async function configHash(target: DeployTarget, config: string): Promise<string> {
+/** The SHA-256 of /etc/config/<config>, which tells whether it changed. */
+export async function configHash(target: Pick<DeployTarget, 'access'>, config: string): Promise<string> {
   const result = await runAsRoot(target.access, ['sha256sum', `/etc/config/${config}`]);
   if (result.exitCode !== 0) throw new HostError('uci-failed', `reading /etc/config/${config}: ${result.stderr.trim()}`);
   return result.stdout.split(/\s/)[0]!;

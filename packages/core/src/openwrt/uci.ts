@@ -30,8 +30,12 @@ export interface UciConfig {
 
 /** One change hopdeck stages in its rpcd session: one ubus call. */
 export type UciChange =
-  /** A new section; anonymous unless it has a name. */
-  | { kind: 'add'; type: string; name?: string; values: Record<string, UciValue> }
+  /**
+   * A new section; anonymous unless it has a name. Until rpcd names it, later
+   * changes and orders refer to it by `ref` (new-1, ...), which hopdeck
+   * replaces with the name rpcd gives it.
+   */
+  | { kind: 'add'; type: string; name?: string; ref?: string; values: Record<string, UciValue> }
   /** Options set, keeping the others. */
   | { kind: 'set'; section: string; values: Record<string, UciValue> }
   /** Options removed. */

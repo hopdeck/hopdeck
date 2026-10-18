@@ -34,9 +34,10 @@ import type {
   TraceView,
   UsedKey,
 } from '@hopdeck/core';
-import { cpuPercent, liveState, parseUsage, platform, USAGE_COMMAND, type CpuSample, type HostUsage } from '@hopdeck/core';
+import { cpuPercent, liveState, parseUsage, platform, USAGE_COMMAND, type CpuSample, type HostUsage, type UciChange, type UciConfig, type UciPlanView } from '@hopdeck/core';
 import { HostError } from './errors.ts';
 import { Deployments, firewallReadOnly, type DeployLogEntry, type DeployTarget } from '../firewall/deploy.ts';
+import { configHash, readConfig, UciPlans } from '../openwrt/uci-plans.ts';
 import { History, type HistoryTarget } from '../firewall/history.ts';
 import { journal } from './journal.ts';
 import { Traces, type TraceOptions } from '../firewall/trace.ts';
@@ -117,6 +118,7 @@ export class HostManager {
   readonly #entries = new Map<string, Entry>();
   readonly #hostKeys: HostKeys;
   readonly #deployments: Deployments;
+  readonly #uci: UciPlans;
   readonly #traces = new Traces();
   readonly #history: History;
   readonly #sshKeys: SshKeys;
@@ -138,9 +140,13 @@ export class HostManager {
       afterConfirm: (view) => persistTables(this.#persistTarget(entryOf(view.hostId)), view.tables),
       record: (view) => this.#history.record(this.#historyTarget(entryOf(view.hostId)), view),
     });
+    this.#uci = new UciPlans({
+      ...(options.rollbackSeconds !== undefined && { seconds: options.rollbackSeconds }),
+      log: (entry) => this.#logChange(entry),
+    });
     this.#history = new History({
       operator: options.operator ?? { user: userInfo().username, computer: hostname() },
-      busy: (hostId) => this.#deployments.busy(hostId),
+      busy: (hostId) => this.#deployments.busy(hostId) || this.#uci.busy(hostId),
     });
   }
 
@@ -279,6 +285,46 @@ export class HostManager {
       case 'discard': {
         const view = this.#deployments.get(id);
         await this.#deployments.discard(id, target);
+        return view;
+      }
+    }
+  }
+
+  /** A UCI configuration of an OpenWrt host as committed, without changes waiting anywhere, and the hash of its file. */
+  async uciConfig(id: string, config: string): Promise<{ config: UciConfig; hash: string } | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    const target = this.#target(entry);
+    if (target.platform.id !== 'openwrt') throw new HostError('platform-read-only', 'UCI is OpenWrt’s configuration; this host is not OpenWrt');
+    // The hash first: a change in between makes it older than what is read, so a plan made on it is refused rather than misplaced.
+    const hash = await configHash(target, config);
+    return { config: await readConfig(target, config, undefined), hash };
+  }
+
+  /** Stages changes of a UCI configuration in hopdeck's own rpcd session; nothing changes until apply. */
+  async prepareUci(id: string, config: string, changes: readonly UciChange[], base: string | undefined): Promise<UciPlanView | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    return this.#uci.prepare(this.#target(entry), config, changes, base === undefined ? {} : { base });
+  }
+
+  async uciPlan(id: string, action: 'get' | 'apply' | 'confirm' | 'rollback' | 'discard'): Promise<UciPlanView | undefined> {
+    const hostId = this.#uci.hostOf(id);
+    const entry = hostId === undefined ? undefined : this.#entries.get(hostId);
+    if (entry === undefined) return undefined;
+    const target = this.#target(entry);
+    switch (action) {
+      case 'get':
+        return this.#uci.refresh(id, target);
+      case 'apply':
+        return this.#uci.apply(id, target);
+      case 'confirm':
+        return this.#uci.confirm(id, target);
+      case 'rollback':
+        return this.#uci.rollback(id, target);
+      case 'discard': {
+        const view = this.#uci.get(id);
+        await this.#uci.discard(id, target);
         return view;
       }
     }

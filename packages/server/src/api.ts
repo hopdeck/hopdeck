@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import { HISTORY_MAX_BYTES, RSA_BITS, validMaxBytes, type Family, type KeyUse, type TableChange, type TraceFilter } from '@hopdeck/core';
+import { HISTORY_MAX_BYTES, RSA_BITS, validMaxBytes, type Family, type KeyUse, type TableChange, type TraceFilter, type UciChange, type UciValue } from '@hopdeck/core';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HostError } from './hosts/errors.ts';
 import { HostStateError, InvalidHostError, type HostManager } from './hosts/manager.ts';
@@ -248,6 +248,41 @@ const ROUTES: Route[] = [
   },
   {
     method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/uci\/([a-z0-9_-]+)$/,
+    async handle(_req, [id, config], ctx) {
+      if (!UCI_READABLE.includes(config!)) throw new ApiError(400, 'invalid-body', `hopdeck reads only these UCI configurations: ${UCI_READABLE.join(', ')}`);
+      return { body: found(await ctx.hosts.uciConfig(id!, config!)) };
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/hosts\/([^/]+)\/uci\/([a-z0-9_-]+)\/plans$/,
+    async handle(req, [id, config], ctx) {
+      if (!UCI_WRITABLE.includes(config!)) throw new ApiError(400, 'invalid-body', `hopdeck changes only these UCI configurations: ${UCI_WRITABLE.join(', ')}`);
+      const body = asObject(await readJson(req, 1024 * 1024));
+      if (!Array.isArray(body['changes']) || body['changes'].length > 2000) throw new ApiError(400, 'invalid-body', 'changes must be a list of at most 2000');
+      const changes = body['changes'].map(toUciChange);
+      const base = body['base'];
+      if (base !== undefined && (typeof base !== 'string' || !/^[0-9a-f]{64}$/.test(base))) throw new ApiError(400, 'invalid-body', 'base must be the hash the configuration was read with');
+      return { status: 201, body: { plan: found(await ctx.hosts.prepareUci(id!, config!, changes, base)) } };
+    },
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/uci-plans\/([^/]+)$/,
+    async handle(_req, [id], ctx) {
+      return { body: { plan: foundDeployment(await ctx.hosts.uciPlan(id!, 'get')) } };
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/uci-plans\/([^/]+)\/(apply|confirm|rollback|discard)$/,
+    async handle(_req, [id, action], ctx) {
+      return { body: { plan: foundDeployment(await ctx.hosts.uciPlan(id!, action as 'apply' | 'confirm' | 'rollback' | 'discard')) } };
+    },
+  },
+  {
+    method: 'GET',
     pattern: /^\/api\/hosts\/([^/]+)\/host-key$/,
     async handle(_req, [id], ctx) {
       return { body: { hostKey: found(await ctx.hosts.checkHostKey(id!)) } };
@@ -406,6 +441,7 @@ function hostErrorStatus(error: HostError): number {
       return 400;
     case 'trace-unavailable':
     case 'platform-read-only':
+    case 'uci-apply-pending':
       return 409;
     default:
       return 502;
@@ -439,6 +475,67 @@ function toTraceFilter(value: unknown): TraceFilter {
 }
 
 const FAMILIES: readonly Family[] = ['ip', 'ip6', 'inet', 'arp', 'bridge', 'netdev'];
+
+/** UCI configurations the panel reads: the firewall, and the network for the names of its interfaces. */
+const UCI_READABLE = ['firewall', 'network'];
+const UCI_WRITABLE = ['firewall'];
+const UCI_NAME = /^[A-Za-z0-9_]{1,64}$/;
+/** A section as UCI names it, or as the panel refers to one it adds (new-1, new-1-fwd-1). */
+const UCI_SECTION = /^(?:[A-Za-z0-9_]{1,64}|new-[a-z0-9-]{1,40})$/;
+
+/** One change of a UCI configuration, checked for what UCI can hold: no line breaks in values. */
+function toUciChange(value: unknown): UciChange {
+  const change = asObject(value);
+  const section = () => {
+    const name = change['section'];
+    if (typeof name !== 'string' || !UCI_SECTION.test(name)) throw new ApiError(400, 'invalid-body', 'section must be a UCI section name');
+    return name;
+  };
+  switch (change['kind']) {
+    case 'add': {
+      const type = change['type'];
+      if (typeof type !== 'string' || !/^[a-z_]{1,32}$/.test(type)) throw new ApiError(400, 'invalid-body', 'type must be a UCI section type');
+      const ref = change['ref'];
+      if (ref !== undefined && (typeof ref !== 'string' || !/^new-[a-z0-9-]{1,40}$/.test(ref))) throw new ApiError(400, 'invalid-body', 'ref must look like new-1');
+      const name = change['name'];
+      if (name !== undefined && (typeof name !== 'string' || !UCI_NAME.test(name))) throw new ApiError(400, 'invalid-body', 'name must be a UCI section name');
+      return { kind: 'add', type, ...(name !== undefined && { name }), ...(ref !== undefined && { ref }), values: uciValues(change['values']) };
+    }
+    case 'set':
+      return { kind: 'set', section: section(), values: uciValues(change['values']) };
+    case 'unset': {
+      const options = change['options'];
+      if (!Array.isArray(options) || options.length === 0 || options.length > 200 || options.some((option) => typeof option !== 'string' || !UCI_NAME.test(option))) {
+        throw new ApiError(400, 'invalid-body', 'options must be a list of UCI option names');
+      }
+      return { kind: 'unset', section: section(), options: options as string[] };
+    }
+    case 'delete':
+      return { kind: 'delete', section: section() };
+    case 'order': {
+      const sections = change['sections'];
+      if (!Array.isArray(sections) || sections.length > 5000 || sections.some((name) => typeof name !== 'string' || !UCI_SECTION.test(name))) {
+        throw new ApiError(400, 'invalid-body', 'sections must be a list of UCI section names');
+      }
+      return { kind: 'order', sections: sections as string[] };
+    }
+    default:
+      throw new ApiError(400, 'invalid-body', 'kind must be add, set, unset, delete or order');
+  }
+}
+
+function uciValues(value: unknown): Record<string, UciValue> {
+  const values = asObject(value);
+  const text = (item: unknown) => typeof item === 'string' && item.length <= 4096 && !/[\0\r\n]/.test(item);
+  for (const [option, item] of Object.entries(values)) {
+    if (!UCI_NAME.test(option)) throw new ApiError(400, 'invalid-body', `${option} is no UCI option name`);
+    if (!(text(item) || (Array.isArray(item) && item.length <= 1000 && item.every(text)))) {
+      throw new ApiError(400, 'invalid-body', `${option} must be a line of text, or a list of them`);
+    }
+  }
+  if (Object.keys(values).length > 200) throw new ApiError(400, 'invalid-body', 'too many options');
+  return values as Record<string, UciValue>;
+}
 
 function toChange(value: unknown): TableChange {
   const change = asObject(value);

@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import { openwrtFirewall, type UciChange } from '@hopdeck/core';
+import { openwrtFirewall, previewUci, typeOrder, type UciChange } from '@hopdeck/core';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { DeployTarget } from '../firewall/deploy.ts';
 import { HostError } from '../hosts/errors.ts';
 import { hostTarget, testHost } from '../testing/test-host.ts';
-import { readConfig, ubus, UciPlans } from './uci-plans.ts';
+import { configHash, readConfig, ubus, UciPlans } from './uci-plans.ts';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -85,6 +85,26 @@ describe.skipIf(testHost?.platform !== 'openwrt')('UCI plans on the OpenWrt test
     expect(await inFw4('hd-test-kept')).toBe(false);
   });
 
+  it('names a new section by its ref until rpcd does, and puts it first among the rules', async () => {
+    const config = await readConfig(target, 'firewall', undefined);
+    const add: UciChange = { kind: 'add', type: 'rule', ref: 'new-1', values: { name: 'hd-test-first', src: 'wan', proto: 'tcp', dest_port: '2225', target: 'DROP' } };
+    const set: UciChange = { kind: 'set', section: 'new-1', values: { target: 'REJECT' } };
+    const preview = previewUci(config, [add, set]);
+    const rules = preview.sections.filter((section) => section.type === 'rule').map((section) => section.name);
+    const order = typeOrder(preview, 'rule', ['new-1', ...rules.filter((name) => name !== 'new-1')]);
+    const plan = await prepare(target, 'firewall', [add, set, order]);
+    expect(plan.validation).toEqual({ ok: true, message: '' });
+    await plans.apply(plan.id, target);
+    await plans.confirm(plan.id, target);
+    const after = openwrtFirewall(await readConfig(target, 'firewall', undefined));
+    expect(after.rules[0]).toMatchObject({ name: 'hd-test-first', target: 'REJECT' });
+    // Defaults, zones and the forwarding stay where they were in the file.
+    expect((await readConfig(target, 'firewall', undefined)).sections.slice(0, 4).map((section) => section.type)).toEqual(['defaults', 'zone', 'zone', 'forwarding']);
+    // fw4 follows UCI's order: the rule comes before the others from wan.
+    const input = await sh("nft list chain inet fw4 input_wan | grep -o '!fw4: [A-Za-z-]*' | head -n 1");
+    expect(input).toBe('!fw4: hd-test-first');
+  });
+
   it('is rolled back by rpcd when nobody confirms in time', async () => {
     const before = await sh('sha256sum /etc/config/firewall');
     const plan = await prepare(target, 'firewall', [rule('hd-test-unconfirmed')]);
@@ -128,6 +148,14 @@ describe.skipIf(testHost?.platform !== 'openwrt')('UCI plans on the OpenWrt test
     } finally {
       await sh('rm -f /tmp/hd-test-broken.nft');
     }
+  });
+
+  it('refuses changes made on a configuration that changed since, as names of anonymous sections may now mean others', async () => {
+    const hash = await configHash(target, 'firewall');
+    await expect(prepare(target, 'firewall', [rule('hd-test-old')], { base: '0'.repeat(64) })).rejects.toMatchObject({ code: 'ruleset-changed' });
+    const plan = await prepare(target, 'firewall', [rule('hd-test-old')], { base: hash });
+    expect(plan.state).toBe('planned');
+    await plans.discard(plan.id, target);
   });
 
   it('says what rpcd refused, and stages nothing', async () => {

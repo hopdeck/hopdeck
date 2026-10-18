@@ -27,3 +27,5 @@ export * from './firewall/history.ts';
 export * from './firewall/rule-commands.ts';
 export * from './openwrt/uci.ts';
 export * from './openwrt/firewall.ts';
+export * from './openwrt/uci-edit.ts';
+export * from './openwrt/firewall-edit.ts';
