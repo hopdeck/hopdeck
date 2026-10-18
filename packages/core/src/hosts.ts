@@ -43,7 +43,9 @@ export type HostErrorCode =
   | 'wrong-passphrase'
   | 'login-password-rejected'
   | 'password-login-disabled'
-  | 'key-exists';
+  | 'key-exists'
+  | 'uci-failed'
+  | 'uci-apply-pending';
 
 export interface HostFacts {
   uid: number;

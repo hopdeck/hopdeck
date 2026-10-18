@@ -25,3 +25,5 @@ export * from './firewall/port-forward.ts';
 export * from './firewall/live.ts';
 export * from './firewall/history.ts';
 export * from './firewall/rule-commands.ts';
+export * from './openwrt/uci.ts';
+export * from './openwrt/firewall.ts';

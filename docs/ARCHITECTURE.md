@@ -739,24 +739,55 @@ them. On OpenWrt the server refuses to plan firewall changes or save tables
 (`platform-read-only`), and the UI shows the firewall without edit actions and
 says why; tracing still works, since its temporary table changes no verdict.
 
+## OpenWrt through UCI
+
+In progress (decided 2026-10-18): the firewall of OpenWrt 22.03 and later
+(fw4) is changed through UCI, never straight through nftables. UCI
+(`/etc/config/firewall`) is OpenWrt's source of truth: fw4 makes `inet fw4`
+from it at every reload, and LuCI reads and writes only UCI, so a table
+changed with nft would be lost on the next reload and never shown in LuCI.
+What hopdeck changes there is UCI's own, and LuCI shows it.
+
+- **Scope, first:** zones and the forwardings between them, traffic rules
+  (`rule`) and port forwards (`redirect`; hairpin is its `reflection`,
+  masquerade a setting of the zone). IP sets and nftables includes later.
+  The nft view of `inet fw4` stays read-only; fw4 names each rule it makes
+  after its UCI rule (`comment "!fw4: Allow-Ping"`), which links them.
+- **Through rpcd, as LuCI does** ([`openwrt/uci-plans.ts`](../packages/server/src/openwrt/uci-plans.ts)).
+  hopdeck makes an rpcd session of its own (`ubus call session create`,
+  granted read and write on the one configuration) and stages the changes
+  there, apart from the uncommitted changes of the `uci` command
+  (`/tmp/.uci`) and of LuCI's sessions; it reads through a session too, as
+  ubus without one mixes in the `uci` command's. The review lists what rpcd
+  will write (`uci changes`) and says when other changes wait uncommitted.
+- **Applying:** `uci apply` with `rollback` arms rpcd's own rollback: unless
+  the same session confirms within the deadline, rpcd puts the
+  configuration back and has the firewall reloaded, whatever becomes of
+  hopdeck or its connection meanwhile. hopdeck then reloads fw4 itself (rpcd
+  has procd do it a second later), runs `fw4 check`, as `fw4 reload` exits
+  with 0 even when nft refused the ruleset and kept the one before, and
+  tries a new SSH connection. If the check or the connection fails, it rolls
+  back at once. While it waits for confirmation it shows the fw4 table
+  before and after. Only one such apply can wait on a router: another, from
+  LuCI or another hopdeck, is refused (`uci-apply-pending`). A change of
+  `/etc/config/firewall` between planning and applying stops the apply, as
+  a changed table does on other hosts.
+- **Full nftables power there** will come from fw4's includes: files
+  hopdeck writes, one per version, that `config include` sections of type
+  `nftables` point to. A rollback restores the pointer, so the file's
+  content goes back with the rest of UCI, and LuCI shows the include.
+- Tested on OpenWrt 24.10 and 25.12 VMs and the OpenWrt container: staging,
+  keeping, rpcd's rollback after the deadline, rolling back at once, a rule
+  that blocks new SSH connections (VMs only: a container's SSH bypasses
+  fw4's zones), an include nft refuses, rpcd refusing a change, and another
+  apply waiting.
+
 ## Future: beyond nftables on servers
 
 The project is meant to grow into managing OpenWrt routers and other parts of
 Linux networking. That makes the platform layer pluggable: the same UI over
 different ways of reading and changing a host.
 
-- **OpenWrt goes through UCI, never straight to nftables.** UCI
-  (`/etc/config/firewall`) is OpenWrt's source of truth: firewall4 generates
-  `inet fw4` from it (recognised already as another tool's table), and LuCI
-  reads and writes only UCI. Direct nft changes would be invisible to LuCI
-  and lost on the next firewall reload. hopdeck will edit UCI with `uci` or
-  ubus, so everything it does shows up in LuCI and the other way round.
-- **Full nftables power there** comes from fw4's nftables includes (UCI
-  `config include` entries of type `nftables`, and `/etc/nftables.d/*.nft`),
-  which LuCI also shows.
-- **Safe apply there** should use OpenWrt's own apply with rollback (rpcd
-  `uci apply` with a rollback timeout, then `confirm`), the mechanism LuCI
-  uses, rather than hopdeck's systemd timer.
 - **No server assumptions on hosts:** OpenWrt has procd instead of systemd,
   root login instead of sudo, dropbear instead of an OpenSSH server, and
   BusyBox instead of GNU tools.

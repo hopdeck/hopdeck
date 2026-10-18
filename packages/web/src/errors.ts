@@ -49,6 +49,8 @@ const TEXTS = new Map<string, ErrorText>([
   ['login-password-rejected', { title: 'error.login-password-rejected.title', hint: 'error.login-password-rejected.hint' }],
   ['password-login-disabled', { title: 'error.password-login-disabled.title', hint: 'error.password-login-disabled.hint' }],
   ['key-exists', { title: 'error.key-exists.title', hint: 'error.key-exists.hint' }],
+  ['uci-failed', { title: 'error.uci-failed.title' }],
+  ['uci-apply-pending', { title: 'error.uci-apply-pending.title', hint: 'error.uci-apply-pending.hint' }],
   ['version-not-found', { title: 'error.version-not-found.title', hint: 'error.version-not-found.hint' }],
   ['ui-error', { title: 'error.ui-error.title', hint: 'error.ui-error.hint' }],
 ]);

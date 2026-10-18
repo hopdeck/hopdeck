@@ -37,6 +37,8 @@ const HOST_ERROR_CODES = {
   'login-password-rejected': true,
   'password-login-disabled': true,
   'key-exists': true,
+  'uci-failed': true,
+  'uci-apply-pending': true,
 } satisfies Record<HostErrorCode, true>;
 
 describe('errorText', () => {

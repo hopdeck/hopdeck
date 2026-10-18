@@ -35,7 +35,7 @@ fi
 echo $$ >"$lock/pid"
 trap 'rm -rf "$lock"' EXIT INT TERM
 export HOPDECK_TEST_RUN=$$
-tests="packages/server/src/hosts/host-keys.test.ts packages/server/src/hosts/key-login.test.ts packages/server/src/hosts/usage.test.ts packages/server/src/firewall"
+tests="packages/server/src/hosts/host-keys.test.ts packages/server/src/hosts/key-login.test.ts packages/server/src/hosts/usage.test.ts packages/server/src/firewall packages/server/src/openwrt"
 summary=""
 failed=0
 
