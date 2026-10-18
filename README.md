@@ -253,6 +253,9 @@ setup tests, which log in with a password, run on the containers alone. An
 OpenWrt VM is set up through its serial console before it gets a network
 card, so its DHCP server and router advertisements never reach that network.
 
+`pnpm dev:vms [SYSTEM...]` starts the panel with the VMs started before,
+those named or all of them, each account as "VM SYSTEM: account", to try
+things by hand.
 `pnpm test:vms [SYSTEM...]` starts each VM in turn, runs the host tests
 against it and removes it again (the templates stay); logs go to
 `.dev/vm-host/logs`. `dev/vm-host/down.sh [SYSTEM|all] [--templates]` removes
