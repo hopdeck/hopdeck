@@ -18,7 +18,7 @@ body:
     attributes:
       label: hopdeck version
       description: '`hopdeck --version`, or the version next to the name at the top of the panel.'
-      placeholder: 0.2.0
+      placeholder: 0.3.0
     validations:
       required: true
   - type: dropdown
