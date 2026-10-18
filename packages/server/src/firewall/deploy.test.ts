@@ -90,7 +90,7 @@ describe('planTable', () => {
   });
 });
 
-describe('read-only platforms', () => {
+describe('platforms whose firewall nft does not change', () => {
   it('refuses to plan any change on OpenWrt, before touching the host', async () => {
     const executor = new FakeExecutor(() => new Error('must not run'));
     const target: DeployTarget = {
@@ -386,7 +386,7 @@ describe.skipIf(testHost?.platform !== 'openwrt')('Deployments on the OpenWrt te
     const controlDir = await mkdtemp(`${tmpdir()}/hopdeck-openwrt-`);
     const root = await hostTarget('root', controlDir);
     expect(root.facts.platform).toBe('openwrt');
-    expect(root.platform.firewall).toBe('read-only');
+    expect(root.platform.firewall).toBe('uci');
     const create = { kind: 'replace' as const, family: 'inet' as const, table: 'hopdeck_x', definition: 'table inet hopdeck_x {\n}\n' };
     await expect(new Deployments().prepare(root, [create])).rejects.toMatchObject({ code: 'platform-read-only' });
     // fw4 made its table from UCI, and hopdeck sees it as OpenWrt's.

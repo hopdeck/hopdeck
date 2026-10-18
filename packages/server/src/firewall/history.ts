@@ -295,8 +295,8 @@ export class History {
   }
 
   #unavailable(target: HistoryTarget, host: HostRecord): Problem | undefined {
-    if (target.platform.firewall === 'read-only') {
-      return { code: 'platform-read-only', detail: 'hopdeck changes nothing in the firewall of this host, so it keeps no history of it' };
+    if (target.platform.firewall !== 'nft') {
+      return { code: 'platform-read-only', detail: 'hopdeck changes the firewall of this host through UCI, not nft, and keeps no history of it yet' };
     }
     return host.unavailable;
   }

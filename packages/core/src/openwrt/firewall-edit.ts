@@ -47,6 +47,7 @@ export interface TrafficRuleForm {
   destIps: string[];
   destPort: string;
   icmpTypes: string[];
+  /** "" leaves it to fw4, for a rule that does not say. */
   target: string;
 }
 
@@ -103,7 +104,7 @@ export function trafficRuleForm(rule: FirewallRule | undefined): TrafficRuleForm
     destIps: rule.destIps,
     destPort: rule.destPort ?? '',
     icmpTypes: rule.icmpTypes,
-    target: rule.target ?? 'ACCEPT',
+    target: rule.target ?? '',
   };
 }
 
@@ -193,26 +194,30 @@ export function trafficRuleChanges(rule: FirewallRule | undefined, form: Traffic
       dest_ip: form.destIps.length > 0 ? form.destIps : undefined,
       dest_port: form.destPort.trim() === '' ? undefined : form.destPort.trim(),
       icmp_type: icmp && form.icmpTypes.length > 0 ? form.icmpTypes : undefined,
-      target: form.target,
+      target: form.target === '' ? undefined : form.target,
     },
     ref,
   );
 }
 
 export function redirectChanges(redirect: FirewallRedirect | undefined, form: RedirectForm, ref: string): UciChange[] {
+  const options = redirect?.section.options ?? {};
+  // What fw4 takes by default, a redirect that leaves it out keeps leaving out.
+  const target = redirect === undefined ? 'DNAT' : (options['target'] as string | undefined);
+  const defaultProtocols = form.protocols.length === 2 && form.protocols.includes('tcp') && form.protocols.includes('udp');
   return sectionChanges(
     redirect?.section,
     'redirect',
     {
       name: form.name.trim() === '' ? undefined : form.name.trim(),
       enabled: form.enabled ? undefined : '0',
-      target: 'DNAT',
-      proto: form.protocols,
-      src: form.src,
-      src_dport: form.srcDport.trim(),
+      target,
+      proto: redirect !== undefined && !('proto' in options) && defaultProtocols ? undefined : form.protocols,
+      src: form.src === '' ? undefined : form.src,
+      src_dport: form.srcDport.trim() === '' ? undefined : form.srcDport.trim(),
       src_ip: form.srcIps.length > 0 ? form.srcIps : undefined,
-      dest: form.dest,
-      dest_ip: form.destIp.trim(),
+      dest: form.dest === '' ? undefined : form.dest,
+      dest_ip: form.destIp.trim() === '' ? undefined : form.destIp.trim(),
       dest_port: form.destPort.trim() === '' ? undefined : form.destPort.trim(),
       reflection: form.reflection ? undefined : '0',
     },

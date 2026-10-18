@@ -43,7 +43,7 @@ tools, such as a topology view, come later.
 | polkit | Not used (decided 2026-09-25) | Plain `pkexec` asks for the password on every nft call. Doing it properly needs a root-owned helper and a polkit action installed on the machine, and the lighter alternative (one pkexec per session) hands the panel an unrestricted root channel. It would help only the local host in a graphical session; sudo covers every case. |
 | UI languages | English and Polish | One JSON file per language; adding one needs no code changes |
 | Styling | Plain CSS with design tokens, light and dark theme, system fonts; the look of a network tool: dense, hairlines instead of cards, 2 px corners, no shadows, monospace for data, one signal colour (amber) | No UI framework to trust or update; the CSP blocks external fonts anyway. Dense and plain like Wireshark or htop, not a generic dashboard |
-| Managed hosts | Debian 11+ (nft 0.9.8), RHEL 9+, Alpine; OpenWrt read-only for now | Each is tested with `pnpm test:hosts` (containers: Debian 11, 12, 13, AlmaLinux 9, 10, Alpine, OpenWrt 24.10) and `pnpm test:vms` (the same as VMs on Proxmox, with their own kernels from 5.10 up and SELinux enforcing on AlmaLinux, plus OpenWrt 25.12). Admin machine: Linux; macOS likely works; Windows later |
+| Managed hosts | Debian 11+ (nft 0.9.8), RHEL 9+, Alpine; OpenWrt 22.03+ through UCI | Each is tested with `pnpm test:hosts` (containers: Debian 11, 12, 13, AlmaLinux 9, 10, Alpine, OpenWrt 24.10) and `pnpm test:vms` (the same as VMs on Proxmox, with their own kernels from 5.10 up and SELinux enforcing on AlmaLinux, plus OpenWrt 25.12). Admin machine: Linux; macOS likely works; Windows later |
 | License | AGPL-3.0-or-later (since 2026-10-15; 0.1.0 and 0.1.1 are GPL-3.0-or-later) | hopdeck may come to serve many people from a server. Under the GPL a changed version run as a service would need to share nothing; the AGPL makes it offer its source to its users. The panel links to the source of its version. |
 
 ## Components
@@ -730,19 +730,21 @@ too):
 |---|---|---|
 | Configuration (`configDir`) | `/etc/hopdeck` | `/etc/hopdeck` |
 | Records such as history (`stateDir`) | `/var/lib/hopdeck` | `/etc/hopdeck/state`: `/var` is in RAM there |
-| Firewall | changed through nft | shown only, until changes go through UCI |
+| Firewall | changed through nft | changed through UCI (rpcd); nftables shown only |
 
 Both directories belong to root with mode 700. Each module keeps its files in
 a subdirectory of its own, such as `/etc/hopdeck/firewall` for the tables that
 load at boot, so settings of the host and of other modules can sit beside
-them. On OpenWrt the server refuses to plan firewall changes or save tables
-(`platform-read-only`), and the UI shows the firewall without edit actions and
-says why; tracing still works, since its temporary table changes no verdict.
+them. On OpenWrt the server refuses to plan nft changes or save tables
+(`platform-read-only`): the firewall is changed through UCI (see below), and
+the nftables view, without edit actions, says why. Tracing still works, since
+its temporary table changes no verdict.
 
 ## OpenWrt through UCI
 
-In progress (decided 2026-10-18): the firewall of OpenWrt 22.03 and later
-(fw4) is changed through UCI, never straight through nftables. UCI
+Done for zones, traffic rules and port forwards (2026-10-18): the firewall
+of OpenWrt 22.03 and later (fw4) is changed through UCI, never straight
+through nftables. UCI
 (`/etc/config/firewall`) is OpenWrt's source of truth: fw4 makes `inet fw4`
 from it at every reload, and LuCI reads and writes only UCI, so a table
 changed with nft would be lost on the next reload and never shown in LuCI.
@@ -772,6 +774,29 @@ What hopdeck changes there is UCI's own, and LuCI shows it.
   LuCI or another hopdeck, is refused (`uci-apply-pending`). A change of
   `/etc/config/firewall` between planning and applying stops the apply, as
   a changed table does on other hosts.
+- **The panel** ([`web/src/openwrt`](../packages/web/src/openwrt)) shows
+  Zones (networks, policies, masquerading, the zones each forwards to),
+  Traffic rules and Port forwards, and the nftables fw4 made, read-only.
+  Edits from every tab collect as pending changes, LuCI's unsaved changes:
+  one per section, a section added and removed again leaves nothing, and an
+  edit back to the router's value drops out (`core/openwrt/uci-edit.ts`).
+  The tabs show the configuration with them; one review lists them all.
+  Forms keep every option they do not show; renaming a zone renames it
+  where rules, port forwards and forwardings name it.
+- **Names of anonymous sections** (`cfg0592bd`) come from their place in the
+  file, so after a section is added or removed elsewhere, the same name may
+  mean another section. The panel reads the configuration with its file's
+  hash, and the plan is refused (`ruleset-changed`) if the file changed
+  since; the panel then offers to start again from what the router has.
+  Sections the panel adds go by a ref (`new-1`) until rpcd names them.
+- **Rule order** is what fw4 follows. rpcd's `uci order` puts each section
+  named at an absolute place in the file, so hopdeck names every section,
+  with the rules in their new order in the rules' own places: only the rules
+  trade places. Rows are dragged by a handle, or moved with arrows.
+- **Counters:** fw4 names each rule after its section (`!fw4: NAME`, or
+  `@rule[3]` without a name), so the Traffic rules and Port forwards tabs show
+  the sum of what fw4's rules of a section counted (port forwards in the
+  dstnat chains).
 - **Full nftables power there** will come from fw4's includes: files
   hopdeck writes, one per version, that `config include` sections of type
   `nftables` point to. A rollback restores the pointer, so the file's

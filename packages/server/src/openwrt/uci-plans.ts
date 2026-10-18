@@ -350,9 +350,9 @@ async function pendingElsewhere(target: DeployTarget, config: string, session: s
   return { cli: (cli ?? 0) > 0, sessions: sessions ?? 0 };
 }
 
-/** The table fw4 made, as nft lists it; empty when there is none. */
+/** The table fw4 made, as nft lists it without counter values, which a reload sets to zero; empty when there is none. */
 async function fw4Table(target: DeployTarget): Promise<string> {
-  const result = await runAsRoot(target.access, [target.access.nftPath, 'list', 'table', 'inet', 'fw4']);
+  const result = await runAsRoot(target.access, [target.access.nftPath, '-s', 'list', 'table', 'inet', 'fw4']);
   return result.exitCode === 0 ? result.stdout : '';
 }
 

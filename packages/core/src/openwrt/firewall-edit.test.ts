@@ -124,6 +124,18 @@ describe('port forwards', () => {
     expect(redirectChanges(undefined, { ...form, reflection: false }, 'new-1')[0]).toMatchObject({ values: { reflection: '0' } });
   });
 
+  it('changes only what changed in a redirect that leaves defaults out', () => {
+    const config = parseUciGet(
+      'firewall',
+      JSON.stringify({ values: { web: { '.anonymous': true, '.type': 'redirect', '.name': 'cfg01', '.index': 0, name: 'Web', src: 'wan', src_dport: '8080', dest: 'lan', dest_ip: '192.168.1.10' } } }),
+    );
+    const redirect = openwrtFirewall(config).redirects[0]!;
+    expect(redirectChanges(redirect, redirectForm(redirect, ['lan', 'wan']), 'new-1')).toEqual([]);
+    expect(redirectChanges(redirect, { ...redirectForm(redirect, ['lan', 'wan']), enabled: false }, 'new-1')).toEqual([
+      { kind: 'set', section: 'cfg01', values: { enabled: '0' } },
+    ]);
+  });
+
   it('wants a port and an address to forward to', () => {
     const form = redirectForm(undefined, ['lan', 'wan']);
     expect(redirectProblems(form).map((problem) => problem.field)).toEqual(['srcDport', 'destIp']);

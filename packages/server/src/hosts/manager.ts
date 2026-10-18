@@ -264,7 +264,7 @@ export class HostManager {
     const entry = this.#entries.get(id);
     if (entry === undefined) return undefined;
     const target = this.#target(entry);
-    if (target.platform.firewall !== 'read-only') await this.#observe(entry, await this.#readJson(entry));
+    if (target.platform.firewall === 'nft') await this.#observe(entry, await this.#readJson(entry));
     return this.#deployments.prepare(target, changes, options);
   }
 
@@ -613,7 +613,7 @@ export class HostManager {
 
   /** Every look at the ruleset may find a change made outside hopdeck; see History.observe(). */
   async #observe(entry: Entry, json: unknown): Promise<void> {
-    if (this.#platform(entry).firewall !== 'read-only') await this.#history.observe(this.#historyTarget(entry), json);
+    if (this.#platform(entry).firewall === 'nft') await this.#history.observe(this.#historyTarget(entry), json);
   }
 
   /** The host's interfaces with their addresses, and whether it forwards packets. */

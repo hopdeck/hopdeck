@@ -12,8 +12,9 @@ import {
   type PlatformId,
   type Privilege,
   type TableChange,
+  type UciChange,
 } from '@hopdeck/core';
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Callout } from '../components/Callout.tsx';
 import { ErrorBody, ErrorCallout, ErrorVarsProvider, errorTitle, toErrorInfo, type ErrorInfo } from '../components/ErrorCallout.tsx';
 import { AlertIcon, CheckIcon, HostKindIcon, InfoIcon, LockIcon, RefreshIcon, SandboxIcon, TrashIcon } from '../components/icons.tsx';
@@ -36,6 +37,12 @@ import { liveSource, newTableSource, type NewTableSpec } from '../firewall/edit/
 import { TableEditor, type EditorDraft, type EditorMode, type EditorProblem } from '../firewall/edit/TableEditor.tsx';
 import { PersistencePanel } from '../firewall/deploy/PersistencePanel.tsx';
 import { HistoryPanel } from '../firewall/history/HistoryPanel.tsx';
+import { RedirectsPanel } from '../openwrt/RedirectsPanel.tsx';
+import { TrafficRulesPanel } from '../openwrt/TrafficRulesPanel.tsx';
+import { UciPlanDialog } from '../openwrt/UciPlanDialog.tsx';
+import { UciTab } from '../openwrt/UciTab.tsx';
+import { useUciFirewall } from '../openwrt/useUciFirewall.ts';
+import { ZonesPanel } from '../openwrt/ZonesPanel.tsx';
 import { HostSettings } from './HostSettings.tsx';
 import { UsageMeter } from './UsageMeter.tsx';
 import { useUsage } from './useUsage.ts';
@@ -98,9 +105,15 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   const { status } = host;
   const subtitle = hostSubtitle(host);
   const readable = fullAccess(status);
-  // The firewall is only shown where changing it with nft would go behind the platform's back.
-  const readOnly = status.state === 'connected' && platform(status.facts.platform).firewall === 'read-only';
+  // OpenWrt's firewall is changed through UCI; its nftables only shown, as changing them would go behind fw4's back.
+  const uci = status.state === 'connected' && platform(status.facts.platform).firewall === 'uci';
+  const readOnly = uci;
   const ruleset = useRuleset(host.id, readable);
+  const uciFirewall = useUciFirewall(host.id, readable && uci);
+  // Changes of the UCI configuration being reviewed and applied.
+  const [uciChanges, setUciChanges] = useState<UciChange[]>();
+  // The router's configuration changed since the pending changes were made on it.
+  const [uciStale, setUciStale] = useState(false);
   // Read every few seconds, it also notices when an SSH host stops letting hopdeck in.
   const usage = useUsage(host.id, status.state === 'connected');
   const loginLost = host.kind === 'ssh' && status.state === 'connected' && usage.error?.code === 'ssh-auth' ? usage.error : undefined;
@@ -117,6 +130,10 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
     // Only the change of loginLost matters, not a new ruleset object.
   }, [loginLost]);
   const [tab, setTab] = useState('rules');
+  // On OpenWrt the firewall starts at its zones, as LuCI's does.
+  useEffect(() => {
+    if (uci) setTab((current) => (current === 'rules' ? 'zones' : current));
+  }, [uci]);
   // A chain to scroll to once the rules tab is shown, e.g. picked in the packet path.
   const [scrollTarget, setScrollTarget] = useState<string>();
   // Changes being planned and applied in the deployment dialog.
@@ -130,7 +147,11 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   const [liveSeconds, setLiveSeconds] = useState(5);
   // Counters and changes are read while the rules (or the editor) or the packet log are in view.
   // Paused while the host refuses the login: it would only repeat that.
-  const live = useLive(host.id, liveSeconds, readable && (tab === 'rules' || tab === 'logs' || tab === 'forwards') && ruleset.model !== undefined && loginLost === undefined);
+  const live = useLive(
+    host.id,
+    liveSeconds,
+    readable && ['rules', 'logs', 'forwards', 'uci-rules', 'redirects'].includes(tab) && ruleset.model !== undefined && loginLost === undefined,
+  );
   // While hopdeck applies a change itself, the host differing is expected.
   const changed =
     live.info === undefined || ruleset.model === undefined || changes !== undefined || ruleset.loading
@@ -162,6 +183,25 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
       element.animate([{ backgroundColor: 'var(--accent-soft)' }, { backgroundColor: 'transparent' }], { duration: 1800 });
     }
   }, [tab, scrollTarget]);
+  /** A tab of OpenWrt's firewall, with the changes pending for review above it. */
+  const uciTab = (id: string, label: MessageKey, panel: () => ReactNode) => ({
+    id,
+    group: t('tabs.group.firewall'),
+    label: t(label),
+    content: (
+      <UciTab
+        state={uciFirewall}
+        stale={uciStale}
+        onReview={() => setUciChanges(uciFirewall.pending)}
+        onStart={() => {
+          setUciStale(false);
+          uciFirewall.reload({ discard: true });
+        }}
+      >
+        {panel}
+      </UciTab>
+    ),
+  });
   const badge =
     readable && status.state === 'connected' && status.privilege.kind !== 'none' ? ACCESS_BADGES[status.privilege.kind] : undefined;
 
@@ -254,10 +294,17 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
             active={tab}
             onChange={setTab}
             tabs={[
+              ...(uci
+                ? [
+                    uciTab('zones', 'tabs.zones', () => <ZonesPanel state={uciFirewall} />),
+                    uciTab('uci-rules', 'tabs.uciRules', () => <TrafficRulesPanel state={uciFirewall} model={ruleset.model} live={live.info} />),
+                    uciTab('redirects', 'tabs.forwards', () => <RedirectsPanel state={uciFirewall} model={ruleset.model} live={live.info} />),
+                  ]
+                : []),
               {
                 id: 'rules',
                 group: t('tabs.group.firewall'),
-                label: t('tabs.rules'),
+                label: t(uci ? 'tabs.fw4' : 'tabs.rules'),
                 content:
                   editing !== undefined && ruleset.model !== undefined ? (
                     editedNode !== undefined || editing.create !== undefined ? (
@@ -288,8 +335,8 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                   ) : (
                     <div className={styles.rules}>
                       {readOnly ? (
-                        <Callout tone="info" icon={<LockIcon />} title={t('platform.readOnly.title')}>
-                          {t('platform.readOnly.openwrt')}
+                        <Callout tone="info" icon={<LockIcon />} title={t('platform.uci.title')}>
+                          {t('platform.uci.note')}
                         </Callout>
                       ) : (
                         <PersistencePanel hostId={host.id} version={ruleset.model?.readAt} />
@@ -311,30 +358,30 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                     </div>
                   ),
               },
-              {
-                id: 'forwards',
-                group: t('tabs.group.firewall'),
-                label: t('tabs.forwards'),
-                content: readOnly ? (
-                  <Callout tone="info" icon={<LockIcon />} title={t('platform.readOnly.title')}>
-                    {t('platform.readOnly.openwrt')}
-                  </Callout>
-                ) : ruleset.model !== undefined ? (
-                  <ForwardsPanel
-                    hostId={host.id}
-                    hostKind={host.kind}
-                    model={ruleset.model}
-                    live={live.info}
-                    onChange={setChanges}
-                    onShowChain={(anchor) => {
-                      setScrollTarget(anchor);
-                      setTab('rules');
-                    }}
-                  />
-                ) : (
-                  <Listing state={ruleset} />
-                ),
-              },
+              ...(uci
+                ? []
+                : [
+                  {
+                    id: 'forwards',
+                    group: t('tabs.group.firewall'),
+                    label: t('tabs.forwards'),
+                    content: ruleset.model !== undefined ? (
+                      <ForwardsPanel
+                        hostId={host.id}
+                        hostKind={host.kind}
+                        model={ruleset.model}
+                        live={live.info}
+                        onChange={setChanges}
+                        onShowChain={(anchor) => {
+                          setScrollTarget(anchor);
+                          setTab('rules');
+                        }}
+                      />
+                    ) : (
+                      <Listing state={ruleset} />
+                    ),
+                  },
+                  ]),
               {
                 id: 'path',
                 group: t('tabs.group.firewall'),
@@ -391,22 +438,26 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                     />
                   ),
               },
-              {
-                id: 'history',
-                group: t('tabs.group.firewall'),
-                label: t('tabs.history'),
-                content: (
-                  <HistoryPanel
-                    hostId={host.id}
-                    model={ruleset.model}
-                    canRestore={!readOnly}
-                    onRestore={(restore, version) => {
-                      setRestoredFrom(version);
-                      setChanges(restore);
-                    }}
-                  />
-                ),
-              },
+              ...(uci
+                ? []
+                : [
+                  {
+                    id: 'history',
+                    group: t('tabs.group.firewall'),
+                    label: t('tabs.history'),
+                    content: (
+                      <HistoryPanel
+                        hostId={host.id}
+                        model={ruleset.model}
+                        canRestore={!readOnly}
+                        onRestore={(restore, version) => {
+                          setRestoredFrom(version);
+                          setChanges(restore);
+                        }}
+                      />
+                    ),
+                  },
+                  ]),
               { id: 'text', group: t('tabs.group.firewall'), label: t('tabs.text'), content: <Listing state={ruleset} /> },
               { id: 'system', group: t('tabs.group.host'), label: t('tabs.system'), content: <Facts facts={status.facts} /> },
               { id: 'settings', group: t('tabs.group.host'), label: t('tabs.settings'), content: <HostSettings hostId={host.id} /> },
@@ -422,6 +473,18 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
             setEditing({ family, table, mode: 'visual', create });
           }}
           onClose={() => setCreating(false)}
+        />
+        <UciPlanDialog
+          hostId={host.id}
+          hostName={host.name}
+          changes={uciChanges}
+          base={uciFirewall.hash}
+          onClose={(result) => {
+            setUciChanges(undefined);
+            if (result.view?.state === 'confirmed') uciFirewall.reload({ discard: true });
+            if (result.view !== undefined && result.view.state !== 'planned' && result.view.state !== 'invalid') ruleset.reload();
+            if (result.error?.code === 'ruleset-changed') setUciStale(true);
+          }}
         />
         <DeploymentDialog
           hostId={host.id}

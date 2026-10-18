@@ -119,12 +119,12 @@ echo $? > "$dir/rolled-back"
 `;
 
 /**
- * Why the firewall module must not change this host's firewall, if it must
- * not; in English, for error details. Only OpenWrt is read-only so far.
+ * Why the firewall module must not change this host's firewall with nft, if
+ * it must not; in English, for error details. OpenWrt's goes through UCI.
  */
 export function firewallReadOnly(host: Platform): string | undefined {
-  if (host.firewall !== 'read-only') return undefined;
-  return 'OpenWrt keeps its firewall in UCI (/etc/config/firewall), which LuCI shows and fw4 turns into nftables. hopdeck will make changes there in a later version; until then it changes nothing on this host';
+  if (host.firewall === 'nft') return undefined;
+  return 'OpenWrt keeps its firewall in UCI (/etc/config/firewall), which LuCI shows and fw4 turns into nftables; hopdeck changes it there, in the zones, rules and port forwards, and changes nothing on this host with nft';
 }
 
 /** Plans, applies and confirms changes on hosts, with a rollback armed on the host before anything changes. */
