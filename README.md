@@ -221,7 +221,8 @@ not `~/.ssh`, and hopdeck's own ssh-agent holds them, not your session's.
 `pnpm dev:test-hosts [SYSTEM...]` with those of the systems named, or of every
 running one, each as "SYSTEM: account".
 `pnpm test:host` runs the tests including the ones that need a host; set
-`HOPDECK_TEST_HOST_DIR=.dev/test-host/SYSTEM` for another system.
+`HOPDECK_TEST_HOST_DIR=.dev/test-host/SYSTEM` for another system
+(`.dev/vm-host/SYSTEM` for a [VM](#test-virtual-machines)).
 `pnpm test:hosts` starts each system in turn, runs those tests against it and
 sums up; logs go to `.dev/test-host/logs`. The key, known_hosts and ssh
 configs live in `.dev/test-host`; `~/.ssh` is never touched, and a container's
@@ -230,6 +231,26 @@ removes containers.
 
 The containers share this machine's kernel, so they test nft, sudo, sshd,
 systemd, OpenRC and the paths of each system, not older kernels.
+
+### Test virtual machines
+
+For what needs a kernel of its own (the kernels of Debian 11 and RHEL 9, the
+packet log, port forwards between machines), `dev/vm-host/up.sh [SYSTEM]`
+starts the same systems as virtual machines on a Proxmox VE host, plus
+`openwrt24` (OpenWrt 24.10 next to `openwrt`, 25.12). It reaches the host as
+`ssh pve` (root; `HOPDECK_PVE` for another name) and uses only VMIDs from
+9000 up (`HOPDECK_PVE_VMID`): a template per system made from the system's
+official cloud image, checked against its published sum, and a linked clone
+of it for the tests. The VMs take an address by DHCP on `vmbr0`
+(`HOPDECK_PVE_BRIDGE`), a real network, so logins are by key only; the key
+setup tests, which log in with a password, run on the containers alone. An
+OpenWrt VM is set up through its serial console before it gets a network
+card, so its DHCP server and router advertisements never reach that network.
+
+`pnpm test:vms [SYSTEM...]` starts each VM in turn, runs the host tests
+against it and removes it again (the templates stay); logs go to
+`.dev/vm-host/logs`. `dev/vm-host/down.sh [SYSTEM|all] [--templates]` removes
+VMs by hand, and their templates too; it touches only VMs named `hopdeck-…`.
 
 CI on GitHub runs the same: every push tests the Debian 13 host, and every
 Monday all systems; "Run workflow" on the CI workflow picks systems by hand.

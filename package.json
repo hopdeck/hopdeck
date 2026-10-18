@@ -19,7 +19,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:host": "HOPDECK_TEST_HOST=1 vitest run --no-file-parallelism",
-    "test:hosts": "scripts/test-hosts.sh"
+    "test:hosts": "scripts/test-hosts.sh",
+    "test:vms": "scripts/test-hosts.sh --vm"
   },
   "devDependencies": {
     "@types/node": "^24.13.5",

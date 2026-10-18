@@ -129,7 +129,7 @@ describe.skipIf(NFT === undefined || !USERNS)('History in a sandbox', { timeout:
   });
 });
 
-// Against a podman test host: dev/test-host/up.sh [SYSTEM], then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
+// Against a test host: dev/test-host/up.sh [SYSTEM] (or dev/vm-host/up.sh), then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
 describe.skipIf(testHost?.platform !== 'linux')('History on the test host', { timeout: 90_000 }, () => {
   let controlDir: string;
   const history = new History({ operator: { user: 'ada', computer: 'desk' } });

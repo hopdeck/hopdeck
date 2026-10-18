@@ -91,7 +91,7 @@ describe('withTableNotes', () => {
   });
 });
 
-// Against a podman test host: dev/test-host/up.sh [SYSTEM], then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
+// Against a test host: dev/test-host/up.sh [SYSTEM] (or dev/vm-host/up.sh), then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
 /** Where each system keeps the configuration its firewall service loads at boot. */
 const MAIN_CONFIG: Record<string, string> = { debian: '/etc/nftables.conf', alma: '/etc/sysconfig/nftables.conf', alpine: '/etc/nftables.nft' };
 

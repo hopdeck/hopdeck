@@ -22,7 +22,8 @@ const RELOAD = 'if [ -d /run/systemd/system ]; then systemctl reload sshd.servic
 /** A connection that fails before logging in: sshd is still restarting. */
 const RESTARTING = /kex_exchange_identification|Connection (refused|reset|closed)/;
 
-describe.skipIf(host === undefined)('KeyLogin on the test host', { timeout: 60_000 }, () => {
+// The key setup logs in with a password: a VM of dev/vm-host takes keys only.
+describe.skipIf(host === undefined || !host.passwords)('KeyLogin on the test host', { timeout: 60_000 }, () => {
   let dir: string;
   let keys: SshKeys;
   let login: KeyLogin;

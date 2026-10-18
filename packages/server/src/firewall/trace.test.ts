@@ -85,7 +85,7 @@ describe.skipIf(NFT === undefined || !USERNS || PING === undefined)('Traces in a
   });
 });
 
-// Against a podman test host: dev/test-host/up.sh [SYSTEM], then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
+// Against a test host: dev/test-host/up.sh [SYSTEM] (or dev/vm-host/up.sh), then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
 describe.skipIf(testHost === undefined)('Traces on the test host', { timeout: 60_000 }, () => {
   const traces = new Traces();
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -112,7 +112,10 @@ describe.skipIf(testHost === undefined)('Traces on the test host', { timeout: 60
         view = await traces.get(started.id, target);
       }
       expect(groupTrace(view.lines).length).toBeGreaterThanOrEqual(2);
-      expect((await traces.stop(started.id, target)).state).toBe('finished');
+      const stopped = await traces.stop(started.id, target);
+      expect(stopped.state).toBe('finished');
+      // What the watchdog said when removing the table did not work.
+      expect(stopped.cleanup).toBeUndefined();
       const { runNft } = await import('../hosts/privilege.ts');
       expect((await runNft(target.access, ['list', 'tables'])).stdout).not.toContain(started.table);
     });

@@ -59,9 +59,12 @@ describe('fingerprint and hashName', () => {
   });
 });
 
-// Against a podman test host: dev/test-host/up.sh [SYSTEM], then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
+// Against a test host: dev/test-host/up.sh [SYSTEM] (or dev/vm-host/up.sh), then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
 const testKey = testHost?.key ?? '';
 const port = testHost?.port ?? 0;
+const address = testHost?.address ?? '127.0.0.1';
+/** The host as known_hosts names it: "[address]:port", or the address alone on port 22. */
+const knownName = port === 22 ? address : `[${address}]:${port}`;
 
 describe.skipIf(testHost === undefined)('HostKeys against the test host', () => {
   let dir: string;
@@ -71,13 +74,13 @@ describe.skipIf(testHost === undefined)('HostKeys against the test host', () => 
 
   beforeAll(async () => {
     dir = await mkdtemp(join(tmpdir(), 'hopdeck-hostkeys-'));
-    const common = `HostName 127.0.0.1\n\tPort ${port}\n\tUser root\n\tIdentityFile ${testKey}\n\tIdentitiesOnly yes\n\tStrictHostKeyChecking yes`;
+    const common = `HostName ${address}\n\tPort ${port}\n\tUser root\n\tIdentityFile ${testKey}\n\tIdentitiesOnly yes\n\tStrictHostKeyChecking yes`;
     await writeFile(
       join(dir, 'ssh_config'),
       `Host unknown\n\t${common}\n\tUserKnownHostsFile ${dir}/known_hosts\n\tHashKnownHosts yes\n` +
         `Host changed\n\t${common}\n\tUserKnownHostsFile ${dir}/known_hosts.changed\n\tHashKnownHosts no\n`,
     );
-    await writeFile(join(dir, 'known_hosts.changed'), `[127.0.0.1]:${port} ssh-ed25519 ${bogusKey}\n`);
+    await writeFile(join(dir, 'known_hosts.changed'), `${knownName} ssh-ed25519 ${bogusKey}\n`);
     keys = new HostKeys({ configFile: join(dir, 'ssh_config') });
     serverFingerprint = (await keys.check('unknown')).presented.fingerprint;
   });
@@ -88,7 +91,7 @@ describe.skipIf(testHost === undefined)('HostKeys against the test host', () => 
 
   it('reports an unknown key and records it hashed once confirmed', async () => {
     const check = await keys.check('unknown');
-    expect(check).toMatchObject({ name: `[127.0.0.1]:${port}`, knownHostsFile: `${dir}/known_hosts`, known: [] });
+    expect(check).toMatchObject({ name: knownName, knownHostsFile: `${dir}/known_hosts`, known: [] });
     await expect(connects('unknown')).rejects.toMatchObject({ code: 'ssh-host-key' });
 
     await expect(keys.trust('unknown', 'SHA256:not-what-the-server-has', false)).rejects.toMatchObject({ code: 'host-key-mismatch' });

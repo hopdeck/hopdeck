@@ -43,8 +43,9 @@ describe('readPacketLog', () => {
   });
 });
 
-// The test hosts are containers: their kernel writes no packets to their log,
-// so these check that each system's source is found and read.
+// In a container the kernel writes no packets to the host's log, so these
+// check that each system's source is found and read; the port forward test
+// reads what a VM's kernel logs.
 describe.skipIf(testHost === undefined || !hasAccount('root'))('readPacketLog on the test host', { timeout: 60_000 }, () => {
   let dir: string;
   beforeAll(async () => {

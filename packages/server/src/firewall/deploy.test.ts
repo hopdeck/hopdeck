@@ -279,7 +279,7 @@ describe.skipIf(NFT === undefined || !USERNS)('Deployments in a sandbox', { time
   });
 });
 
-// Against a podman test host: dev/test-host/up.sh [SYSTEM], then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
+// Against a test host: dev/test-host/up.sh [SYSTEM] (or dev/vm-host/up.sh), then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
 const linuxHost = testHost?.platform === 'linux';
 
 describe.skipIf(!linuxHost)('Deployments on the test host', { timeout: 90_000 }, () => {

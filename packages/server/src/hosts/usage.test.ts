@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { hasAccount, testHost } from '../testing/test-host.ts';
 import { SshExecutor } from './ssh.ts';
 
-// Against a podman test host: dev/test-host/up.sh [SYSTEM], then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
+// Against a test host: dev/test-host/up.sh [SYSTEM] (or dev/vm-host/up.sh), then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
 describe.skipIf(testHost === undefined)('CPU and memory use on the test host', () => {
   it('reads them with the userland there, as the least privileged account', async () => {
     const account = hasAccount('plain') ? 'plain' : 'root';

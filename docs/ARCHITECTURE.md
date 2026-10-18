@@ -43,7 +43,7 @@ tools, such as a topology view, come later.
 | polkit | Not used (decided 2026-09-25) | Plain `pkexec` asks for the password on every nft call. Doing it properly needs a root-owned helper and a polkit action installed on the machine, and the lighter alternative (one pkexec per session) hands the panel an unrestricted root channel. It would help only the local host in a graphical session; sudo covers every case. |
 | UI languages | English and Polish | One JSON file per language; adding one needs no code changes |
 | Styling | Plain CSS with design tokens, light and dark theme, system fonts; the look of a network tool: dense, hairlines instead of cards, 2 px corners, no shadows, monospace for data, one signal colour (amber) | No UI framework to trust or update; the CSP blocks external fonts anyway. Dense and plain like Wireshark or htop, not a generic dashboard |
-| Managed hosts | Debian 11+ (nft 0.9.8), RHEL 9+, Alpine; OpenWrt read-only for now | Each is tested with `pnpm test:hosts` (containers: Debian 11, 12, 13, AlmaLinux 9, 10, Alpine, OpenWrt 24.10). Admin machine: Linux; macOS likely works; Windows later |
+| Managed hosts | Debian 11+ (nft 0.9.8), RHEL 9+, Alpine; OpenWrt read-only for now | Each is tested with `pnpm test:hosts` (containers: Debian 11, 12, 13, AlmaLinux 9, 10, Alpine, OpenWrt 24.10) and `pnpm test:vms` (the same as VMs on Proxmox, with their own kernels from 5.10 up and SELinux enforcing on AlmaLinux, plus OpenWrt 25.12). Admin machine: Linux; macOS likely works; Windows later |
 | License | AGPL-3.0-or-later (since 2026-10-15; 0.1.0 and 0.1.1 are GPL-3.0-or-later) | hopdeck may come to serve many people from a server. Under the GPL a changed version run as a service would need to share nothing; the AGPL makes it offer its source to its users. The panel links to the source of its version. |
 
 ## Components
@@ -342,7 +342,10 @@ A change is a list of table operations: adopt, replace (or create), delete.
    detached with `setsid` (hosts without systemd, the sandbox), or as the
    login user calling `sudo -n nft` when sudo allows only nft. If none is
    possible, hopdeck refuses to apply. The change is applied with `nft -f` in one
-   transaction.
+   transaction. The watchdog hands nft the rollback script on its standard
+   input: under SELinux (RHEL), nft started by systemd runs as `iptables_t`,
+   which may not open files in `/tmp` but may read one opened for it; a VM
+   with SELinux enforcing showed it (AlmaLinux 9 and 10).
 3. **Check.** For SSH hosts, a new connection that shares nothing with the
    existing one runs `true`. An existing connection usually survives a rule
    that blocks every new one (thanks to `ct state established`), so it would
@@ -623,6 +626,12 @@ The npm supply chain is a real risk for a tool with this access.
     it, now and at boot (`/etc/sysctl.d/90-hopdeck-forwarding.conf`) or until
     the next boot, and the system log notes it. For IPv6 it warns that
     forwarding stops router advertisements being taken where accept_ra is 1.
+  - Tested end to end on the test VMs: a client, a target and a neighbor of
+    the target in network namespaces of the VM, with a managed table that
+    drops and logs what it does not forward. The client reaches the target
+    through the forward, the neighbor through hairpin NAT, the target's own
+    address is dropped, and both the forward's log and the drop log are read
+    back from the VM's kernel log.
 - **Packet log** (done): the Logs tab shows what rules with a log statement
   wrote to the host's kernel log, newest first (`core/packet-log.ts`).
   - hopdeck stores nothing: every few seconds it reads the host's log, as
@@ -648,7 +657,8 @@ The npm supply chain is a real risk for a tool with this access.
     (unless `net.netfilter.nf_log_all_netns` is 1), so containers, the test
     hosts among them, and the sandbox log none; the sandbox's tab says so
     instead of reading this machine's log. The parsing is tested on lines in
-    the kernel's format, and the sources on the test hosts.
+    the kernel's format, and the sources on the test hosts; on the test VMs
+    (`dev/vm-host`), the kernel writes the lines that are read back.
 - **Host load** (done): the host's header shows CPU as top shows a process
   (100% per fully busy thread, up to 100% times the threads) and memory in
   use as free counts it (total less MemAvailable), with the share of it. The
@@ -752,9 +762,6 @@ different ways of reading and changing a host.
 
 ## Open questions
 
-- **Older kernels:** table comments need kernel support. The test hosts
-  share this machine's kernel, so the kernels of Debian 11 (5.10) and RHEL 9
-  (5.14) are untested; a virtual machine would tell.
 - **Windows as the admin machine:** its OpenSSH has no ControlMaster.
 - **Distribution, beyond the executable:** distribution packages (.deb, .rpm),
   macOS, Windows.

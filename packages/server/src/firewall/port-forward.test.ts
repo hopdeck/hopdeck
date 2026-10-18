@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import { parseRuleset, planPortForward, platform, portForwards, type Executor, type PortForward, type TableChange } from '@hopdeck/core';
+import { dropLogPrefix, dropLogRule, parseListing, parseRuleset, planPortForward, platform, portForwards, renderRule, withTableComments, type Executor, type PortForward, type TableChange } from '@hopdeck/core';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -11,6 +11,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { Sandbox } from '../hosts/sandbox.ts';
 import { Deployments, type DeployTarget } from './deploy.ts';
+import { readPacketLog } from './packet-log.ts';
 
 const NFT = ['/usr/sbin/nft', '/sbin/nft', '/usr/bin/nft'].find((path) => existsSync(path));
 const USERNS = spawnSync('unshare', ['--user', '--map-root-user', '--net', 'true']).status === 0;
@@ -99,7 +100,7 @@ describe.skipIf(NFT === undefined || !USERNS)('port forwards in a sandbox', { ti
   });
 });
 
-// Against a podman test host: each system's ip (BusyBox's on Alpine and OpenWrt) and nft (0.9.8 on Debian 11).
+// Against a test host: each system's ip (BusyBox's on Alpine and OpenWrt) and nft (0.9.8 on Debian 11).
 describe.skipIf(testHost === undefined || !hasAccount('root'))('port forwards on the test host', { timeout: 90_000 }, () => {
   let target: DeployTarget;
   const deployments = new Deployments({ seconds: 10 });
@@ -164,3 +165,113 @@ describe.skipIf(testHost === undefined || !hasAccount('root'))('port forwards on
   });
 });
 
+// On a VM of dev/vm-host, whose kernel is its own: packets go through a forward
+// between network namespaces, and what the policy drops lands in its log.
+//
+//   client (203.0.113.7) --hdc-- [the VM] --hdlan-- server (198.51.100.2, HTTP on 80)
+//                                                \-- neighbor (198.51.100.3)
+describe.skipIf(testHost?.vmid === undefined || testHost.platform !== 'linux' || !hasAccount('root'))('a port forward through the kernel of a test VM', { timeout: 120_000 }, () => {
+  let target: DeployTarget;
+  let forwarding = '0';
+  const deployments = new Deployments({ seconds: 15 });
+  // A run of its own: a table, forward and log prefixes no earlier run left in the log.
+  const run = String(Date.now() % 1_000_000);
+  const table = `hd_e2e_${run}`;
+  const nat = { family: 'inet' as const, name: `hd_e2e_nat_${run}`, exists: false };
+  const prefix = dropLogPrefix('inet', table, 'forward');
+  const web: PortForward = {
+    name: `web ${run}`,
+    protocols: ['tcp'],
+    ports: '8080',
+    inInterfaces: ['hdc'],
+    target: '198.51.100.2',
+    targetPort: '80',
+    outInterfaces: ['hdlan'],
+    masquerade: false,
+    hairpin: '198.51.100.0/24',
+    log: true,
+  };
+  const sh = async (script: string) => {
+    const result = await target.executor.exec(['sh', '-c', script]);
+    return `${result.stdout}${result.stderr}`.trim();
+  };
+  const must = async (script: string) => {
+    const result = await target.executor.exec(['sh', '-c', `set -e\n${script}`]);
+    expect(result.exitCode, `${result.stdout}${result.stderr}`).toBe(0);
+  };
+  // Python is there for cloud-init on every cloud image; curl is not.
+  const fetch = (namespace: string, url: string) =>
+    sh(`ip netns exec ${namespace} python3 -c 'import sys, urllib.request; print(urllib.request.urlopen(sys.argv[1], timeout=3).read().decode().strip())' ${url} 2>/dev/null || echo "no answer"`);
+  const read = async () => {
+    const json = await target.executor.exec([target.access.nftPath, '-j', 'list', 'ruleset']);
+    const listing = await target.executor.exec([target.access.nftPath, '-a', 'list', 'ruleset']);
+    // As the panel reads it: nft 0.9.8 leaves table comments, hopdeck's marker among them, out of its JSON.
+    return { ruleset: withTableComments(parseRuleset(JSON.parse(json.stdout)), parseListing(listing.stdout)), listing: listing.stdout };
+  };
+  const deploy = async (changes: TableChange[]) => {
+    const plan = await deployments.prepare(target, changes);
+    expect(plan.validation, JSON.stringify(plan.validation)).toMatchObject({ ok: true });
+    await deployments.apply(plan.id, target);
+    return (await deployments.confirm(plan.id, target)).state;
+  };
+  const cleanup = `
+    for ns in hd-client hd-server hd-neighbor; do ip netns pids $ns 2>/dev/null | xargs -r kill 2>/dev/null; ip netns del $ns 2>/dev/null; done
+    for link in hdc hdlan hds hdn; do ip link del $link 2>/dev/null; done
+    rm -rf /tmp/hd-e2e-www; true`;
+
+  beforeAll(async () => {
+    target = await hostTarget('root', await mkdtemp(`${tmpdir()}/hopdeck-vm-forward-`));
+    forwarding = (await sh('cat /proc/sys/net/ipv4/ip_forward')) || '0';
+    await sh(cleanup);
+    await must(`
+      for ns in hd-client hd-server hd-neighbor; do ip netns add $ns; ip -n $ns link set lo up; done
+      ip link add hdc type veth peer name eth0 netns hd-client
+      ip addr add 203.0.113.1/24 dev hdc; ip link set hdc up
+      ip link add hdlan type bridge; ip addr add 198.51.100.1/24 dev hdlan; ip link set hdlan up
+      ip link add hds type veth peer name eth0 netns hd-server; ip link set hds master hdlan up
+      ip link add hdn type veth peer name eth0 netns hd-neighbor; ip link set hdn master hdlan up
+      ip -n hd-client addr add 203.0.113.7/24 dev eth0; ip -n hd-server addr add 198.51.100.2/24 dev eth0; ip -n hd-neighbor addr add 198.51.100.3/24 dev eth0
+      for ns in hd-client hd-server hd-neighbor; do ip -n $ns link set eth0 up; done
+      ip -n hd-client route add default via 203.0.113.1
+      ip -n hd-server route add default via 198.51.100.1; ip -n hd-neighbor route add default via 198.51.100.1
+      mkdir -p /tmp/hd-e2e-www; echo "served by the target" > /tmp/hd-e2e-www/index.html
+      ip netns exec hd-server python3 -m http.server 80 --directory /tmp/hd-e2e-www </dev/null >/dev/null 2>&1 &
+      sleep 1`);
+  }, 60_000);
+
+  afterAll(async () => {
+    await sh(`nft delete table inet ${table} 2>/dev/null; nft delete table inet ${nat.name} 2>/dev/null; echo ${forwarding === '1' ? 1 : 0} > /proc/sys/net/ipv4/ip_forward; ${cleanup}`);
+  }, 60_000);
+
+  it('forwards to the target, back to its own network too, drops the rest, and logs both', async () => {
+    // A managed table that drops what nothing forwards, and logs it.
+    const definition = `table inet ${table} {\n\tchain forward {\n\t\ttype filter hook forward priority filter; policy drop;\n\t\t${renderRule(dropLogRule(prefix), 'inet')}\n\t}\n}\n`;
+    expect(await deploy([{ kind: 'replace', family: 'inet', table, definition }])).toBe('confirmed');
+    expect((await enableForwarding({ executor: target.executor, access: target.access }, 'ip', false)).forwarding.ip).toBe(true);
+    expect(await fetch('hd-client', 'http://203.0.113.1:8080/')).toBe('no answer');
+
+    let { ruleset, listing } = await read();
+    const plan = planPortForward(ruleset, listing, web, { natTable: nat });
+    // The table lets nothing back yet: the forward lets replies through too.
+    expect(plan.replies).toEqual([{ family: 'inet', table, chain: 'forward' }]);
+    expect(await deploy(plan.changes)).toBe('confirmed');
+    ({ ruleset, listing } = await read());
+    expect(portForwards(ruleset).find((entry) => entry.name === web.name)?.forward).toEqual(web);
+
+    expect(await fetch('hd-client', 'http://203.0.113.1:8080/')).toBe('served by the target');
+    // Hairpin: the neighbor reaches the server by the outside address, and the answer comes back the same way.
+    expect(await fetch('hd-neighbor', 'http://203.0.113.1:8080/')).toBe('served by the target');
+    // The server's own address is no forward: the policy drops it.
+    expect(await fetch('hd-client', 'http://198.51.100.2/')).toBe('no answer');
+
+    // syslogd writes a moment later than journald.
+    let entries: Awaited<ReturnType<typeof readPacketLog>>['entries'] = [];
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      entries = (await readPacketLog(target.access, undefined)).entries;
+      if (entries.some((entry) => entry.prefix === prefix) && entries.some((entry) => entry.prefix === `hopdeck forward ${web.name}: `)) break;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    expect(entries.find((entry) => entry.prefix === prefix)).toMatchObject({ protocol: 'TCP', src: '203.0.113.7', dst: '198.51.100.2', dport: 80, in: 'hdc', out: 'hdlan' });
+    expect(entries.find((entry) => entry.prefix === `hopdeck forward ${web.name}: `)).toMatchObject({ protocol: 'TCP', dport: 8080, in: 'hdc' });
+  });
+});
