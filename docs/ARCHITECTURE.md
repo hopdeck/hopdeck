@@ -661,9 +661,10 @@ The npm supply chain is a real risk for a tool with this access.
     (`dev/vm-host`), the kernel writes the lines that are read back.
 - **Host load** (done): the host's header shows CPU as top shows a process
   (100% per fully busy thread, up to 100% times the threads) and memory in
-  use as free counts it (total less MemAvailable), with the share of it. The
-  panel reads /proc/stat and /proc/meminfo every 3 seconds while the host is
-  open and the browser tab visible; CPU is the change since the reading
+  use as free counts it (total less MemAvailable), with the share of it, and
+  uptime (its two largest units; the boot time on hover). The panel reads
+  /proc/stat, /proc/meminfo and /proc/uptime every 3 seconds while the host
+  is open and the browser tab visible; CPU is the change since the reading
   before. Any account can read them, so no root is needed.
 - **Live data** (done): while the rules are in view, the panel reads the
   host every 2, 5 or 15 seconds (or not at all), pausing while the browser

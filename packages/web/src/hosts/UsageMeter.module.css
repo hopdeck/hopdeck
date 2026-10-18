@@ -44,6 +44,10 @@
   background: var(--border);
 }
 
+.noBar {
+  background: transparent;
+}
+
 .fill {
   display: block;
   height: 100%;

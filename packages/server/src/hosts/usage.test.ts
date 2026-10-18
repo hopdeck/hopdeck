@@ -9,7 +9,7 @@ import { hasAccount, testHost } from '../testing/test-host.ts';
 import { SshExecutor } from './ssh.ts';
 
 // Against a test host: dev/test-host/up.sh [SYSTEM] (or dev/vm-host/up.sh), then HOPDECK_TEST_HOST=1 (see testing/test-host.ts).
-describe.skipIf(testHost === undefined)('CPU and memory use on the test host', () => {
+describe.skipIf(testHost === undefined)('CPU and memory use, and uptime, on the test host', () => {
   it('reads them with the userland there, as the least privileged account', async () => {
     const account = hasAccount('plain') ? 'plain' : 'root';
     const executor = new SshExecutor({ destination: `hopdeck-test-${account}`, controlDir: await mkdtemp(`${tmpdir()}/hopdeck-usage-`), configFile: testHost!.sshConfig });
@@ -20,5 +20,6 @@ describe.skipIf(testHost === undefined)('CPU and memory use on the test host', (
     expect(usage.cpu.total).toBeGreaterThan(usage.cpu.busy);
     expect(usage.memory.used).toBeGreaterThan(0);
     expect(usage.memory.used).toBeLessThan(usage.memory.total);
+    expect(usage.uptime).toBeGreaterThan(0);
   });
 });

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- The host's header shows how long the host has been up, next to CPU and
+  RAM, and when it booted on hover.
+
 ## 0.3.0 (2026-10-18)
 
 ### Added

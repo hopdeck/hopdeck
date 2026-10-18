@@ -11,6 +11,7 @@ cpu2 0 0 0 0 0 0 0 0 0 0
 cpu3 0 0 0 0 0 0 0 0 0 0
 MemTotal:        4000000 kB
 MemAvailable:    3000000 kB
+uptime 93784.52 351021.40
 `;
 
 describe('parseUsage and cpuPercent', () => {
@@ -27,7 +28,12 @@ describe('parseUsage and cpuPercent', () => {
     expect(parseUsage(sample(0, 0)).cpu.threads).toBe(4);
   });
 
+  it('reads the seconds since boot, the first number in /proc/uptime', () => {
+    expect(parseUsage(sample(0, 0)).uptime).toBe(93784.52);
+  });
+
   it('says what is missing', () => {
     expect(() => parseUsage('MemTotal: 1 kB\n')).toThrow(/no "cpu" line/);
+    expect(() => parseUsage(sample(0, 0).replace(/^uptime.*$/m, 'uptime '))).toThrow(/no uptime/);
   });
 });

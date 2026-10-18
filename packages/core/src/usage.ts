@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-/** How busy a host is: CPU as top shows a process, memory as free counts it. */
+/** How busy a host is: CPU as top shows a process, memory as free counts it; and how long it has been up. */
 export interface HostUsage {
   /** When hopdeck read it, ISO 8601. */
   readAt: string;
@@ -16,6 +16,8 @@ export interface HostUsage {
     /** Bytes in use: total less what is available (MemAvailable), as free counts it. */
     used: number;
   };
+  /** Seconds since the host booted, at readAt (/proc/uptime). */
+  uptime: number;
 }
 
 /** CPU time out of /proc/stat's "cpu" line, in clock ticks. */
@@ -26,10 +28,10 @@ export interface CpuSample {
 }
 
 /** The shell command that prints what parseUsage() reads; any user may run it. */
-export const USAGE_COMMAND = "grep '^cpu' /proc/stat; grep -E '^(MemTotal|MemAvailable):' /proc/meminfo";
+export const USAGE_COMMAND = "grep '^cpu' /proc/stat; grep -E '^(MemTotal|MemAvailable):' /proc/meminfo; printf 'uptime '; cat /proc/uptime";
 
-/** CPU time and memory out of USAGE_COMMAND's output. */
-export function parseUsage(output: string): { cpu: CpuSample; memory: HostUsage['memory'] } {
+/** CPU time, memory and uptime out of USAGE_COMMAND's output. */
+export function parseUsage(output: string): { cpu: CpuSample; memory: HostUsage['memory']; uptime: number } {
   const total = /^cpu\s+(.+)$/m.exec(output);
   if (total === null) throw new Error(`no "cpu" line in /proc/stat: ${output.slice(0, 200)}`);
   // user nice system idle iowait irq softirq steal; guest time is already in user and nice.
@@ -44,7 +46,13 @@ export function parseUsage(output: string): { cpu: CpuSample; memory: HostUsage[
     return Number(found[1]) * 1024;
   };
   const memoryTotal = kib('MemTotal');
-  return { cpu: { busy: sum - idle, total: sum, threads }, memory: { total: memoryTotal, used: memoryTotal - kib('MemAvailable') } };
+  const uptime = /^uptime (\d+(?:\.\d+)?)\s/m.exec(output);
+  if (uptime === null) throw new Error(`no uptime in /proc/uptime: ${output.slice(-200)}`);
+  return {
+    cpu: { busy: sum - idle, total: sum, threads },
+    memory: { total: memoryTotal, used: memoryTotal - kib('MemAvailable') },
+    uptime: Number(uptime[1]),
+  };
 }
 
 /** CPU use between two samples: 100 per fully busy thread. */

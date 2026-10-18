@@ -615,7 +615,7 @@ export class HostManager {
   }
 
   /**
-   * CPU and memory use. CPU is measured since the previous reading; the first
+   * CPU and memory use, and uptime. CPU is measured since the previous reading; the first
    * one, or one after a long pause, reads twice a moment apart. No root needed.
    */
   async usage(id: string): Promise<HostUsage | undefined> {
@@ -642,6 +642,7 @@ export class HostManager {
       readAt: new Date(now.at).toISOString(),
       cpu: { percent: Math.round(cpuPercent(previous, now.cpu)), threads: now.cpu.threads },
       memory: now.memory,
+      uptime: now.uptime,
     };
   }
 
