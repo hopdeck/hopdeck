@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- IP sets on OpenWrt: named sets of addresses, networks, ports or MAC
+  addresses that fw4 declares, with their entries in UCI and, if wanted, a
+  file on the router for more; traffic rules match a set, or packets not in
+  it. Renaming a set renames it in the rules that use it, and a set in use
+  is not removed.
+
 ## 0.4.0 (2026-10-18)
 
 ### Added

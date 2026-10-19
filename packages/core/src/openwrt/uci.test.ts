@@ -100,22 +100,26 @@ describe('openwrtFirewall', () => {
     expect(firewall.other).toEqual([]);
   });
 
-  it('reads a port forward, with NAT loopback on unless it is off', () => {
+  it('reads a port forward, with NAT loopback on unless it is off, and an IP set', () => {
     const config = parseUciGet(
       'firewall',
       JSON.stringify({
         values: {
           web: { '.anonymous': false, '.type': 'redirect', '.name': 'web', '.index': 0, name: 'Web', src: 'wan', src_dport: '8080', dest: 'lan', dest_ip: '192.168.1.10', dest_port: '80', proto: 'tcp udp' },
           ssh: { '.anonymous': true, '.type': 'redirect', '.name': 'cfg01', '.index': 1, target: 'dnat', reflection: '0', enabled: '0' },
-          set: { '.anonymous': true, '.type': 'ipset', '.name': 'cfg02', '.index': 2, name: 'blocked' },
+          set: { '.anonymous': true, '.type': 'ipset', '.name': 'cfg02', '.index': 2, name: 'blocked', match: ['src_net'], entry: ['192.0.2.0/24', '198.51.100.7'] },
+          inc: { '.anonymous': true, '.type': 'include', '.name': 'cfg03', '.index': 3, path: '/etc/x.nft' },
         },
       }),
     );
-    const { redirects, other } = openwrtFirewall(config);
+    const { redirects, ipsets, other } = openwrtFirewall(config);
     expect(redirects.map(({ section: _, ...redirect }) => redirect)).toEqual([
       { name: 'Web', target: 'DNAT', src: 'wan', srcDport: '8080', dest: 'lan', destIp: '192.168.1.10', destPort: '80', protocols: ['tcp', 'udp'], reflection: true, enabled: true },
       { name: undefined, target: 'DNAT', src: undefined, srcDport: undefined, dest: undefined, destIp: undefined, destPort: undefined, protocols: [], reflection: false, enabled: false },
     ]);
-    expect(other.map((section) => section.type)).toEqual(['ipset']);
+    expect(ipsets.map(({ section: _, ...set }) => set)).toEqual([
+      { name: 'blocked', family: 'ipv4', match: ['src_net'], entries: ['192.0.2.0/24', '198.51.100.7'], loadfile: undefined, comment: undefined, enabled: true },
+    ]);
+    expect(other.map((section) => section.type)).toEqual(['include']);
   });
 });

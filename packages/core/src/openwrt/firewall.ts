@@ -15,7 +15,8 @@ export interface OpenWrtFirewall {
   forwardings: FirewallForwarding[];
   rules: FirewallRule[];
   redirects: FirewallRedirect[];
-  /** Sections of other types (ipset, include, nat, ...), shown as they are. */
+  ipsets: FirewallIpSet[];
+  /** Sections of other types (include, nat, ...), shown as they are. */
   other: UciSection[];
 }
 
@@ -73,6 +74,8 @@ export interface FirewallRule {
   icmpTypes: string[];
   /** ipv4, ipv6, or nothing for both. */
   family: string | undefined;
+  /** An IP set the packet must be in, or with "!" must not: "blocked", "!blocked". */
+  ipset: string | undefined;
   /** ACCEPT, REJECT, DROP, MARK, NOTRACK, ... */
   target: string | undefined;
   enabled: boolean;
@@ -97,9 +100,28 @@ export interface FirewallRedirect {
   enabled: boolean;
 }
 
+/**
+ * A named set fw4 declares in its table, for rules to match against: of
+ * addresses, networks, ports or MAC addresses, from the source or the
+ * destination of a packet.
+ */
+export interface FirewallIpSet {
+  section: UciSection;
+  name: string;
+  /** ipv4 (fw4's default) or ipv6. */
+  family: string;
+  /** What of a packet it holds, such as src_net or dest_port; several make a set of tuples. */
+  match: string[];
+  entries: string[];
+  /** A file of more entries, one a line, that fw4 reads when it loads. */
+  loadfile: string | undefined;
+  comment: string | undefined;
+  enabled: boolean;
+}
+
 /** The firewall's sections, typed; sections fw4 would ignore keep their place in `other`. */
 export function openwrtFirewall(config: UciConfig): OpenWrtFirewall {
-  const firewall: OpenWrtFirewall = { defaults: undefined, zones: [], forwardings: [], rules: [], redirects: [], other: [] };
+  const firewall: OpenWrtFirewall = { defaults: undefined, zones: [], forwardings: [], rules: [], redirects: [], ipsets: [], other: [] };
   for (const section of config.sections) {
     const option = (name: string): string | undefined => {
       const value: UciValue | undefined = section.options[name];
@@ -145,7 +167,20 @@ export function openwrtFirewall(config: UciConfig): OpenWrtFirewall {
           destPort: option('dest_port'),
           icmpTypes: uciList(section.options['icmp_type']),
           family: option('family'),
+          ipset: option('ipset'),
           target: option('target'),
+          enabled,
+        });
+        break;
+      case 'ipset':
+        firewall.ipsets.push({
+          section,
+          name: option('name') ?? section.name,
+          family: option('family') ?? 'ipv4',
+          match: uciList(section.options['match']),
+          entries: uciList(section.options['entry']),
+          loadfile: option('loadfile'),
+          comment: option('comment'),
           enabled,
         });
         break;

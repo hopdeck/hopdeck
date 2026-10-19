@@ -37,6 +37,7 @@ import { liveSource, newTableSource, type NewTableSpec } from '../firewall/edit/
 import { TableEditor, type EditorDraft, type EditorMode, type EditorProblem } from '../firewall/edit/TableEditor.tsx';
 import { PersistencePanel } from '../firewall/deploy/PersistencePanel.tsx';
 import { HistoryPanel } from '../firewall/history/HistoryPanel.tsx';
+import { IpSetsPanel } from '../openwrt/IpSetsPanel.tsx';
 import { RedirectsPanel } from '../openwrt/RedirectsPanel.tsx';
 import { TrafficRulesPanel } from '../openwrt/TrafficRulesPanel.tsx';
 import { UciPlanDialog } from '../openwrt/UciPlanDialog.tsx';
@@ -299,6 +300,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                     uciTab('zones', 'tabs.zones', () => <ZonesPanel state={uciFirewall} />),
                     uciTab('uci-rules', 'tabs.uciRules', () => <TrafficRulesPanel state={uciFirewall} model={ruleset.model} live={live.info} />),
                     uciTab('redirects', 'tabs.forwards', () => <RedirectsPanel state={uciFirewall} model={ruleset.model} live={live.info} />),
+                    uciTab('ipsets', 'tabs.ipsets', () => <IpSetsPanel state={uciFirewall} />),
                   ]
                 : []),
               {

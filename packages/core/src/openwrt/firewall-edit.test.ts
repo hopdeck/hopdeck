@@ -5,7 +5,11 @@ import { describe, expect, it } from 'vitest';
 import firewallJson from '../../test/fixtures/openwrt/firewall-25.12.json' with { type: 'json' };
 import { openwrtFirewall } from './firewall.ts';
 import {
+  deleteIpSetChanges,
   deleteZoneChanges,
+  ipSetChanges,
+  ipSetForm,
+  ipSetProblems,
   redirectChanges,
   redirectForm,
   redirectProblems,
@@ -154,5 +158,61 @@ describe('collected and previewed', () => {
     const preview = openwrtFirewall(previewUci(config, changes));
     expect(preview.zones.map((zone) => zone.name)).toEqual(['lan', 'wan', 'guest']);
     expect(preview.forwardings.map((forwarding) => `${forwarding.src}>${forwarding.dest}`)).toEqual(['lan>wan', 'guest>wan']);
+  });
+});
+
+describe('IP sets', () => {
+  const withSet = parseUciGet(
+    'firewall',
+    JSON.stringify({
+      values: {
+        set: { '.anonymous': true, '.type': 'ipset', '.name': 'cfg01', '.index': 0, name: 'blocked', match: ['src_net'], entry: ['192.0.2.0/24'] },
+        drop: { '.anonymous': true, '.type': 'rule', '.name': 'cfg02', '.index': 1, name: 'Drop blocked', src: 'wan', ipset: 'blocked', target: 'DROP' },
+        other: { '.anonymous': true, '.type': 'rule', '.name': 'cfg03', '.index': 2, name: 'Not blocked', src: 'wan', ipset: '!blocked src', target: 'ACCEPT' },
+      },
+    }),
+  );
+  const sets = openwrtFirewall(withSet);
+  const blocked = sets.ipsets[0]!;
+
+  it('adds a set of networks, saying its family', () => {
+    const form = { ...ipSetForm(undefined), name: 'bad', entries: ['203.0.113.0/24', '198.51.100.7'] };
+    expect(ipSetProblems(sets, undefined, form)).toEqual([]);
+    expect(ipSetChanges(sets, undefined, form, 'new-1')).toEqual([
+      { kind: 'add', type: 'ipset', ref: 'new-1', values: { name: 'bad', family: 'ipv4', match: ['src_net'], entry: ['203.0.113.0/24', '198.51.100.7'] } },
+    ]);
+  });
+
+  it('changes only entries, leaving out the family fw4 takes by default', () => {
+    expect(ipSetChanges(sets, blocked, { ...ipSetForm(blocked), entries: ['192.0.2.0/24', '10.0.0.0/8'] }, 'new-1')).toEqual([
+      { kind: 'set', section: 'cfg01', values: { entry: ['192.0.2.0/24', '10.0.0.0/8'] } },
+    ]);
+  });
+
+  it('renames the set where rules use it, keeping "!" and the direction', () => {
+    expect(ipSetChanges(sets, blocked, { ...ipSetForm(blocked), name: 'banned' }, 'new-1')).toEqual([
+      { kind: 'set', section: 'cfg01', values: { name: 'banned' } },
+      { kind: 'set', section: 'cfg02', values: { ipset: 'banned' } },
+      { kind: 'set', section: 'cfg03', values: { ipset: '!banned src' } },
+    ]);
+  });
+
+  it('is not removed while rules use it', () => {
+    expect(deleteIpSetChanges(sets, blocked)).toEqual({ changes: [], usedBy: ['Drop blocked', 'Not blocked'] });
+  });
+
+  it('checks entries against what the set holds', () => {
+    const form = ipSetForm(blocked);
+    expect(ipSetProblems(sets, blocked, { ...form, entries: ['192.0.2.0/24', 'fe80::/10'] })).toEqual([{ field: 'entries', code: 'entry', value: 'fe80::/10' }]);
+    expect(ipSetProblems(sets, blocked, { ...form, match: ['dest_port'], entries: ['80', '8000-8080', 'http'] })).toEqual([{ field: 'entries', code: 'entry', value: 'http' }]);
+    expect(ipSetProblems(sets, blocked, { ...form, match: ['src_mac'], entries: ['aa:bb:cc:dd:ee:ff'] })).toEqual([]);
+    expect(ipSetProblems(sets, undefined, { ...form, name: 'blocked' })).toEqual([{ field: 'name', code: 'set-taken', value: 'blocked' }]);
+    expect(ipSetProblems(sets, undefined, { ...form, name: 'two words' })).toEqual([{ field: 'name', code: 'set-name', value: 'two words' }]);
+  });
+
+  it('lets a rule match a set there is', () => {
+    expect(trafficRuleForm(sets.rules[1]).ipset).toBe('!blocked src');
+    expect(trafficRuleProblems({ ...trafficRuleForm(undefined), ipset: '!nope' }, ['blocked'])).toEqual([{ field: 'ipset', code: 'set-unknown', value: 'nope' }]);
+    expect(trafficRuleChanges(undefined, { ...trafficRuleForm(undefined), name: 'x', ipset: 'blocked' }, 'new-2')[0]).toMatchObject({ values: { ipset: 'blocked' } });
   });
 });

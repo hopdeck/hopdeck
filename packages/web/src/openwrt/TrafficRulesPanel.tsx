@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Mateusz T (Tenir)
 
 import {
+  ipSetReference,
   RULE_TARGETS,
   trafficRuleChanges,
   trafficRuleForm,
@@ -87,6 +88,7 @@ export function TrafficRulesPanel({ state, model, live }: TrafficRulesPanelProps
               rule.protocols.length === 0 ? 'tcp udp' : rule.protocols.join(' '),
               rule.destPort === undefined ? '' : t('uci.rules.port', { port: rule.destPort }),
               rule.icmpTypes.join(' '),
+              rule.ipset === undefined ? '' : `${ipSetReference(rule.ipset).not ? '!' : ''}@${ipSetReference(rule.ipset).name}`,
             ].filter((part) => part !== '');
             const rowClass = [
               rule.enabled ? '' : styles.off,
@@ -214,7 +216,10 @@ function TrafficRuleDialog({ state, rule, opening, onClose }: { state: UciFirewa
   const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
   const [revealed, setRevealed] = useState(false);
   const full: TrafficRuleForm = { ...form, srcIps: list(srcIps), destIps: list(destIps), icmpTypes: list(icmpTypes) };
-  const problems = trafficRuleProblems(full);
+  const problems = trafficRuleProblems(full, firewall.ipsets.map((set) => set.name));
+  const reference = ipSetReference(form.ipset);
+  const setOptions = [...new Set([...firewall.ipsets.map((set) => set.name), ...(reference.name === '' ? [] : [reference.name])])];
+  const setIpset = (name: string, not: boolean) => edit('ipset', { ipset: name === '' ? '' : `${not ? '!' : ''}${name}${reference.rest}` });
   const { errorOf, invalid } = fieldErrors(problems, (problem) => problemText(t, problem), touched, revealed);
   const edit = (field: string, next: Partial<TrafficRuleForm>) => {
     setTouched((current) => new Set([...current, field]));
@@ -329,6 +334,25 @@ function TrafficRuleDialog({ state, rule, opening, onClose }: { state: UciFirewa
         </Field>
       )}
       <p className={editor.note}>{t('uci.rules.zonesHint')}</p>
+      <Field label={t('uci.rules.ipset')} error={errorOf('ipset')}>
+        <span className={editor.inline}>
+          <select className="select" value={reference.name} aria-invalid={invalid('ipset')} onChange={(event) => setIpset(event.target.value, reference.not)}>
+            <option value="">{t('uci.rules.noSet')}</option>
+            {setOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+          {reference.name !== '' && (
+            <label className={editor.check}>
+              <input type="checkbox" checked={reference.not} onChange={(event) => setIpset(reference.name, event.target.checked)} />
+              {t('uci.rules.notInSet')}
+            </label>
+          )}
+        </span>
+      </Field>
+      {reference.name !== '' && form.protocols.length === 0 && <p className={editor.note}>{t('uci.rules.setProtocolHint')}</p>}
 
       <h3 className={styles.section}>{t('uci.rules.action')}</h3>
       <Field label={t('uci.rules.action')}>

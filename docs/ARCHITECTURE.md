@@ -750,9 +750,11 @@ from it at every reload, and LuCI reads and writes only UCI, so a table
 changed with nft would be lost on the next reload and never shown in LuCI.
 What hopdeck changes there is UCI's own, and LuCI shows it.
 
-- **Scope, first:** zones and the forwardings between them, traffic rules
-  (`rule`) and port forwards (`redirect`; hairpin is its `reflection`,
-  masquerade a setting of the zone). IP sets and nftables includes later.
+- **Scope:** zones and the forwardings between them, traffic rules
+  (`rule`), port forwards (`redirect`; hairpin is its `reflection`,
+  masquerade a setting of the zone) and IP sets (`ipset`, which fw4 declares
+  as named sets; a rule's `ipset` matches one, "!name" its complement).
+  nftables includes next.
   The nft view of `inet fw4` stays read-only; fw4 names each rule it makes
   after its UCI rule (`comment "!fw4: Allow-Ping"`), which links them.
 - **Through rpcd, as LuCI does** ([`openwrt/uci-plans.ts`](../packages/server/src/openwrt/uci-plans.ts)).

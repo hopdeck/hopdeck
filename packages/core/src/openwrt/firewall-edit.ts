@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Mateusz T (Tenir)
 
 import { isIpAddress } from '../firewall/port-forward.ts';
-import type { FirewallRedirect, FirewallRule, FirewallZone, OpenWrtFirewall } from './firewall.ts';
+import type { FirewallIpSet, FirewallRedirect, FirewallRule, FirewallZone, OpenWrtFirewall } from './firewall.ts';
 import { sectionChanges } from './uci-edit.ts';
 import type { UciChange, UciValue } from './uci.ts';
 
@@ -47,6 +47,8 @@ export interface TrafficRuleForm {
   destIps: string[];
   destPort: string;
   icmpTypes: string[];
+  /** An IP set the packet must be in, "!name" for not in; "" for none. */
+  ipset: string;
   /** "" leaves it to fw4, for a rule that does not say. */
   target: string;
 }
@@ -89,7 +91,7 @@ export function zoneForm(firewall: OpenWrtFirewall, zone: FirewallZone | undefin
 
 export function trafficRuleForm(rule: FirewallRule | undefined): TrafficRuleForm {
   if (rule === undefined) {
-    return { name: '', enabled: true, family: '', protocols: ['tcp'], src: 'wan', srcIps: [], srcPort: '', dest: '', destIps: [], destPort: '', icmpTypes: [], target: 'ACCEPT' };
+    return { name: '', enabled: true, family: '', protocols: ['tcp'], src: 'wan', srcIps: [], srcPort: '', dest: '', destIps: [], destPort: '', icmpTypes: [], ipset: '', target: 'ACCEPT' };
   }
   const family = rule.family === 'ipv4' || rule.family === 'ipv6' ? rule.family : '';
   return {
@@ -104,6 +106,7 @@ export function trafficRuleForm(rule: FirewallRule | undefined): TrafficRuleForm
     destIps: rule.destIps,
     destPort: rule.destPort ?? '',
     icmpTypes: rule.icmpTypes,
+    ipset: rule.ipset ?? '',
     target: rule.target ?? '',
   };
 }
@@ -194,6 +197,7 @@ export function trafficRuleChanges(rule: FirewallRule | undefined, form: Traffic
       dest_ip: form.destIps.length > 0 ? form.destIps : undefined,
       dest_port: form.destPort.trim() === '' ? undefined : form.destPort.trim(),
       icmp_type: icmp && form.icmpTypes.length > 0 ? form.icmpTypes : undefined,
+      ipset: form.ipset.trim() === '' ? undefined : form.ipset.trim(),
       target: form.target === '' ? undefined : form.target,
     },
     ref,
@@ -228,7 +232,7 @@ export function redirectChanges(redirect: FirewallRedirect | undefined, form: Re
 /** What is wrong where, for the form to say in its language at that field. */
 export interface UciFormProblem {
   field: string;
-  code: 'zone-name' | 'zone-taken' | 'required' | 'ports' | 'ports-protocol' | 'address' | 'icmp-protocol' | 'protocols' | 'family';
+  code: 'zone-name' | 'zone-taken' | 'required' | 'ports' | 'ports-protocol' | 'address' | 'icmp-protocol' | 'protocols' | 'family' | 'set-name' | 'set-taken' | 'set-unknown' | 'entry';
   value?: string;
 }
 
@@ -240,8 +244,11 @@ export function zoneProblems(firewall: OpenWrtFirewall, zone: FirewallZone | und
   return problems;
 }
 
-export function trafficRuleProblems(form: TrafficRuleForm): UciFormProblem[] {
+/** `sets` are the names of the IP sets there are, for the rule's to be one of them. */
+export function trafficRuleProblems(form: TrafficRuleForm, sets?: readonly string[]): UciFormProblem[] {
   const problems: UciFormProblem[] = [];
+  const set = ipSetReference(form.ipset).name;
+  if (set !== '' && sets !== undefined && !sets.includes(set)) problems.push({ field: 'ipset', code: 'set-unknown', value: set });
   const protocols = form.protocols.length > 0 ? form.protocols : ['tcp', 'udp'];
   const ports = protocols.every((protocol) => PORT_PROTOCOLS.includes(protocol));
   for (const field of ['srcPort', 'destPort'] as const) {
@@ -272,6 +279,106 @@ export function redirectProblems(form: RedirectForm): UciFormProblem[] {
   const wrong = form.srcIps.find((value) => !validAddress(value));
   if (wrong !== undefined) problems.push({ field: 'srcIps', code: 'address', value: wrong });
   return problems;
+}
+
+/** What a set holds, as fw4's match takes it: from the source or the destination, of addresses, networks, ports or MAC addresses. */
+export const IPSET_MATCHES = ['src_net', 'dest_net', 'src_ip', 'dest_ip', 'src_port', 'dest_port', 'src_mac'] as const;
+
+export interface IpSetForm {
+  name: string;
+  enabled: boolean;
+  family: 'ipv4' | 'ipv6';
+  /** One of IPSET_MATCHES, or several for a set of tuples, kept as they are. */
+  match: string[];
+  entries: string[];
+  /** A file of more entries on the router, one a line; "" for none. */
+  loadfile: string;
+  comment: string;
+}
+
+export function ipSetForm(set: FirewallIpSet | undefined): IpSetForm {
+  if (set === undefined) return { name: '', enabled: true, family: 'ipv4', match: ['src_net'], entries: [], loadfile: '', comment: '' };
+  return {
+    name: set.name,
+    enabled: set.enabled,
+    family: set.family === 'ipv6' ? 'ipv6' : 'ipv4',
+    match: set.match,
+    entries: set.entries,
+    loadfile: set.loadfile ?? '',
+    comment: set.comment ?? '',
+  };
+}
+
+/** The set's own options, and for a new name the rules and port forwards that use it. */
+export function ipSetChanges(firewall: OpenWrtFirewall, set: FirewallIpSet | undefined, form: IpSetForm, ref: string): UciChange[] {
+  const options = set?.section.options ?? {};
+  const changes = sectionChanges(
+    set?.section,
+    'ipset',
+    {
+      name: form.name,
+      enabled: form.enabled ? undefined : '0',
+      // fw4 takes ipv4 when a set does not say; a set that leaves it out keeps leaving it out.
+      family: set !== undefined && !('family' in options) && form.family === 'ipv4' ? undefined : form.family,
+      match: form.match,
+      entry: form.entries.length > 0 ? form.entries : undefined,
+      loadfile: form.loadfile.trim() === '' ? undefined : form.loadfile.trim(),
+      comment: form.comment.trim() === '' ? undefined : form.comment.trim(),
+    },
+    ref,
+  );
+  if (set !== undefined && set.name !== form.name) {
+    for (const part of [...firewall.rules, ...firewall.redirects]) {
+      const value = part.section.options['ipset'];
+      if (typeof value !== 'string') continue;
+      const reference = ipSetReference(value);
+      if (reference.name === set.name) changes.push({ kind: 'set', section: part.section.name, values: { ipset: `${reference.not ? '!' : ''}${form.name}${reference.rest}` } });
+    }
+  }
+  return changes;
+}
+
+/** Removing a set that rules or port forwards use would leave them matching nothing fw4 knows: they are named instead. */
+export function deleteIpSetChanges(firewall: OpenWrtFirewall, set: FirewallIpSet): { changes: UciChange[]; usedBy: string[] } {
+  const usedBy = [...firewall.rules, ...firewall.redirects]
+    .filter((part) => typeof part.section.options['ipset'] === 'string' && ipSetReference(part.section.options['ipset']).name === set.name)
+    .map((part) => part.name ?? part.section.name);
+  return usedBy.length > 0 ? { changes: [], usedBy } : { changes: [{ kind: 'delete', section: set.section.name }], usedBy: [] };
+}
+
+export function ipSetProblems(firewall: OpenWrtFirewall, set: FirewallIpSet | undefined, form: IpSetForm): UciFormProblem[] {
+  const problems: UciFormProblem[] = [];
+  // A name nft takes for a set, as fw4 declares it under its own.
+  if (!/^[A-Za-z_][A-Za-z0-9_]{0,30}$/.test(form.name)) problems.push({ field: 'name', code: 'set-name', value: form.name });
+  else if (firewall.ipsets.some((other) => other !== set && other.name === form.name)) problems.push({ field: 'name', code: 'set-taken', value: form.name });
+  if (form.match.length === 1) {
+    const kind = form.match[0]!.replace(/^(src|dest)_/, '');
+    const wrong = form.entries.find((entry) => !validEntry(kind, entry, form.family));
+    if (wrong !== undefined) problems.push({ field: 'entries', code: 'entry', value: wrong });
+  }
+  return problems;
+}
+
+/** "!blocked src" as its parts: whether it is negated, the set's name, and the rest, which fw4 reads as the direction. */
+export function ipSetReference(value: string): { not: boolean; name: string; rest: string } {
+  const match = /^(!?)\s*([^\s]*)(.*)$/.exec(value.trim())!;
+  return { not: match[1] === '!', name: match[2]!, rest: match[3]! };
+}
+
+function validEntry(kind: string, entry: string, family: 'ipv4' | 'ipv6'): boolean {
+  const ofFamily = (address: string) => (address.includes(':') ? 'ipv6' : 'ipv4') === family;
+  switch (kind) {
+    case 'ip':
+      return isIpAddress(entry) && ofFamily(entry);
+    case 'net':
+      return validAddress(entry) && !entry.startsWith('!') && ofFamily(entry);
+    case 'port':
+      return validPorts(entry) && !/\s/.test(entry);
+    case 'mac':
+      return /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/.test(entry);
+    default:
+      return true;
+  }
 }
 
 /** Rules, forwardings and port forwards naming a renamed zone, renamed with it. */
