@@ -27,6 +27,10 @@ const RACE_MARGIN_MS = 3000;
 export interface UciPlansOptions {
   /** Seconds until rpcd rolls back an unconfirmed change. */
   seconds?: number;
+  /** Before a plan is made: the history notes the configuration as it is, if it has to. */
+  beforeChange?: (target: DeployTarget) => Promise<void>;
+  /** After a change is kept: the history records it. */
+  record?: (view: UciPlanView, target: DeployTarget) => Promise<NonNullable<UciPlanView['recorded']>>;
   /** Records what happened, as deployments do. */
   log?: (entry: DeployLogEntry) => void | Promise<void>;
 }
@@ -61,11 +65,15 @@ export class UciPlans {
   readonly #plans = new Map<string, Plan>();
   readonly #seconds: number;
   readonly #log: UciPlansOptions['log'];
+  readonly #beforeChange: UciPlansOptions['beforeChange'];
+  readonly #recordKept: UciPlansOptions['record'];
   readonly #working = new Map<string, number>();
 
   constructor(options: UciPlansOptions = {}) {
     this.#seconds = options.seconds ?? 60;
     this.#log = options.log;
+    this.#beforeChange = options.beforeChange;
+    this.#recordKept = options.record;
   }
 
   hostOf(id: string): string | undefined {
@@ -93,7 +101,7 @@ export class UciPlans {
     target: DeployTarget,
     config: string,
     changes: readonly UciChange[],
-    options: { base?: string; files?: readonly IncludeFile[] } = {},
+    options: { base?: string; files?: readonly IncludeFile[]; restoredFrom?: number } = {},
   ): Promise<UciPlanView> {
     if (target.platform.id !== 'openwrt') throw new HostError('platform-read-only', 'UCI is OpenWrt’s configuration; this host is not OpenWrt');
     if (!/^[a-z0-9_-]+$/.test(config)) throw new HostError('invalid-definition', `not a UCI configuration: ${config}`);
@@ -103,6 +111,8 @@ export class UciPlans {
     if (options.base !== undefined && options.base !== hashBefore) {
       throw new HostError('ruleset-changed', `/etc/config/${config} changed since the panel read it, in LuCI or elsewhere; read it again and make the changes on what is there now`);
     }
+    // The history notes what the change is made on, a change of LuCI's say, before it is staged.
+    if (config === 'firewall') await this.#beforeChange?.(target);
     const files = options.files ?? [];
     if (files.length > 0 && config !== 'firewall') throw new HostError('invalid-definition', 'only the firewall has include files');
     for (const file of files) {
@@ -146,6 +156,7 @@ export class UciPlans {
       validation: { ok: true, message: '' },
       pendingElsewhere: { cli: false, sessions: 0 },
       safety: { seconds: this.#seconds, freshConnectionCheck: target.freshExecutor !== undefined },
+      ...(options.restoredFrom !== undefined && { restoredFrom: options.restoredFrom }),
     };
     try {
       // Sections the panel added go by their ref until rpcd names them.
@@ -262,6 +273,7 @@ export class UciPlans {
     await this.#record(view, 'confirmed');
     // Versions of includes that nothing points to any more go, now that the change is kept.
     if (view.config === 'firewall') await removeUnusedIncludes(target).catch(() => undefined);
+    if (view.config === 'firewall' && this.#recordKept !== undefined) view.recorded = await this.#recordKept(view, target);
     return view;
   }
 

@@ -27,7 +27,9 @@ interface UciPlanDialogProps {
   /** The hash of the configuration the changes were made on. */
   base: string | undefined;
   /** Include files the changes point to, written on the router with them. */
-  files?: { path: string; content: string }[];
+  files?: { path: string; content: string }[] | undefined;
+  /** The history version the changes put back. */
+  restoredFrom?: number | undefined;
   onClose(result: UciPlanResult): void;
 }
 
@@ -36,7 +38,7 @@ interface UciPlanDialogProps {
  * firewall's UCI configuration, as LuCI's "Save & Apply" does, with what
  * rpcd will write listed by section, and what fw4 made of it.
  */
-export function UciPlanDialog({ hostId, hostName, changes, base, files = [], onClose }: UciPlanDialogProps) {
+export function UciPlanDialog({ hostId, hostName, changes, base, files = [], restoredFrom, onClose }: UciPlanDialogProps) {
   const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
   const [view, setView] = useState<UciPlanView>();
@@ -67,7 +69,14 @@ export function UciPlanDialog({ hostId, hostName, changes, base, files = [], onC
       setView(undefined);
       setError(undefined);
       element.showModal();
-      void run(() => api.post(`/hosts/${encodeURIComponent(hostId)}/uci/firewall/plans`, { changes, ...(base !== undefined && { base }), ...(files.length > 0 && { files }) }));
+      void run(() =>
+        api.post(`/hosts/${encodeURIComponent(hostId)}/uci/firewall/plans`, {
+          changes,
+          ...(base !== undefined && { base }),
+          ...(files.length > 0 && { files }),
+          ...(restoredFrom !== undefined && { restoredFrom }),
+        }),
+      );
     } else if (!open && element.open) {
       element.close();
     }
@@ -118,6 +127,7 @@ export function UciPlanDialog({ hostId, hostName, changes, base, files = [], onC
           </h2>
           <span className={deploy.host}>{hostName} · /etc/config/firewall</span>
         </header>
+        {restoredFrom !== undefined && <p className={deploy.restoring}>{t('deploy.restoring', { version: restoredFrom })}</p>}
 
         {view === undefined && busy && (
           <p className={deploy.progress} role="status">
@@ -279,7 +289,20 @@ function stagedText(t: ReturnType<typeof useI18n>['t'], change: Staged): string 
 
 function Outcome({ view }: { view: UciPlanView }) {
   const { t } = useI18n();
-  if (view.state === 'confirmed') return <Callout tone="ok" icon={<CheckIcon />} title={t('uci.plan.confirmed')} />;
+  if (view.state === 'confirmed') {
+    const { recorded } = view;
+    return (
+      <>
+        <Callout tone="ok" icon={<CheckIcon />} title={t('uci.plan.confirmed')} />
+        {recorded?.version !== undefined && <p className={deploy.recorded}>{t('deploy.recorded', { version: recorded.version })}</p>}
+        {recorded?.problem !== undefined && (
+          <Callout tone="warn" icon={<AlertIcon />} title={t('deploy.notRecorded')} role="alert">
+            <pre className="details">{recorded.problem.detail}</pre>
+          </Callout>
+        )}
+      </>
+    );
+  }
   const detail = view.outcome?.detail.trim() ?? '';
   const reason = view.outcome?.reason;
   const title: MessageKey =

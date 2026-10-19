@@ -38,6 +38,7 @@ import { TableEditor, type EditorDraft, type EditorMode, type EditorProblem } fr
 import { PersistencePanel } from '../firewall/deploy/PersistencePanel.tsx';
 import { HistoryPanel } from '../firewall/history/HistoryPanel.tsx';
 import { IncludesPanel } from '../openwrt/IncludesPanel.tsx';
+import { UciHistoryPanel } from '../openwrt/UciHistoryPanel.tsx';
 import { IpSetsPanel } from '../openwrt/IpSetsPanel.tsx';
 import { RedirectsPanel } from '../openwrt/RedirectsPanel.tsx';
 import { TrafficRulesPanel } from '../openwrt/TrafficRulesPanel.tsx';
@@ -113,7 +114,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   const ruleset = useRuleset(host.id, readable);
   const uciFirewall = useUciFirewall(host.id, readable && uci);
   // Changes of the UCI configuration being reviewed and applied.
-  const [uciChanges, setUciChanges] = useState<UciChange[]>();
+  const [uciPlan, setUciPlan] = useState<{ changes: UciChange[]; files: { path: string; content: string }[]; restoredFrom?: number }>();
   // The router's configuration changed since the pending changes were made on it.
   const [uciStale, setUciStale] = useState(false);
   // Read every few seconds, it also notices when an SSH host stops letting hopdeck in.
@@ -194,7 +195,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
       <UciTab
         state={uciFirewall}
         stale={uciStale}
-        onReview={() => setUciChanges(uciFirewall.pending)}
+        onReview={() => setUciPlan({ changes: uciFirewall.pending, files: uciFirewall.filesToSend() })}
         onStart={() => {
           setUciStale(false);
           uciFirewall.reload({ discard: true });
@@ -303,6 +304,9 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                     uciTab('redirects', 'tabs.forwards', () => <RedirectsPanel state={uciFirewall} model={ruleset.model} live={live.info} />),
                     uciTab('ipsets', 'tabs.ipsets', () => <IpSetsPanel state={uciFirewall} />),
                     uciTab('includes', 'tabs.includes', () => <IncludesPanel hostId={host.id} state={uciFirewall} model={ruleset.model} />),
+                    uciTab('uci-history', 'tabs.history', () => (
+                      <UciHistoryPanel hostId={host.id} state={uciFirewall} onRestore={(changes, files, version) => setUciPlan({ changes, files, restoredFrom: version })} />
+                    )),
                   ]
                 : []),
               {
@@ -481,11 +485,12 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
         <UciPlanDialog
           hostId={host.id}
           hostName={host.name}
-          changes={uciChanges}
+          changes={uciPlan?.changes}
           base={uciFirewall.hash}
-          files={uciChanges === undefined ? [] : uciFirewall.filesToSend()}
+          files={uciPlan?.files}
+          restoredFrom={uciPlan?.restoredFrom}
           onClose={(result) => {
-            setUciChanges(undefined);
+            setUciPlan(undefined);
             if (result.view?.state === 'confirmed') uciFirewall.reload({ discard: true });
             if (result.view !== undefined && result.view.state !== 'planned' && result.view.state !== 'invalid') ruleset.reload();
             if (result.error?.code === 'ruleset-changed') setUciStale(true);

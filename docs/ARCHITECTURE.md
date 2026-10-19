@@ -439,6 +439,18 @@ connects sees the same one, from whichever computer.
   platforms, and on hosts without managed tables and without a history yet:
   looking at a host does not start one. The sandbox keeps its history in its
   temporary directory.
+- **On OpenWrt** the firewall's UCI configuration has a history of its own
+  ([`openwrt/uci-history.ts`](../packages/server/src/openwrt/uci-history.ts)),
+  in `/etc/hopdeck/state/firewall/uci-history`, with the same layout, limit
+  and author: a version keeps `/etc/config/firewall`, its JSON as ubus reads
+  it (for a restore), copies of hopdeck's include files it points to, and
+  meta.json with the changes as rpcd listed them. A baseline is taken before
+  hopdeck's first change; an outside version when the file's hash differs
+  from the newest version's, noticed when the panel reads the configuration
+  and before each plan. The author's key comes from dropbear's log line
+  (`logread`). A restore pairs sections up (by name, by type and name
+  option, by type in order) and writes the differences, with the include
+  files the version had, through the usual plan.
 
 ## Local panel security
 

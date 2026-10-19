@@ -180,4 +180,8 @@ export interface UciPlanView {
   warnings?: string;
   /** The table fw4 made, before the change and with it: what the change does in nftables. */
   ruleset?: { before: string; after: string };
+  /** The history version these changes put back. */
+  restoredFrom?: number;
+  /** The history version the kept change became, or why it did not. */
+  recorded?: { version?: number; problem?: { code: string; detail: string } };
 }

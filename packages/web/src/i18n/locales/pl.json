@@ -1143,5 +1143,18 @@
   "uci.includes.syntax.ruleset": "Całe polecenia nftables, np. własna tabela: table inet moja { … }.",
   "uci.problem.include-name": "{{value}} to nie nazwa: od 1 do 32 małych liter, cyfr lub podkreśleń.",
   "uci.problem.include-taken": "Plik {{value}} już istnieje.",
-  "uci.problem.content": "Plik musi zawierać jakieś nftables."
+  "uci.problem.content": "Plik musi zawierać jakieś nftables.",
+  "uci.history.summary_one": "{{count}} wersja, {{size}}",
+  "uci.history.summary_few": "{{count}} wersje, {{size}}",
+  "uci.history.summary_many": "{{count}} wersji, {{size}}",
+  "uci.history.summary_other": "{{count}} wersji, {{size}}",
+  "uci.history.empty": "Nie ma jeszcze historii: zaczyna się z pierwszą zmianą hopdeck tutaj i zachowuje konfigurację sprzed niej.",
+  "uci.history.outsideSummary": "zmieniono gdzie indziej (LuCI, uci)",
+  "uci.history.baselineSummary": "tak jak hopdeck ją zastał",
+  "uci.history.baselineNote": "Konfiguracja sprzed pierwszej zmiany hopdeck na tym routerze.",
+  "uci.history.noticedNote": "Zmienione przez coś innego niż hopdeck, w LuCI albo poleceniem uci; nie wiadomo, kto to zrobił. hopdeck zauważył to przy wczytywaniu konfiguracji.",
+  "uci.history.pendingFirst_one": "Jest {{count}} niezastosowana zmiana. Zastosuj ją albo odrzuć, zanim przywrócisz wersję.",
+  "uci.history.pendingFirst_few": "Są {{count}} niezastosowane zmiany. Zastosuj je albo odrzuć, zanim przywrócisz wersję.",
+  "uci.history.pendingFirst_many": "Jest {{count}} niezastosowanych zmian. Zastosuj je albo odrzuć, zanim przywrócisz wersję.",
+  "uci.history.pendingFirst_other": "Jest {{count}} niezastosowanej zmiany. Zastosuj je albo odrzuć, zanim przywrócisz wersję."
 }

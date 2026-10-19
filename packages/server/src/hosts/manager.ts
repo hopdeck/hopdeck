@@ -34,9 +34,10 @@ import type {
   TraceView,
   UsedKey,
 } from '@hopdeck/core';
-import { cpuPercent, liveState, parseUsage, platform, USAGE_COMMAND, type CpuSample, type HostUsage, type UciChange, type UciConfig, type UciPlanView } from '@hopdeck/core';
+import { cpuPercent, liveState, parseUsage, platform, USAGE_COMMAND, type CpuSample, type HostUsage, type UciChange, type UciConfig, type UciHistoryDetail, type UciHistoryState, type UciPlanView } from '@hopdeck/core';
 import { HostError } from './errors.ts';
 import { Deployments, firewallReadOnly, type DeployLogEntry, type DeployTarget } from '../firewall/deploy.ts';
+import { UciHistory, type UciHistoryTarget } from '../openwrt/uci-history.ts';
 import { automaticIncludes, configHash, readConfig, readInclude, UciPlans, type IncludeFile } from '../openwrt/uci-plans.ts';
 import { History, type HistoryTarget } from '../firewall/history.ts';
 import { journal } from './journal.ts';
@@ -119,6 +120,7 @@ export class HostManager {
   readonly #hostKeys: HostKeys;
   readonly #deployments: Deployments;
   readonly #uci: UciPlans;
+  readonly #uciHistory: UciHistory;
   readonly #traces = new Traces();
   readonly #history: History;
   readonly #sshKeys: SshKeys;
@@ -143,6 +145,13 @@ export class HostManager {
     this.#uci = new UciPlans({
       ...(options.rollbackSeconds !== undefined && { seconds: options.rollbackSeconds }),
       log: (entry) => this.#logChange(entry),
+      // A history that cannot be written must not stop a change; recording the change says why.
+      beforeChange: (target) => this.#uciHistory.beforeChange(this.#uciHistoryTarget(entryOf(target.hostId))).catch(() => undefined),
+      record: (view) => this.#uciHistory.record(this.#uciHistoryTarget(entryOf(view.hostId)), view),
+    });
+    this.#uciHistory = new UciHistory({
+      operator: options.operator ?? { user: userInfo().username, computer: hostname() },
+      busy: (hostId) => this.#uci.busy(hostId),
     });
     this.#history = new History({
       operator: options.operator ?? { user: userInfo().username, computer: hostname() },
@@ -205,6 +214,7 @@ export class HostManager {
     const entry = this.#entries.get(id);
     if (entry === undefined) return undefined;
     this.#history.reset(id);
+    this.#uciHistory.reset(id);
     // Connecting is the user asking to log in again.
     if (entry.executor instanceof LoginGuard) entry.executor.reset();
     try {
@@ -298,14 +308,33 @@ export class HostManager {
     if (target.platform.id !== 'openwrt') throw new HostError('platform-read-only', 'UCI is OpenWrt’s configuration; this host is not OpenWrt');
     // The hash first: a change in between makes it older than what is read, so a plan made on it is refused rather than misplaced.
     const hash = await configHash(target, config);
-    return { config: await readConfig(target, config, undefined), hash };
+    const read = await readConfig(target, config, undefined);
+    // A change made in LuCI since the history's newest version is noticed here.
+    if (config === 'firewall') await this.#uciHistory.observe(this.#uciHistoryTarget(entry), hash).catch(() => undefined);
+    return { config: read, hash };
+  }
+
+  /** The history of an OpenWrt host's firewall configuration, and one version of it. */
+  async uciHistory(id: string): Promise<UciHistoryState | undefined> {
+    const entry = this.#entries.get(id);
+    return entry === undefined ? undefined : this.#uciHistory.state(this.#uciHistoryTarget(entry));
+  }
+
+  async uciHistoryVersion(id: string, version: number): Promise<UciHistoryDetail | undefined> {
+    const entry = this.#entries.get(id);
+    return entry === undefined ? undefined : this.#uciHistory.version(this.#uciHistoryTarget(entry), version);
   }
 
   /** Stages changes of a UCI configuration in hopdeck's own rpcd session; nothing changes until apply. */
-  async prepareUci(id: string, config: string, changes: readonly UciChange[], base: string | undefined, files: readonly IncludeFile[] = []): Promise<UciPlanView | undefined> {
+  async prepareUci(
+    id: string,
+    config: string,
+    changes: readonly UciChange[],
+    options: { base?: string; files?: readonly IncludeFile[]; restoredFrom?: number } = {},
+  ): Promise<UciPlanView | undefined> {
     const entry = this.#entries.get(id);
     if (entry === undefined) return undefined;
-    return this.#uci.prepare(this.#target(entry), config, changes, { ...(base !== undefined && { base }), files });
+    return this.#uci.prepare(this.#target(entry), config, changes, options);
   }
 
   /** The content of a file fw4 includes on an OpenWrt host, and the files it includes without a UCI section. */
@@ -425,6 +454,11 @@ export class HostManager {
     const access = this.#access(entry);
     const status = entry.status as Extract<HostStatus, { state: 'connected' }>;
     return { kind: entry.kind, executor: entry.executor, access, facts: status.facts };
+  }
+
+  #uciHistoryTarget(entry: Entry): UciHistoryTarget {
+    const status = entry.status as Extract<HostStatus, { state: 'connected' }>;
+    return { ...this.#target(entry), login: status.facts.user };
   }
 
   #target(entry: Entry): DeployTarget {

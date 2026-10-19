@@ -16,6 +16,13 @@
   /etc/hopdeck/fw4, so a rollback brings back the one before, and removes
   the versions nothing points to once a change is kept. Other includes, and
   the files fw4 includes by themselves, are shown.
+- A history of the firewall's configuration on OpenWrt, kept on the router
+  as the nftables history is on other hosts: the configuration before
+  hopdeck's first change, every change kept, with who made it (the SSH key
+  as dropbear logged it), and changes made in LuCI or with uci, noticed when
+  hopdeck reads the configuration. Each version keeps /etc/config/firewall
+  and hopdeck's nftables files, shows what changed in them, and can be put
+  back through the usual review and rollback.
 
 ### Changed
 

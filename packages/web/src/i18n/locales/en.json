@@ -1079,5 +1079,14 @@
   "uci.includes.syntax.ruleset": "Whole nftables statements, such as a table of your own: table inet mine { … }.",
   "uci.problem.include-name": "{{value}} is no name: 1 to 32 small letters, digits or underscores.",
   "uci.problem.include-taken": "There is an include {{value}} already.",
-  "uci.problem.content": "The file needs some nftables."
+  "uci.problem.content": "The file needs some nftables.",
+  "uci.history.summary_one": "{{count}} version, {{size}}",
+  "uci.history.summary_other": "{{count}} versions, {{size}}",
+  "uci.history.empty": "No history yet: it starts with hopdeck's first change here, keeping the configuration as it was before.",
+  "uci.history.outsideSummary": "changed elsewhere (LuCI, uci)",
+  "uci.history.baselineSummary": "as hopdeck first found it",
+  "uci.history.baselineNote": "The configuration as it was before hopdeck's first change here.",
+  "uci.history.noticedNote": "Changed by something other than hopdeck, in LuCI or with the uci command; who did it is unknown. hopdeck noticed when it read the configuration.",
+  "uci.history.pendingFirst_one": "There is {{count}} change not applied. Apply or discard it before putting a version back.",
+  "uci.history.pendingFirst_other": "There are {{count}} changes not applied. Apply or discard them before putting a version back."
 }

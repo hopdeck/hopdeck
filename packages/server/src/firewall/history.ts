@@ -458,10 +458,12 @@ async function readSnapshot(access: NftAccess): Promise<Snapshot> {
 
 /**
  * How sshd let a connection in, from its log line for that address and port:
- * "Accepted publickey for root from 10.0.0.5 port 51234 ssh2: ED25519 SHA256:…".
- * Newest first, so a port used again later matches its latest connection.
+ * "Accepted publickey for root from 10.0.0.5 port 51234 ssh2: ED25519 SHA256:…",
+ * or dropbear's on OpenWrt: "Pubkey auth succeeded for 'root' with
+ * ssh-ed25519 key SHA256:… from 10.0.0.5:51234". Newest first, so a port used
+ * again later matches its latest connection.
  */
-async function sshdVerdict(
+export async function sshdVerdict(
   address: string,
   port: string,
   root: (argv: string[]) => Promise<{ exitCode: number; stdout: string }>,
@@ -471,10 +473,17 @@ async function sshdVerdict(
     `line=$(journalctl -q --no-pager -o cat -r -t sshd -t sshd-session 2>/dev/null | grep -F -- "$p" | grep -m 1 'Accepted ' || true)`,
     // Without journald: Debian's and RHEL's syslog files, and BusyBox syslogd's (Alpine).
     `[ -n "$line" ] || for f in /var/log/auth.log /var/log/secure /var/log/messages; do [ -r "$f" ] && line=$(grep -F -- "$p" "$f" | grep 'Accepted ' | tail -n 1); [ -z "$line" ] || break; done`,
+    // OpenWrt's dropbear, which logs through logread.
+    `[ -n "$line" ] || line=$(logread 2>/dev/null | grep -F -- " from $1:$2" | grep 'auth succeeded for' | tail -n 1)`,
     'printf "%s" "$line"',
   ].join('\n');
   const found = await root(['sh', '-c', script, 'sh', address, port]).catch(() => undefined);
   if (found === undefined) return {};
+  const dropbear = /(Pubkey|Password) auth succeeded for '[^']*'(?: with (\S+) key (\S+))?/.exec(found.stdout);
+  if (dropbear !== null) {
+    const type = dropbear[2]?.replace(/^ssh-/, '').replace(/^ecdsa-.*$/, 'ecdsa').toUpperCase();
+    return { method: dropbear[1] === 'Pubkey' ? 'publickey' : 'password', ...(type !== undefined && dropbear[3] !== undefined && { key: `${type} ${dropbear[3]}` }) };
+  }
   const match = /Accepted (\S+) for \S+ from \S+ port \d+ [^\s:]+(?::\s+(\S+) (\S+))?/.exec(found.stdout);
   if (match === null) return {};
   return { method: match[1]!, ...(match[2] !== undefined && match[3] !== undefined && { key: `${match[2]} ${match[3]}` }) };

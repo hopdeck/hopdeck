@@ -266,7 +266,12 @@ const ROUTES: Route[] = [
       const base = body['base'];
       if (base !== undefined && (typeof base !== 'string' || !/^[0-9a-f]{64}$/.test(base))) throw new ApiError(400, 'invalid-body', 'base must be the hash the configuration was read with');
       const files = body['files'] === undefined ? [] : includeFiles(body['files']);
-      return { status: 201, body: { plan: found(await ctx.hosts.prepareUci(id!, config!, changes, base, files)) } };
+      const restoredFrom = body['restoredFrom'];
+      if (restoredFrom !== undefined && !(typeof restoredFrom === 'number' && Number.isInteger(restoredFrom) && restoredFrom > 0)) {
+        throw new ApiError(400, 'invalid-body', 'restoredFrom must be a version number');
+      }
+      const options = { ...(base !== undefined && { base }), files, ...(restoredFrom !== undefined && { restoredFrom }) };
+      return { status: 201, body: { plan: found(await ctx.hosts.prepareUci(id!, config!, changes, options)) } };
     },
   },
   {
@@ -283,6 +288,22 @@ const ROUTES: Route[] = [
     pattern: /^\/api\/hosts\/([^/]+)\/uci\/firewall\/automatic-includes$/,
     async handle(_req, [id], ctx) {
       return { body: { paths: found(await ctx.hosts.uciAutomaticIncludes(id!)) } };
+    },
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/uci\/firewall\/history$/,
+    async handle(_req, [id], ctx) {
+      return { body: { history: found(await ctx.hosts.uciHistory(id!)) } };
+    },
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/uci\/firewall\/history\/(\d{1,9})$/,
+    async handle(_req, [id, version], ctx) {
+      const detail = await ctx.hosts.uciHistoryVersion(id!, Number(version));
+      if (detail === undefined) throw new ApiError(404, 'version-not-found');
+      return { body: { version: detail } };
     },
   },
   {
