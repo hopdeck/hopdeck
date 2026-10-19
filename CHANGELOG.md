@@ -9,6 +9,18 @@
   file on the router for more; traffic rules match a set, or packets not in
   it. Renaming a set renames it in the rules that use it, and a set in use
   is not removed.
+- nftables files on OpenWrt: nftables of your own that fw4 includes where
+  you say (before or after its table, inside it, or in one of its chains,
+  before or after its rules), pointed to by an include section, so LuCI and a
+  rollback see them. hopdeck writes each version as a file of its own in
+  /etc/hopdeck/fw4, so a rollback brings back the one before, and removes
+  the versions nothing points to once a change is kept. Other includes, and
+  the files fw4 includes by themselves, are shown.
+
+### Changed
+
+- The tabs of a host wrap onto a second row when they do not fit, each group
+  together, instead of scrolling out of sight.
 
 ## 0.4.0 (2026-10-18)
 

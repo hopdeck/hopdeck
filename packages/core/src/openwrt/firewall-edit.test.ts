@@ -6,6 +6,11 @@ import firewallJson from '../../test/fixtures/openwrt/firewall-25.12.json' with 
 import { openwrtFirewall } from './firewall.ts';
 import {
   deleteIpSetChanges,
+  includeChanges,
+  includeForm,
+  includePath,
+  includeProblems,
+  includeVersion,
   deleteZoneChanges,
   ipSetChanges,
   ipSetForm,
@@ -214,5 +219,60 @@ describe('IP sets', () => {
     expect(trafficRuleForm(sets.rules[1]).ipset).toBe('!blocked src');
     expect(trafficRuleProblems({ ...trafficRuleForm(undefined), ipset: '!nope' }, ['blocked'])).toEqual([{ field: 'ipset', code: 'set-unknown', value: 'nope' }]);
     expect(trafficRuleChanges(undefined, { ...trafficRuleForm(undefined), name: 'x', ipset: 'blocked' }, 'new-2')[0]).toMatchObject({ values: { ipset: 'blocked' } });
+  });
+});
+
+describe('nftables includes', () => {
+  const withInclude = parseUciGet(
+    'firewall',
+    JSON.stringify({
+      values: {
+        hopdeck_ssh: { '.anonymous': false, '.type': 'include', '.name': 'hopdeck_ssh', '.index': 0, type: 'nftables', path: '/etc/hopdeck/fw4/ssh.3.nft', position: 'chain-pre', chain: 'input_wan' },
+        old: { '.anonymous': true, '.type': 'include', '.name': 'cfg02', '.index': 1, path: '/etc/firewall.user' },
+      },
+    }),
+  );
+  const firewall = openwrtFirewall(withInclude);
+  const [ssh, user] = firewall.includes;
+
+  it('knows its own includes from others', () => {
+    expect(ssh).toMatchObject({ type: 'nftables', position: 'chain-pre', chain: 'input_wan', managed: true });
+    expect(user).toMatchObject({ type: 'script', managed: false });
+    expect(includeVersion(ssh!.path)).toBe(3);
+    expect(includeVersion('/etc/firewall.user')).toBeUndefined();
+  });
+
+  it('adds a named section and the first file', () => {
+    const form = { ...includeForm(undefined, 'tcp dport 22 accept\n'), name: 'web' };
+    expect(includeProblems(firewall, undefined, form)).toEqual([]);
+    expect(includeChanges(undefined, form, { committedPath: undefined, contentChanged: true })).toEqual({
+      changes: [{ kind: 'add', type: 'include', name: 'hopdeck_web', values: { type: 'nftables', path: includePath('web', 1), position: 'chain-pre', chain: 'input' } }],
+      file: { path: '/etc/hopdeck/fw4/web.1.nft', content: 'tcp dport 22 accept\n' },
+    });
+  });
+
+  it('writes new content to the next version, however often it is edited before review', () => {
+    const form = { ...includeForm(ssh, 'old'), content: 'tcp dport 2222 accept\n' };
+    const first = includeChanges(ssh, form, { committedPath: ssh!.path, contentChanged: true });
+    expect(first).toEqual({
+      changes: [{ kind: 'set', section: 'hopdeck_ssh', values: { path: '/etc/hopdeck/fw4/ssh.4.nft' } }],
+      file: { path: '/etc/hopdeck/fw4/ssh.4.nft', content: 'tcp dport 2222 accept\n' },
+    });
+    const pending = { ...ssh!, path: '/etc/hopdeck/fw4/ssh.4.nft', section: { ...ssh!.section, options: { ...ssh!.section.options, path: '/etc/hopdeck/fw4/ssh.4.nft' } } };
+    expect(includeChanges(pending, { ...form, content: 'again' }, { committedPath: ssh!.path, contentChanged: true }).file).toEqual({ path: '/etc/hopdeck/fw4/ssh.4.nft', content: 'again\n' });
+    // Moved without new content, it keeps its file.
+    expect(includeChanges(ssh, { ...form, position: 'chain-post' }, { committedPath: ssh!.path, contentChanged: false })).toEqual({
+      changes: [{ kind: 'set', section: 'hopdeck_ssh', values: { position: 'chain-post' } }],
+    });
+  });
+
+  it('ends the file with a line break, as fw4 puts it in as it is', () => {
+    expect(includeChanges(undefined, { ...includeForm(undefined, 'tcp dport 22 accept'), name: 'x' }, { committedPath: undefined, contentChanged: true }).file?.content).toBe('tcp dport 22 accept\n');
+  });
+
+  it('wants a free name, a chain for a chain, and content', () => {
+    const form = includeForm(undefined, '');
+    expect(includeProblems(firewall, undefined, { ...form, name: 'ssh', chain: '' }).map((problem) => problem.code)).toEqual(['include-taken', 'required', 'content']);
+    expect(includeProblems(firewall, undefined, { ...form, name: 'Bad-Name', content: 'x' })).toEqual([{ field: 'name', code: 'include-name', value: 'Bad-Name' }]);
   });
 });

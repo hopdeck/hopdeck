@@ -17,11 +17,15 @@ export interface UciFirewallState {
   error: ErrorInfo | undefined;
   /** Changes collected in the panel, not on the router yet. */
   pending: UciChange[];
+  /** Content of the include files the pending changes point to, by path. */
+  files: Record<string, string>;
   /** The configuration with them, and its firewall, as the tabs show it. */
   preview: UciConfig | undefined;
   firewall: OpenWrtFirewall | undefined;
   /** Adds edits to the pending changes; each merges with what is pending for the same section. */
-  change(changes: readonly UciChange[]): void;
+  change(changes: readonly UciChange[], file?: { path: string; content: string }): void;
+  /** The include files to send with the pending changes: those the configuration with them points to. */
+  filesToSend(): { path: string; content: string }[];
   /** A ref for a section the panel adds. */
   ref(): string;
   discard(): void;
@@ -37,6 +41,7 @@ export function useUciFirewall(hostId: string, active: boolean): UciFirewallStat
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ErrorInfo>();
   const [pending, setPending] = useState<UciChange[]>([]);
+  const [files, setFiles] = useState<Record<string, string>>({});
   const [reads, setReads] = useState(0);
   // Pending changes the next reading makes obsolete, as it has them already: dropped when it arrives, not before.
   const dropOnRead = useRef(false);
@@ -59,6 +64,7 @@ export function useUciFirewall(hostId: string, active: boolean): UciFirewallStat
         if (dropOnRead.current) {
           dropOnRead.current = false;
           setPending([]);
+          setFiles({});
         }
         setNetwork(networks?.config);
         setLoading(false);
@@ -77,20 +83,30 @@ export function useUciFirewall(hostId: string, active: boolean): UciFirewallStat
   const preview = useMemo(() => (base === undefined ? undefined : previewUci(base, pending)), [base, pending]);
   const firewall = useMemo(() => (preview === undefined ? undefined : openwrtFirewall(preview)), [preview]);
   const change = useCallback(
-    (changes: readonly UciChange[]) => {
+    (changes: readonly UciChange[], file?: { path: string; content: string }) => {
       if (base === undefined) return;
       setPending((current) => changes.reduce((list, next) => addUciChange(base, list, next), current));
+      if (file !== undefined) setFiles((current) => ({ ...current, [file.path]: file.content }));
     },
     [base],
   );
+  const filesToSend = useCallback(() => {
+    const used = new Set(firewall?.includes.map((include) => include.path) ?? []);
+    return Object.entries(files)
+      .filter(([path]) => used.has(path))
+      .map(([path, content]) => ({ path, content }));
+  }, [files, firewall]);
   const ref = useCallback(() => nextRef(pending), [pending]);
-  const discard = useCallback(() => setPending([]), []);
+  const discard = useCallback(() => {
+    setPending([]);
+    setFiles({});
+  }, []);
   const reload = useCallback((options: { discard?: boolean } = {}) => {
     if (options.discard === true) dropOnRead.current = true;
     setReads((count) => count + 1);
   }, []);
 
-  return { base, hash, network, loading, error, pending, preview, firewall, change, ref, discard, reload };
+  return { base, hash, network, loading, error, pending, files, preview, firewall, change, filesToSend, ref, discard, reload };
 }
 
 /** Sections a pending change touches, by name, or by ref for added ones: the tabs mark their rows. */

@@ -1,7 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import { parseUciChanges, parseUciGet, sectionLabel, uciCall, type UciChange, type UciConfig, type UciPlanView } from '@hopdeck/core';
+import {
+  includeVersion,
+  INCLUDE_DIRECTORY,
+  openwrtFirewall,
+  parseUciChanges,
+  parseUciGet,
+  sectionLabel,
+  uciCall,
+  type UciChange,
+  type UciConfig,
+  type UciPlanView,
+} from '@hopdeck/core';
 import { randomUUID } from 'node:crypto';
 import type { DeployLogEntry, DeployTarget } from '../firewall/deploy.ts';
 import { HostError } from '../hosts/errors.ts';
@@ -27,7 +38,18 @@ interface Plan {
   /** /etc/config/<config> when the plan was made, and when it was applied: a change elsewhere in between stops it, and the first tells a rollback. */
   hashBefore: string;
   createdAt: number;
+  /** Include files this plan wrote, which no kept configuration points to unless it is kept. */
+  written: string[];
 }
+
+/** An nftables file for fw4 that a plan writes, at a path of includePath()'s. */
+export interface IncludeFile {
+  path: string;
+  content: string;
+}
+
+/** The most an include file may hold. */
+export const MAX_INCLUDE_BYTES = 1024 * 1024;
 
 /**
  * Changes of OpenWrt's UCI configuration, as LuCI makes them: staged in a
@@ -67,7 +89,12 @@ export class UciPlans {
    * their place in the file, so after a change elsewhere the same name may
    * mean another section, and the plan is refused.
    */
-  async prepare(target: DeployTarget, config: string, changes: readonly UciChange[], options: { base?: string } = {}): Promise<UciPlanView> {
+  async prepare(
+    target: DeployTarget,
+    config: string,
+    changes: readonly UciChange[],
+    options: { base?: string; files?: readonly IncludeFile[] } = {},
+  ): Promise<UciPlanView> {
     if (target.platform.id !== 'openwrt') throw new HostError('platform-read-only', 'UCI is OpenWrt’s configuration; this host is not OpenWrt');
     if (!/^[a-z0-9_-]+$/.test(config)) throw new HostError('invalid-definition', `not a UCI configuration: ${config}`);
     if (changes.length === 0) throw new HostError('invalid-definition', 'no changes');
@@ -76,7 +103,40 @@ export class UciPlans {
     if (options.base !== undefined && options.base !== hashBefore) {
       throw new HostError('ruleset-changed', `/etc/config/${config} changed since the panel read it, in LuCI or elsewhere; read it again and make the changes on what is there now`);
     }
-    const session = await openSession(target, config);
+    const files = options.files ?? [];
+    if (files.length > 0 && config !== 'firewall') throw new HostError('invalid-definition', 'only the firewall has include files');
+    for (const file of files) {
+      if (includeVersion(file.path) === undefined) throw new HostError('invalid-definition', `not a path of hopdeck's for an include: ${file.path}`);
+      if (Buffer.byteLength(file.content) > MAX_INCLUDE_BYTES || file.content.includes('\0')) throw new HostError('invalid-definition', `${file.path} is too large, or not text`);
+    }
+    // The files go first: the changes point to them, and fw4 reads them when the changes are applied.
+    let written: string[];
+    try {
+      written = await writeIncludes(target, files);
+    } catch (error) {
+      if (error instanceof HostError && error.code === 'invalid-definition') {
+        return this.#keep(
+          {
+            id: randomUUID(),
+            hostId: target.hostId,
+            config,
+            state: 'invalid',
+            staged: [],
+            validation: { ok: false, message: error.detail },
+            pendingElsewhere: { cli: false, sessions: 0 },
+            safety: { seconds: this.#seconds, freshConnectionCheck: target.freshExecutor !== undefined },
+          },
+          '',
+          hashBefore,
+          [],
+        );
+      }
+      throw error;
+    }
+    const session = await openSession(target, config).catch(async (error: unknown) => {
+      await removeFiles(target, written).catch(() => undefined);
+      throw error;
+    });
     const view: UciPlanView = {
       id: randomUUID(),
       hostId: target.hostId,
@@ -109,9 +169,10 @@ export class UciPlans {
         );
         if (refused !== undefined) {
           await closeSession(target, session, config).catch(() => undefined);
+          await removeFiles(target, written).catch(() => undefined);
           view.state = 'invalid';
           view.validation = { ok: false, message: refused };
-          return this.#keep(view, session, hashBefore);
+          return this.#keep(view, session, hashBefore, []);
         }
       }
       const staged = parseUciChanges(JSON.stringify((await ubus(target, 'uci', 'changes', { config, ubus_rpc_session: session })) ?? {}));
@@ -122,9 +183,10 @@ export class UciPlans {
       view.pendingElsewhere = await pendingElsewhere(target, config, session);
     } catch (error) {
       await closeSession(target, session, config).catch(() => undefined);
+      await removeFiles(target, written).catch(() => undefined);
       throw error;
     }
-    return this.#keep(view, session, hashBefore);
+    return this.#keep(view, session, hashBefore, written);
   }
 
   /**
@@ -191,23 +253,25 @@ export class UciPlans {
     );
     if (confirmed !== undefined) {
       // rpcd no longer holds the rollback: it ran out, so the configuration is back as it was.
-      if ((await configHash(target, view.config)) === plan.hashBefore) return this.#rolledBack(view, target, session, 'timeout', confirmed);
+      if ((await configHash(target, view.config)) === plan.hashBefore) return this.#rolledBack(plan, target, 'timeout', confirmed);
       throw new HostError('uci-failed', `rpcd did not take the confirmation: ${confirmed}`);
     }
     view.state = 'confirmed';
     delete view.deadline;
     await closeSession(target, session, view.config).catch(() => undefined);
     await this.#record(view, 'confirmed');
+    // Versions of includes that nothing points to any more go, now that the change is kept.
+    if (view.config === 'firewall') await removeUnusedIncludes(target).catch(() => undefined);
     return view;
   }
 
   /** Restores the configuration now, before the deadline. */
   rollback(id: string, target: DeployTarget): Promise<UciPlanView> {
     return this.#during(target.hostId, async () => {
-      const { view, session } = this.#require(id, 'awaiting-confirmation');
-      await ubus(target, 'uci', 'rollback', { ubus_rpc_session: session });
+      const plan = this.#require(id, 'awaiting-confirmation');
+      await ubus(target, 'uci', 'rollback', { ubus_rpc_session: plan.session });
       await runAsRoot(target.access, [FW4, 'reload']).catch(() => undefined);
-      return this.#rolledBack(view, target, session, 'user', '');
+      return this.#rolledBack(plan, target, 'user', '');
     });
   }
 
@@ -217,20 +281,21 @@ export class UciPlans {
     if (plan === undefined) throw new HostError('deployment-state', 'no such plan');
     const { view } = plan;
     if (view.state !== 'awaiting-confirmation' || Date.now() < Date.parse(view.deadline!) + RACE_MARGIN_MS) return view;
-    if ((await configHash(target, view.config)) === plan.hashBefore) return this.#rolledBack(view, target, plan.session, 'timeout', 'not confirmed in time');
+    if ((await configHash(target, view.config)) === plan.hashBefore) return this.#rolledBack(plan, target, 'timeout', 'not confirmed in time');
     return view;
   }
 
   /** Drops a plan that was never applied, with its session and the changes staged there. */
   async discard(id: string, target: DeployTarget): Promise<void> {
-    const { view, session } = this.#require(id, 'planned', 'invalid');
+    const { view, session, written } = this.#require(id, 'planned', 'invalid');
     this.#plans.delete(id);
     // An invalid plan's session went when rpcd refused.
     if (view.state === 'planned') await closeSession(target, session, view.config);
+    await removeFiles(target, written);
   }
 
-  #keep(view: UciPlanView, session: string, hashBefore: string): UciPlanView {
-    this.#plans.set(view.id, { view, session, hashBefore, createdAt: Date.now() });
+  #keep(view: UciPlanView, session: string, hashBefore: string, written: string[]): UciPlanView {
+    this.#plans.set(view.id, { view, session, hashBefore, createdAt: Date.now(), written });
     return view;
   }
 
@@ -245,15 +310,19 @@ export class UciPlans {
     view.state = 'rolled-back';
     delete view.deadline;
     await closeSession(target, session, view.config).catch(() => undefined);
+    await removeFiles(target, this.#plans.get(view.id)?.written ?? []).catch(() => undefined);
     await this.#record(view, 'rolled-back', `${outcome.reason}: ${outcome.detail}`);
     return view;
   }
 
-  async #rolledBack(view: UciPlanView, target: DeployTarget, session: string, reason: 'timeout' | 'user', detail: string): Promise<UciPlanView> {
+  async #rolledBack(plan: Plan, target: DeployTarget, reason: 'timeout' | 'user', detail: string): Promise<UciPlanView> {
+    const { view, session } = plan;
     view.state = 'rolled-back';
     view.outcome = { reason, detail };
     delete view.deadline;
     await closeSession(target, session, view.config).catch(() => undefined);
+    // The configuration back as it was points to none of the files this plan wrote.
+    await removeFiles(target, plan.written).catch(() => undefined);
     await this.#record(view, 'rolled-back', reason === 'timeout' ? `not confirmed in time. ${detail}`.trim() : 'by the user');
     return view;
   }
@@ -348,6 +417,65 @@ async function pendingElsewhere(target: DeployTarget, config: string, session: s
   const result = await runAsRoot(target.access, ['sh', '-c', script, 'sh', config, session]);
   const [cli, sessions] = result.stdout.trim().split(/\s+/).map(Number);
   return { cli: (cli ?? 0) > 0, sessions: sessions ?? 0 };
+}
+
+/**
+ * Writes the include files, each through a temporary file renamed into place.
+ * A file that is there already with the same content stays as it is; with
+ * other content, it is written over only when no include of the kept
+ * configuration points to it (one a rolled-back plan left). Returns the
+ * files written, for them to go again if the plan does not get kept.
+ */
+async function writeIncludes(target: DeployTarget, files: readonly IncludeFile[]): Promise<string[]> {
+  if (files.length === 0) return [];
+  const used = new Set(openwrtFirewall(await readConfig(target, 'firewall', undefined)).includes.map((include) => include.path));
+  const written: string[] = [];
+  for (const file of files) {
+    const there = await runAsRoot(target.access, ['cat', file.path]);
+    if (there.exitCode === 0 && there.stdout === file.content) continue;
+    if (there.exitCode === 0 && used.has(file.path)) {
+      throw new HostError('invalid-definition', `${file.path} is in use with other content; read the configuration again`);
+    }
+    const write = await runAsRoot(target.access, ['sh', '-c', 'umask 077 && mkdir -p "$(dirname "$1")" && cat > "$1.hopdeck-new" && mv -f "$1.hopdeck-new" "$1"', 'sh', file.path], {
+      stdin: file.content,
+    });
+    if (write.exitCode !== 0) throw new HostError('command-failed', `writing ${file.path}: ${write.stderr.trim()}`);
+    written.push(file.path);
+  }
+  return written;
+}
+
+async function removeFiles(target: DeployTarget, paths: readonly string[]): Promise<void> {
+  if (paths.length === 0) return;
+  await runAsRoot(target.access, ['rm', '-f', '--', ...paths]);
+}
+
+/** Removes the files in hopdeck's include directory that no include of the kept configuration points to. */
+async function removeUnusedIncludes(target: DeployTarget): Promise<void> {
+  const used = openwrtFirewall(await readConfig(target, 'firewall', undefined)).includes.flatMap((include) => (include.path === undefined ? [] : [include.path]));
+  const script = `for f in ${INCLUDE_DIRECTORY}/*.nft; do [ -f "$f" ] || continue; keep=0; for k in "$@"; do [ "$f" = "$k" ] && keep=1; done; [ "$keep" = 1 ] || rm -f -- "$f"; done`;
+  await runAsRoot(target.access, ['sh', '-c', script, 'sh', ...used]);
+}
+
+/**
+ * The content of a file fw4 includes, for the panel to show: one an include
+ * of the kept configuration points to, or one fw4 includes by itself
+ * (/etc/nftables.d, /usr/share/nftables.d); no other file.
+ */
+export async function readInclude(target: DeployTarget, path: string): Promise<string> {
+  const used = openwrtFirewall(await readConfig(target, 'firewall', undefined)).includes.some((include) => include.path === path);
+  const automatic = (await automaticIncludes(target)).includes(path);
+  if (!used && !automatic) throw new HostError('invalid-definition', `fw4 includes no file ${path}`);
+  const read = await runAsRoot(target.access, ['head', '-c', String(MAX_INCLUDE_BYTES), path]);
+  if (read.exitCode !== 0) throw new HostError('command-failed', `reading ${path}: ${read.stderr.trim()}`);
+  return read.stdout;
+}
+
+/** The files fw4 includes without a UCI section: *.nft in /etc/nftables.d, and by position in /usr/share/nftables.d. */
+export async function automaticIncludes(target: Pick<DeployTarget, 'access'>): Promise<string[]> {
+  const script = 'for f in /etc/nftables.d/*.nft /usr/share/nftables.d/*/*.nft /usr/share/nftables.d/*/*/*.nft; do [ -f "$f" ] && echo "$f"; done; true';
+  const result = await runAsRoot(target.access, ['sh', '-c', script]);
+  return result.stdout.split('\n').filter((line) => line !== '');
 }
 
 /** The table fw4 made, as nft lists it without counter values, which a reload sets to zero; empty when there is none. */

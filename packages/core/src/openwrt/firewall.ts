@@ -16,8 +16,36 @@ export interface OpenWrtFirewall {
   rules: FirewallRule[];
   redirects: FirewallRedirect[];
   ipsets: FirewallIpSet[];
-  /** Sections of other types (include, nat, ...), shown as they are. */
+  includes: FirewallInclude[];
+  /** Sections of other types (nat, ...), shown as they are. */
   other: UciSection[];
+}
+
+/** Where fw4 puts an nftables include: before or after everything, inside its table, or inside one of its chains. */
+export const INCLUDE_POSITIONS = ['ruleset-pre', 'ruleset-post', 'table-pre', 'table-post', 'chain-pre', 'chain-post'] as const;
+
+/** Where hopdeck keeps the nftables files it writes for fw4, one per version: name.version.nft. */
+export const INCLUDE_DIRECTORY = '/etc/hopdeck/fw4';
+/** UCI names the include sections hopdeck writes hopdeck_NAME. */
+export const INCLUDE_SECTION_PREFIX = 'hopdeck_';
+
+/**
+ * A file fw4 includes when it builds its ruleset: nftables at a position
+ * (`type nftables`), or a shell script of fw3's days. hopdeck manages those
+ * in its own directory under a section of its own; others it shows.
+ */
+export interface FirewallInclude {
+  section: UciSection;
+  /** nftables, or script (fw3's, which fw4 ignores). */
+  type: string;
+  path: string | undefined;
+  /** One of INCLUDE_POSITIONS; fw4 takes table-append when none is given. */
+  position: string | undefined;
+  /** The chain, for chain-pre and chain-post. */
+  chain: string | undefined;
+  enabled: boolean;
+  /** hopdeck wrote it: a section hopdeck_NAME pointing into INCLUDE_DIRECTORY. */
+  managed: boolean;
 }
 
 /** ACCEPT, REJECT or DROP. */
@@ -121,7 +149,7 @@ export interface FirewallIpSet {
 
 /** The firewall's sections, typed; sections fw4 would ignore keep their place in `other`. */
 export function openwrtFirewall(config: UciConfig): OpenWrtFirewall {
-  const firewall: OpenWrtFirewall = { defaults: undefined, zones: [], forwardings: [], rules: [], redirects: [], ipsets: [], other: [] };
+  const firewall: OpenWrtFirewall = { defaults: undefined, zones: [], forwardings: [], rules: [], redirects: [], ipsets: [], includes: [], other: [] };
   for (const section of config.sections) {
     const option = (name: string): string | undefined => {
       const value: UciValue | undefined = section.options[name];
@@ -184,6 +212,19 @@ export function openwrtFirewall(config: UciConfig): OpenWrtFirewall {
           enabled,
         });
         break;
+      case 'include': {
+        const path = option('path');
+        firewall.includes.push({
+          section,
+          type: option('type') ?? 'script',
+          path,
+          position: option('position'),
+          chain: option('chain'),
+          enabled,
+          managed: section.name.startsWith(INCLUDE_SECTION_PREFIX) && path !== undefined && path.startsWith(`${INCLUDE_DIRECTORY}/`),
+        });
+        break;
+      }
       case 'redirect':
         firewall.redirects.push({
           section,

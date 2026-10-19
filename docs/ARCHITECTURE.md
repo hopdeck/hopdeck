@@ -753,8 +753,8 @@ What hopdeck changes there is UCI's own, and LuCI shows it.
 - **Scope:** zones and the forwardings between them, traffic rules
   (`rule`), port forwards (`redirect`; hairpin is its `reflection`,
   masquerade a setting of the zone) and IP sets (`ipset`, which fw4 declares
-  as named sets; a rule's `ipset` matches one, "!name" its complement).
-  nftables includes next.
+  as named sets; a rule's `ipset` matches one, "!name" its complement), and
+  nftables includes, below.
   The nft view of `inet fw4` stays read-only; fw4 names each rule it makes
   after its UCI rule (`comment "!fw4: Allow-Ping"`), which links them.
 - **Through rpcd, as LuCI does** ([`openwrt/uci-plans.ts`](../packages/server/src/openwrt/uci-plans.ts)).
@@ -799,10 +799,20 @@ What hopdeck changes there is UCI's own, and LuCI shows it.
   `@rule[3]` without a name), so the Traffic rules and Port forwards tabs show
   the sum of what fw4's rules of a section counted (port forwards in the
   dstnat chains).
-- **Full nftables power there** will come from fw4's includes: files
-  hopdeck writes, one per version, that `config include` sections of type
-  `nftables` point to. A rollback restores the pointer, so the file's
-  content goes back with the rest of UCI, and LuCI shows the include.
+- **Full nftables power there** comes from fw4's includes (the nftables
+  files tab): files hopdeck writes in `/etc/hopdeck/fw4`, `NAME.VERSION.nft`,
+  that a named section `hopdeck_NAME` (`config include`, type `nftables`,
+  with a position and, in a chain, its chain) points to. New content is the
+  next version's file and a new path, so a rollback restores the pointer and
+  the content goes back with the rest of UCI. The plan writes the files
+  before it stages the changes and takes them away again if it is not kept
+  (discarded, refused, rolled back); a kept change removes the versions no
+  include points to. A file in use is never written over with other
+  content. fw4 puts a file in as it is, so hopdeck ends it with a line break.
+  fw4 warns of options it does not know, so the section has none of
+  hopdeck's own. Includes of others, and the files fw4 includes without a
+  section (`/etc/nftables.d`, `/usr/share/nftables.d`), are shown, read
+  through an API that reads no other file.
 - Tested on OpenWrt 24.10 and 25.12 VMs and the OpenWrt container: staging,
   keeping, rpcd's rollback after the deadline, rolling back at once, a rule
   that blocks new SSH connections (VMs only: a container's SSH bypasses

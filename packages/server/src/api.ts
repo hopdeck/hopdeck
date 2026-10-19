@@ -259,12 +259,30 @@ const ROUTES: Route[] = [
     pattern: /^\/api\/hosts\/([^/]+)\/uci\/([a-z0-9_-]+)\/plans$/,
     async handle(req, [id, config], ctx) {
       if (!UCI_WRITABLE.includes(config!)) throw new ApiError(400, 'invalid-body', `hopdeck changes only these UCI configurations: ${UCI_WRITABLE.join(', ')}`);
-      const body = asObject(await readJson(req, 1024 * 1024));
+      // Include files may come along, a MiB each at most.
+      const body = asObject(await readJson(req, 16 * 1024 * 1024));
       if (!Array.isArray(body['changes']) || body['changes'].length > 2000) throw new ApiError(400, 'invalid-body', 'changes must be a list of at most 2000');
       const changes = body['changes'].map(toUciChange);
       const base = body['base'];
       if (base !== undefined && (typeof base !== 'string' || !/^[0-9a-f]{64}$/.test(base))) throw new ApiError(400, 'invalid-body', 'base must be the hash the configuration was read with');
-      return { status: 201, body: { plan: found(await ctx.hosts.prepareUci(id!, config!, changes, base)) } };
+      const files = body['files'] === undefined ? [] : includeFiles(body['files']);
+      return { status: 201, body: { plan: found(await ctx.hosts.prepareUci(id!, config!, changes, base, files)) } };
+    },
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/uci\/firewall\/include$/,
+    async handle(req, [id], ctx) {
+      const path = new URL(req.url ?? '', 'http://localhost').searchParams.get('path') ?? '';
+      if (!/^\/[\w./-]{1,255}$/.test(path) || path.includes('..')) throw new ApiError(400, 'invalid-body', 'path must be an absolute path');
+      return { body: { path, content: found(await ctx.hosts.uciInclude(id!, path)) } };
+    },
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/uci\/firewall\/automatic-includes$/,
+    async handle(_req, [id], ctx) {
+      return { body: { paths: found(await ctx.hosts.uciAutomaticIncludes(id!)) } };
     },
   },
   {
@@ -522,6 +540,19 @@ function toUciChange(value: unknown): UciChange {
     default:
       throw new ApiError(400, 'invalid-body', 'kind must be add, set, unset, delete or order');
   }
+}
+
+/** Include files a plan writes: at a path of hopdeck's, text of at most a MiB each. */
+function includeFiles(value: unknown): { path: string; content: string }[] {
+  if (!Array.isArray(value) || value.length > 50) throw new ApiError(400, 'invalid-body', 'files must be a list of at most 50');
+  return value.map((item) => {
+    const file = asObject(item);
+    const path = file['path'];
+    const content = file['content'];
+    if (typeof path !== 'string' || !/^\/etc\/hopdeck\/fw4\/[a-z0-9_]{1,32}\.\d{1,6}\.nft$/.test(path)) throw new ApiError(400, 'invalid-body', 'a file must be at /etc/hopdeck/fw4/NAME.VERSION.nft');
+    if (typeof content !== 'string' || content.length > 1024 * 1024 || content.includes('\0')) throw new ApiError(400, 'invalid-body', 'a file must be text of at most a MiB');
+    return { path, content };
+  });
 }
 
 function uciValues(value: unknown): Record<string, UciValue> {

@@ -120,6 +120,9 @@ describe('openwrtFirewall', () => {
     expect(ipsets.map(({ section: _, ...set }) => set)).toEqual([
       { name: 'blocked', family: 'ipv4', match: ['src_net'], entries: ['192.0.2.0/24', '198.51.100.7'], loadfile: undefined, comment: undefined, enabled: true },
     ]);
-    expect(other.map((section) => section.type)).toEqual(['include']);
+    expect(other).toEqual([]);
+    expect(openwrtFirewall(config).includes.map(({ section: _, ...include }) => include)).toEqual([
+      { type: 'script', path: '/etc/x.nft', position: undefined, chain: undefined, enabled: true, managed: false },
+    ]);
   });
 });

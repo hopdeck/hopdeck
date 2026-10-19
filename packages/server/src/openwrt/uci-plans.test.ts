@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { DeployTarget } from '../firewall/deploy.ts';
 import { HostError } from '../hosts/errors.ts';
 import { hostTarget, testHost } from '../testing/test-host.ts';
-import { configHash, readConfig, ubus, UciPlans } from './uci-plans.ts';
+import { automaticIncludes, configHash, readConfig, readInclude, ubus, UciPlans } from './uci-plans.ts';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -34,6 +34,7 @@ describe.skipIf(testHost?.platform !== 'openwrt')('UCI plans on the OpenWrt test
   /** Removes what a failed run left: test rules, through UCI as everything else, and sessions with test changes staged. */
   const removeTestRules = () =>
     sh(`for s in $(uci show firewall | sed -n "s/^firewall\\.\\([^.]*\\)\\.name='hd-test-.*/\\1/p"); do uci delete firewall.$s; done; uci commit firewall; /sbin/fw4 reload >/dev/null 2>&1
+      for s in $(uci show firewall | sed -n "s/^firewall\\.\\(hopdeck_hd[a-z0-9_]*\\)=include$/\\1/p"); do uci delete firewall.$s; done; uci commit firewall; rm -f /etc/hopdeck/fw4/hd*.nft; /sbin/fw4 reload >/dev/null 2>&1
       for d in /var/run/rpcd/uci-*; do grep -q hd-test "$d"/firewall 2>/dev/null && ubus call session destroy "{\\"ubus_rpc_session\\":\\"\${d##*/uci-}\\"}"; done; true`);
 
   beforeAll(async () => {
@@ -156,6 +157,65 @@ describe.skipIf(testHost?.platform !== 'openwrt')('UCI plans on the OpenWrt test
     const plan = await prepare(target, 'firewall', [rule('hd-test-old')], { base: hash });
     expect(plan.state).toBe('planned');
     await plans.discard(plan.id, target);
+  });
+
+  it('writes an include file with the plan, which fw4 includes, and keeps only the versions in use', async () => {
+    const file = (version: number) => `/etc/hopdeck/fw4/hdinc.${version}.nft`;
+    const rule = (port: number) => `tcp dport ${port} counter accept comment "hd-include ${port}"\n`;
+    const added = await prepare(target, 'firewall', [{ kind: 'add', type: 'include', name: 'hopdeck_hdinc', values: { type: 'nftables', path: file(1), position: 'chain-pre', chain: 'input_wan' } }], {
+      files: [{ path: file(1), content: rule(2266) }],
+    });
+    expect(added.state).toBe('planned');
+    await plans.apply(added.id, target);
+    await plans.confirm(added.id, target);
+    expect(await sh('nft list chain inet fw4 input_wan')).toContain('hd-include 2266');
+    expect(await readInclude(target, file(1))).toBe(rule(2266));
+
+    const changed = await prepare(target, 'firewall', [{ kind: 'set', section: 'hopdeck_hdinc', values: { path: file(2) } }], { files: [{ path: file(2), content: rule(2267) }] });
+    await plans.apply(changed.id, target);
+    await plans.confirm(changed.id, target);
+    expect(await sh('nft list chain inet fw4 input_wan')).toContain('hd-include 2267');
+    // The first version went once the second was kept.
+    expect(await sh('ls /etc/hopdeck/fw4/')).toBe('hdinc.2.nft');
+    await expect(readInclude(target, file(1))).rejects.toMatchObject({ code: 'invalid-definition' });
+    await expect(readInclude(target, '/etc/shadow')).rejects.toMatchObject({ code: 'invalid-definition' });
+    expect(await automaticIncludes(target)).toContain('/etc/nftables.d/10-custom-filter-chains.nft');
+
+    const removed = await prepare(target, 'firewall', [{ kind: 'delete', section: 'hopdeck_hdinc' }]);
+    await plans.apply(removed.id, target);
+    await plans.confirm(removed.id, target);
+    expect(await sh('ls /etc/hopdeck/fw4/ | wc -l')).toBe('0');
+  });
+
+  it('takes away the files of a plan that is not kept, and of content nft refuses', async () => {
+    const path = '/etc/hopdeck/fw4/hdgone.1.nft';
+    const add: UciChange = { kind: 'add', type: 'include', name: 'hopdeck_hdgone', values: { type: 'nftables', path, position: 'table-post' } };
+    const dropped = await prepare(target, 'firewall', [add], { files: [{ path, content: 'set hdgone { type ipv4_addr; }\n' }] });
+    expect(await sh(`test -f ${path} && echo there`)).toBe('there');
+    await plans.discard(dropped.id, target);
+    expect(await sh(`test -f ${path} && echo there || echo gone`)).toBe('gone');
+
+    const undone = await prepare(target, 'firewall', [add], { files: [{ path, content: 'set hdgone { type ipv4_addr; }\n' }] });
+    await plans.apply(undone.id, target);
+    expect(await sh('nft list sets inet fw4')).toContain('hdgone');
+    await plans.rollback(undone.id, target);
+    expect(await sh(`test -f ${path} && echo there || echo gone`)).toBe('gone');
+
+    const refused = await prepare(target, 'firewall', [add], { files: [{ path, content: 'this is not nftables\n' }] });
+    expect(await plans.apply(refused.id, target)).toMatchObject({ state: 'rolled-back', outcome: { reason: 'reload-failed' } });
+    expect(await sh(`test -f ${path} && echo there || echo gone`)).toBe('gone');
+  });
+
+  it('does not write over an include file in use with other content', async () => {
+    const path = '/etc/hopdeck/fw4/hdused.1.nft';
+    const kept = await prepare(target, 'firewall', [{ kind: 'add', type: 'include', name: 'hopdeck_hdused', values: { type: 'nftables', path, position: 'table-post' } }], {
+      files: [{ path, content: 'set hdused { type ipv4_addr; }\n' }],
+    });
+    await plans.apply(kept.id, target);
+    await plans.confirm(kept.id, target);
+    const other = await prepare(target, 'firewall', [{ kind: 'set', section: 'hopdeck_hdused', values: { position: 'table-pre' } }], { files: [{ path, content: 'something else\n' }] });
+    expect(other).toMatchObject({ state: 'invalid', validation: { message: expect.stringContaining('in use with other content') } });
+    expect(await sh(`cat ${path}`)).toBe('set hdused { type ipv4_addr; }');
   });
 
   it('says what rpcd refused, and stages nothing', async () => {

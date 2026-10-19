@@ -26,6 +26,8 @@ interface UciPlanDialogProps {
   changes: UciChange[] | undefined;
   /** The hash of the configuration the changes were made on. */
   base: string | undefined;
+  /** Include files the changes point to, written on the router with them. */
+  files?: { path: string; content: string }[];
   onClose(result: UciPlanResult): void;
 }
 
@@ -34,7 +36,7 @@ interface UciPlanDialogProps {
  * firewall's UCI configuration, as LuCI's "Save & Apply" does, with what
  * rpcd will write listed by section, and what fw4 made of it.
  */
-export function UciPlanDialog({ hostId, hostName, changes, base, onClose }: UciPlanDialogProps) {
+export function UciPlanDialog({ hostId, hostName, changes, base, files = [], onClose }: UciPlanDialogProps) {
   const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
   const [view, setView] = useState<UciPlanView>();
@@ -65,7 +67,7 @@ export function UciPlanDialog({ hostId, hostName, changes, base, onClose }: UciP
       setView(undefined);
       setError(undefined);
       element.showModal();
-      void run(() => api.post(`/hosts/${encodeURIComponent(hostId)}/uci/firewall/plans`, { changes, ...(base !== undefined && { base }) }));
+      void run(() => api.post(`/hosts/${encodeURIComponent(hostId)}/uci/firewall/plans`, { changes, ...(base !== undefined && { base }), ...(files.length > 0 && { files }) }));
     } else if (!open && element.open) {
       element.close();
     }
@@ -167,7 +169,8 @@ export function UciPlanDialog({ hostId, hostName, changes, base, onClose }: UciP
               </section>
             )}
 
-            {view.warnings !== undefined && (
+            {/* When fw4 could not load the change, its words are the outcome's below. */}
+            {view.warnings !== undefined && view.outcome?.reason !== 'reload-failed' && (
               <Callout tone="info" icon={<InfoIcon />} title={t('uci.plan.warnings')}>
                 <pre className="details">{view.warnings}</pre>
               </Callout>
@@ -258,7 +261,8 @@ function stagedText(t: ReturnType<typeof useI18n>['t'], change: Staged): string 
     case 'add':
       return t('uci.staged.add', { type: change.option ?? '' });
     case 'set':
-      return `${change.option ?? ''} = ${change.value ?? ''}`;
+      // A named section is made by setting its type: a set without a value.
+      return change.value === undefined ? t('uci.staged.add', { type: change.option ?? '' }) : `${change.option ?? ''} = ${change.value}`;
     case 'list-add':
       return `${change.option ?? ''} += ${change.value ?? ''}`;
     case 'list-del':

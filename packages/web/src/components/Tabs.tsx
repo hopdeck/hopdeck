@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import { Fragment, useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 import styles from './Tabs.module.css';
 
 export interface Tab {
@@ -40,26 +40,30 @@ export function Tabs({ tabs, active, onChange, label }: TabsProps) {
   return (
     <div className={styles.tabs}>
       <div ref={list} role="tablist" aria-label={label} className={styles.list} onKeyDown={onKeyDown}>
-        {tabs.map((tab, index) => (
-          <Fragment key={tab.id}>
-            {tab.group !== undefined && tab.group !== tabs[index - 1]?.group && (
+        {runs(tabs).map((run) => (
+          // A group stays together when the row wraps; to assistive technology it is no element.
+          <span key={run[0]!.id} role="none" className={styles.run}>
+            {run[0]!.group !== undefined && (
               <span className={styles.group} aria-hidden="true">
-                {tab.group}
+                {run[0]!.group}
               </span>
             )}
-            <button
-              type="button"
-              role="tab"
-              id={`tab-${tab.id}`}
-              aria-selected={tab.id === current?.id}
-              aria-controls={`panel-${tab.id}`}
-              tabIndex={tab.id === current?.id ? 0 : -1}
-              className={styles.tab}
-              onClick={() => onChange(tab.id)}
-            >
-              {tab.label}
-            </button>
-          </Fragment>
+            {run.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                id={`tab-${tab.id}`}
+                aria-selected={tab.id === current?.id}
+                aria-controls={`panel-${tab.id}`}
+                tabIndex={tab.id === current?.id ? 0 : -1}
+                className={styles.tab}
+                onClick={() => onChange(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </span>
         ))}
       </div>
       {current !== undefined && (
@@ -69,4 +73,15 @@ export function Tabs({ tabs, active, onChange, label }: TabsProps) {
       )}
     </div>
   );
+}
+
+/** The tabs in runs of one group each, in their order. */
+function runs(tabs: readonly Tab[]): Tab[][] {
+  const result: Tab[][] = [];
+  for (const tab of tabs) {
+    const last = result.at(-1);
+    if (last !== undefined && last[0]!.group === tab.group) last.push(tab);
+    else result.push([tab]);
+  }
+  return result;
 }

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Mateusz T (Tenir)
 
 import { isIpAddress } from '../firewall/port-forward.ts';
-import type { FirewallIpSet, FirewallRedirect, FirewallRule, FirewallZone, OpenWrtFirewall } from './firewall.ts';
+import { INCLUDE_DIRECTORY, INCLUDE_SECTION_PREFIX, type FirewallInclude, type FirewallIpSet, type FirewallRedirect, type FirewallRule, type FirewallZone, type OpenWrtFirewall } from './firewall.ts';
 import { sectionChanges } from './uci-edit.ts';
 import type { UciChange, UciValue } from './uci.ts';
 
@@ -232,7 +232,7 @@ export function redirectChanges(redirect: FirewallRedirect | undefined, form: Re
 /** What is wrong where, for the form to say in its language at that field. */
 export interface UciFormProblem {
   field: string;
-  code: 'zone-name' | 'zone-taken' | 'required' | 'ports' | 'ports-protocol' | 'address' | 'icmp-protocol' | 'protocols' | 'family' | 'set-name' | 'set-taken' | 'set-unknown' | 'entry';
+  code: 'zone-name' | 'zone-taken' | 'required' | 'ports' | 'ports-protocol' | 'address' | 'icmp-protocol' | 'protocols' | 'family' | 'set-name' | 'set-taken' | 'set-unknown' | 'entry' | 'include-name' | 'include-taken' | 'content';
   value?: string;
 }
 
@@ -278,6 +278,81 @@ export function redirectProblems(form: RedirectForm): UciFormProblem[] {
   else if (!isIpAddress(form.destIp.trim())) problems.push({ field: 'destIp', code: 'address', value: form.destIp });
   const wrong = form.srcIps.find((value) => !validAddress(value));
   if (wrong !== undefined) problems.push({ field: 'srcIps', code: 'address', value: wrong });
+  return problems;
+}
+
+/** An nftables file of hopdeck's that fw4 includes: where, and what is in it. */
+export interface IncludeForm {
+  /** The section is hopdeck_NAME, the file NAME.VERSION.nft. */
+  name: string;
+  enabled: boolean;
+  /** One of INCLUDE_POSITIONS; "" leaves it to fw4, which puts it at the end of its table. */
+  position: string;
+  /** For chain-pre and chain-post: a chain of fw4's table, such as input_wan. */
+  chain: string;
+  content: string;
+}
+
+export function includeForm(include: FirewallInclude | undefined, content: string): IncludeForm {
+  if (include === undefined) return { name: '', enabled: true, position: 'chain-pre', chain: 'input', content };
+  return {
+    name: include.section.name.startsWith(INCLUDE_SECTION_PREFIX) ? include.section.name.slice(INCLUDE_SECTION_PREFIX.length) : include.section.name,
+    enabled: include.enabled,
+    position: include.position ?? '',
+    chain: include.chain ?? '',
+    content,
+  };
+}
+
+/** The file of a version of an include: /etc/hopdeck/fw4/NAME.VERSION.nft. */
+export function includePath(name: string, version: number): string {
+  return `${INCLUDE_DIRECTORY}/${name}.${version}.nft`;
+}
+
+/** The version in a path includePath() made, if it is one. */
+export function includeVersion(path: string | undefined): number | undefined {
+  const match = /^\/etc\/hopdeck\/fw4\/[a-z0-9_]+\.(\d{1,6})\.nft$/.exec(path ?? '');
+  return match === null ? undefined : Number(match[1]);
+}
+
+/**
+ * The include's section, and when its content changes, the file of its next
+ * version: one past the version the router has (`committedPath`), however
+ * often it is edited before review. A rollback puts back the old path, whose
+ * file stays until the change is kept.
+ */
+export function includeChanges(
+  include: FirewallInclude | undefined,
+  form: IncludeForm,
+  options: { committedPath: string | undefined; contentChanged: boolean },
+): { changes: UciChange[]; file?: { path: string; content: string } } {
+  const chained = form.position.startsWith('chain-');
+  const path = include === undefined || options.contentChanged ? includePath(form.name, (includeVersion(options.committedPath) ?? 0) + 1) : include.path;
+  const values = {
+    type: 'nftables',
+    path,
+    position: form.position === '' ? undefined : form.position,
+    chain: chained ? form.chain : undefined,
+    enabled: form.enabled ? undefined : '0',
+  };
+  // fw4 puts the file in as it is: without a line break at its end, its last line would run into fw4's next.
+  const content = form.content.endsWith('\n') ? form.content : `${form.content}\n`;
+  const file = path !== undefined && (include === undefined || options.contentChanged) ? { path, content } : undefined;
+  if (include === undefined) {
+    const defined = Object.fromEntries(Object.entries(values).filter((entry): entry is [string, string] => entry[1] !== undefined));
+    return { changes: [{ kind: 'add', type: 'include', name: `${INCLUDE_SECTION_PREFIX}${form.name}`, values: defined }], ...(file !== undefined && { file }) };
+  }
+  return { changes: sectionChanges(include.section, 'include', values, ''), ...(file !== undefined && { file }) };
+}
+
+export function includeProblems(firewall: OpenWrtFirewall, include: FirewallInclude | undefined, form: IncludeForm): UciFormProblem[] {
+  const problems: UciFormProblem[] = [];
+  if (include === undefined) {
+    if (!/^[a-z0-9_]{1,32}$/.test(form.name)) problems.push({ field: 'name', code: 'include-name', value: form.name });
+    else if (firewall.includes.some((other) => other.section.name === `${INCLUDE_SECTION_PREFIX}${form.name}`)) problems.push({ field: 'name', code: 'include-taken', value: form.name });
+  }
+  if (form.position.startsWith('chain-') && form.chain.trim() === '') problems.push({ field: 'chain', code: 'required' });
+  if (form.content.trim() === '' || form.content.includes('\0')) problems.push({ field: 'content', code: 'content' });
   return problems;
 }
 

@@ -37,7 +37,7 @@ import type {
 import { cpuPercent, liveState, parseUsage, platform, USAGE_COMMAND, type CpuSample, type HostUsage, type UciChange, type UciConfig, type UciPlanView } from '@hopdeck/core';
 import { HostError } from './errors.ts';
 import { Deployments, firewallReadOnly, type DeployLogEntry, type DeployTarget } from '../firewall/deploy.ts';
-import { configHash, readConfig, UciPlans } from '../openwrt/uci-plans.ts';
+import { automaticIncludes, configHash, readConfig, readInclude, UciPlans, type IncludeFile } from '../openwrt/uci-plans.ts';
 import { History, type HistoryTarget } from '../firewall/history.ts';
 import { journal } from './journal.ts';
 import { Traces, type TraceOptions } from '../firewall/trace.ts';
@@ -302,10 +302,23 @@ export class HostManager {
   }
 
   /** Stages changes of a UCI configuration in hopdeck's own rpcd session; nothing changes until apply. */
-  async prepareUci(id: string, config: string, changes: readonly UciChange[], base: string | undefined): Promise<UciPlanView | undefined> {
+  async prepareUci(id: string, config: string, changes: readonly UciChange[], base: string | undefined, files: readonly IncludeFile[] = []): Promise<UciPlanView | undefined> {
     const entry = this.#entries.get(id);
     if (entry === undefined) return undefined;
-    return this.#uci.prepare(this.#target(entry), config, changes, base === undefined ? {} : { base });
+    return this.#uci.prepare(this.#target(entry), config, changes, { ...(base !== undefined && { base }), files });
+  }
+
+  /** The content of a file fw4 includes on an OpenWrt host, and the files it includes without a UCI section. */
+  async uciInclude(id: string, path: string): Promise<string | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    return readInclude(this.#target(entry), path);
+  }
+
+  async uciAutomaticIncludes(id: string): Promise<string[] | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    return automaticIncludes(this.#target(entry));
   }
 
   async uciPlan(id: string, action: 'get' | 'apply' | 'confirm' | 'rollback' | 'discard'): Promise<UciPlanView | undefined> {
