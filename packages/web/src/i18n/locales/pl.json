@@ -1156,5 +1156,11 @@
   "uci.history.pendingFirst_one": "Jest {{count}} niezastosowana zmiana. Zastosuj ją albo odrzuć, zanim przywrócisz wersję.",
   "uci.history.pendingFirst_few": "Są {{count}} niezastosowane zmiany. Zastosuj je albo odrzuć, zanim przywrócisz wersję.",
   "uci.history.pendingFirst_many": "Jest {{count}} niezastosowanych zmian. Zastosuj je albo odrzuć, zanim przywrócisz wersję.",
-  "uci.history.pendingFirst_other": "Jest {{count}} niezastosowanej zmiany. Zastosuj je albo odrzuć, zanim przywrócisz wersję."
+  "uci.history.pendingFirst_other": "Jest {{count}} niezastosowanej zmiany. Zastosuj je albo odrzuć, zanim przywrócisz wersję.",
+  "uci.redirects.staticHost": "stały adres",
+  "uci.redirects.lease": "dzierżawa DHCP",
+  "uci.redirects.hostsHint_one": "Podczas pisania podpowiadany jest {{count}} host znany routerowi.",
+  "uci.redirects.hostsHint_few": "Podczas pisania podpowiadane są {{count}} hosty znane routerowi.",
+  "uci.redirects.hostsHint_many": "Podczas pisania podpowiadanych jest {{count}} hostów znanych routerowi.",
+  "uci.redirects.hostsHint_other": "Podczas pisania podpowiadanych jest {{count}} hosta znanego routerowi."
 }

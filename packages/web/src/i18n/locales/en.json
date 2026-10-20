@@ -1088,5 +1088,9 @@
   "uci.history.baselineNote": "The configuration as it was before hopdeck's first change here.",
   "uci.history.noticedNote": "Changed by something other than hopdeck, in LuCI or with the uci command; who did it is unknown. hopdeck noticed when it read the configuration.",
   "uci.history.pendingFirst_one": "There is {{count}} change not applied. Apply or discard it before putting a version back.",
-  "uci.history.pendingFirst_other": "There are {{count}} changes not applied. Apply or discard them before putting a version back."
+  "uci.history.pendingFirst_other": "There are {{count}} changes not applied. Apply or discard them before putting a version back.",
+  "uci.redirects.staticHost": "fixed address",
+  "uci.redirects.lease": "DHCP lease",
+  "uci.redirects.hostsHint_one": "{{count}} host the router knows is offered as you type.",
+  "uci.redirects.hostsHint_other": "{{count}} hosts the router knows are offered as you type."
 }

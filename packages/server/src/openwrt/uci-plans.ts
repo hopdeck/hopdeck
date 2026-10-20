@@ -4,6 +4,11 @@
 import {
   includeVersion,
   INCLUDE_DIRECTORY,
+  mergeHosts,
+  parseLeaseFile,
+  parseLuciLeases,
+  staticHosts,
+  type DhcpHost,
   openwrtFirewall,
   parseUciChanges,
   parseUciGet,
@@ -488,6 +493,19 @@ export async function automaticIncludes(target: Pick<DeployTarget, 'access'>): P
   const script = 'for f in /etc/nftables.d/*.nft /usr/share/nftables.d/*/*.nft /usr/share/nftables.d/*/*/*.nft; do [ -f "$f" ] && echo "$f"; done; true';
   const result = await runAsRoot(target.access, ['sh', '-c', script]);
   return result.stdout.split('\n').filter((line) => line !== '');
+}
+
+/**
+ * The hosts the router knows on its networks: its DHCP leases, through
+ * luci-rpc where LuCI's rpcd plugin is there, else from dnsmasq's lease file,
+ * and the host sections of /etc/config/dhcp.
+ */
+export async function dhcpHosts(target: DeployTarget): Promise<DhcpHost[]> {
+  const luci = await runAsRoot(target.access, ['ubus', 'call', 'luci-rpc', 'getDHCPLeases', '{}']);
+  const leases =
+    luci.exitCode === 0 ? parseLuciLeases(luci.stdout) : parseLeaseFile((await runAsRoot(target.access, ['sh', '-c', 'cat /tmp/dhcp.leases 2>/dev/null; true'])).stdout);
+  const hosts = await readConfig(target, 'dhcp', undefined).then(staticHosts, () => []);
+  return mergeHosts(leases, hosts);
 }
 
 /** The table fw4 made, as nft lists it without counter values, which a reload sets to zero; empty when there is none. */

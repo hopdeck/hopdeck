@@ -256,6 +256,12 @@ card, so its DHCP server and router advertisements never reach that network.
 `pnpm dev:vms [SYSTEM...]` starts the panel with the VMs started before,
 those named or all of them, each account as "VM SYSTEM: account", to try
 things by hand.
+`dev/vm-host/router.sh` starts an OpenWrt router with a Debian client behind
+it: the router's LAN is `vmbr9000` (`HOPDECK_PVE_LAN`), a bridge with no port
+of its own, so its DHCP server stays there, and its WAN is on `vmbr0`, where
+it lets SSH in from this machine's address only. The client is reached
+through the router. The host tests then forward a port to the client and
+fetch through it from this machine and, by NAT loopback, from the client.
 `pnpm test:vms [SYSTEM...]` starts each VM in turn, runs the host tests
 against it and removes it again (the templates stay); logs go to
 `.dev/vm-host/logs`. `dev/vm-host/down.sh [SYSTEM|all] [--templates]` removes

@@ -3,6 +3,7 @@
 
 import {
   ipSetReference,
+  movedSections,
   RULE_TARGETS,
   trafficRuleChanges,
   trafficRuleForm,
@@ -43,6 +44,11 @@ export function TrafficRulesPanel({ state, model, live }: TrafficRulesPanelProps
   const firewall = state.firewall!;
   const rules = firewall.rules;
   const touched = touchedSections(state.pending);
+  // A dragged rule is marked as changed, not the ones it passed.
+  const moved = movedSections(
+    state.base?.sections.filter((section) => section.type === 'rule').map((section) => section.name) ?? [],
+    rules.map((rule) => rule.section.name),
+  );
   const counters = model === undefined ? undefined : fw4Counters(model, live, 'rule');
   const number = new Intl.NumberFormat(locale);
 
@@ -92,7 +98,7 @@ export function TrafficRulesPanel({ state, model, live }: TrafficRulesPanelProps
             ].filter((part) => part !== '');
             const rowClass = [
               rule.enabled ? '' : styles.off,
-              touched.has(rule.section.name) ? styles.changed : '',
+              touched.has(rule.section.name) || moved.has(rule.section.name) ? styles.changed : '',
               dragged === index ? styles.dragging : '',
               over?.index === index ? (over.after ? styles.dropAfter : styles.dropBefore) : '',
             ].join(' ');

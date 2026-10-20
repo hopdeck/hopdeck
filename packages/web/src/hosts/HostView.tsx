@@ -301,7 +301,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                 ? [
                     uciTab('zones', 'tabs.zones', () => <ZonesPanel state={uciFirewall} />),
                     uciTab('uci-rules', 'tabs.uciRules', () => <TrafficRulesPanel state={uciFirewall} model={ruleset.model} live={live.info} />),
-                    uciTab('redirects', 'tabs.forwards', () => <RedirectsPanel state={uciFirewall} model={ruleset.model} live={live.info} />),
+                    uciTab('redirects', 'tabs.forwards', () => <RedirectsPanel hostId={host.id} state={uciFirewall} model={ruleset.model} live={live.info} />),
                     uciTab('ipsets', 'tabs.ipsets', () => <IpSetsPanel state={uciFirewall} />),
                     uciTab('includes', 'tabs.includes', () => <IncludesPanel hostId={host.id} state={uciFirewall} model={ruleset.model} />),
                     uciTab('uci-history', 'tabs.history', () => (

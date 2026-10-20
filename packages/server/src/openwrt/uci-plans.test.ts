@@ -127,9 +127,17 @@ describe.skipIf(testHost?.platform !== 'openwrt')('UCI plans on the OpenWrt test
 
   // In a container, SSH comes in through podman's port forward, which fw4's zones do not see.
   it.runIf(testHost?.vmid !== undefined)('undoes at once a change that blocks new SSH connections', async () => {
-    // hopdeck comes in through the zone the VM's network is in; the connection it has stays, as fw4 lets established ones through first.
-    const zone = (await sh(`uci show firewall | grep -q "network='lan'" && echo lan || echo wan`)) || 'lan';
-    const plan = await prepare(target, 'firewall', [rule('hd-test-lockout', { src: zone, dest_port: '22', target: 'REJECT' })]);
+    // The zone of the network hopdeck comes in through (lan on a VM, wan on the test router), from the address SSH reached.
+    const network = await sh(
+      `set -- $SSH_CONNECTION; for n in $(ubus list 'network.interface.*' | sed 's/^network.interface.//'); do ifstatus "$n" | jsonfilter -e '@["ipv4-address"][*].address' | grep -qx "$3" && { echo "$n"; break; }; done`,
+    );
+    const config = await readConfig(target, 'firewall', undefined);
+    const zone = openwrtFirewall(config).zones.find((candidate) => candidate.networks.includes(network))?.name ?? 'lan';
+    const add = rule('hd-test-lockout', { src: zone, dest_port: '22', target: 'REJECT' });
+    // First of the rules, before one that lets SSH in, as the test router has.
+    const rules = previewUci(config, [add]).sections.filter((section) => section.type === 'rule').map((section) => section.name);
+    const order = typeOrder(previewUci(config, [add]), 'rule', ['new-1', ...rules.filter((name) => name !== 'new-1')]);
+    const plan = await prepare(target, 'firewall', [{ ...add, ref: 'new-1' } as UciChange, order]);
     expect(await plans.apply(plan.id, target)).toMatchObject({ state: 'rolled-back', outcome: { reason: 'fresh-connection-failed' } });
     expect(await inConfig('hd-test-lockout')).toBe(false);
     expect(await inFw4('hd-test-lockout')).toBe(false);

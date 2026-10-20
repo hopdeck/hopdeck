@@ -30,3 +30,4 @@ export * from './openwrt/firewall.ts';
 export * from './openwrt/uci-edit.ts';
 export * from './openwrt/firewall-edit.ts';
 export * from './openwrt/uci-restore.ts';
+export * from './openwrt/leases.ts';

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import { redirectChanges, redirectForm, redirectProblems, type FirewallRedirect, type RedirectForm } from '@hopdeck/core';
-import { useState } from 'react';
+import { redirectChanges, redirectForm, redirectProblems, type DhcpHost, type FirewallRedirect, type RedirectForm } from '@hopdeck/core';
+import { useEffect, useState } from 'react';
+import { api } from '../api.ts';
 import { EditIcon, PlusIcon, TrashIcon } from '../components/icons.tsx';
 import { Segmented } from '../components/Segmented.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
@@ -17,13 +18,14 @@ import { touchedSections, type UciFirewallState } from './useUciFirewall.ts';
 import { problemText } from './ZonesPanel.tsx';
 
 interface RedirectsPanelProps {
+  hostId: string;
   state: UciFirewallState;
   model: RulesetModel | undefined;
   live: LiveInfo | undefined;
 }
 
 /** Port forwards as OpenWrt keeps them: redirect sections, which fw4 turns into DNAT, with the connections each took. */
-export function RedirectsPanel({ state, model, live }: RedirectsPanelProps) {
+export function RedirectsPanel({ hostId, state, model, live }: RedirectsPanelProps) {
   const { t, locale } = useI18n();
   const [dialog, setDialog] = useState<{ redirect?: FirewallRedirect; opening: number }>();
   const firewall = state.firewall!;
@@ -119,15 +121,27 @@ export function RedirectsPanel({ state, model, live }: RedirectsPanelProps) {
           </tbody>
         </table>
       )}
-      {dialog !== undefined && <RedirectDialog state={state} redirect={dialog.redirect} opening={dialog.opening} onClose={() => setDialog(undefined)} />}
+      {dialog !== undefined && <RedirectDialog hostId={hostId} state={state} redirect={dialog.redirect} opening={dialog.opening} onClose={() => setDialog(undefined)} />}
     </div>
   );
 }
 
 type Protocol = 'tcp' | 'udp' | 'both';
 
-function RedirectDialog({ state, redirect, opening, onClose }: { state: UciFirewallState; redirect: FirewallRedirect | undefined; opening: number; onClose(): void }) {
+function RedirectDialog({ hostId, state, redirect, opening, onClose }: { hostId: string; state: UciFirewallState; redirect: FirewallRedirect | undefined; opening: number; onClose(): void }) {
   const { t } = useI18n();
+  // The hosts the router knows, to pick the target from; typing any address works all the same.
+  const [hosts, setHosts] = useState<DhcpHost[]>([]);
+  useEffect(() => {
+    let current = true;
+    api.get<{ hosts: DhcpHost[] }>(`/hosts/${encodeURIComponent(hostId)}/dhcp-hosts`).then(
+      (read) => current && setHosts(read.hosts),
+      () => undefined,
+    );
+    return () => {
+      current = false;
+    };
+  }, [hostId]);
   const firewall = state.firewall!;
   const zones = firewall.zones.map((zone) => zone.name);
   const [form, setForm] = useState<RedirectForm>(() => redirectForm(redirect, zones));
@@ -211,9 +225,17 @@ function RedirectDialog({ state, redirect, opening, onClose }: { state: UciFirew
         </select>
       </Field>
       <Field label={t('uci.redirects.internalIp')} error={errorOf('destIp')}>
-        <input className="input mono" value={form.destIp} spellCheck={false} placeholder="192.168.1.10" aria-invalid={invalid('destIp')}
+        <input className="input mono" value={form.destIp} spellCheck={false} placeholder="192.168.1.10" aria-invalid={invalid('destIp')} list="redirect-hosts"
           onChange={(event) => edit('destIp', { destIp: event.target.value })} />
       </Field>
+      <datalist id="redirect-hosts">
+        {hosts.map((host) => (
+          <option key={host.ip} value={host.ip}>
+            {[host.name, host.mac, host.static ? t('uci.redirects.staticHost') : t('uci.redirects.lease')].filter((part) => part !== undefined).join(' · ')}
+          </option>
+        ))}
+      </datalist>
+      {hosts.length > 0 && <p className={editor.note}>{t('uci.redirects.hostsHint', { count: hosts.length })}</p>}
       <Field label={t('uci.redirects.internalPort')} error={errorOf('destPort')}>
         <input className="input mono" value={form.destPort} spellCheck={false} placeholder={t('uci.redirects.samePort')} aria-invalid={invalid('destPort')}
           onChange={(event) => edit('destPort', { destPort: event.target.value })} />

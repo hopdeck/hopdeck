@@ -292,6 +292,13 @@ const ROUTES: Route[] = [
   },
   {
     method: 'GET',
+    pattern: /^\/api\/hosts\/([^/]+)\/dhcp-hosts$/,
+    async handle(_req, [id], ctx) {
+      return { body: { hosts: found(await ctx.hosts.dhcpHosts(id!)) } };
+    },
+  },
+  {
+    method: 'GET',
     pattern: /^\/api\/hosts\/([^/]+)\/uci\/firewall\/history$/,
     async handle(_req, [id], ctx) {
       return { body: { history: found(await ctx.hosts.uciHistory(id!)) } };

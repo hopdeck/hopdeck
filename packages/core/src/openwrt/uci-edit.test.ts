@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import firewallJson from '../../test/fixtures/openwrt/firewall-25.12.json' with { type: 'json' };
 import { parseUciGet, type UciChange } from './uci.ts';
-import { addUciChange, nextRef, previewUci, sectionChanges, typeOrder } from './uci-edit.ts';
+import { addUciChange, movedSections, nextRef, previewUci, sectionChanges, typeOrder } from './uci-edit.ts';
 
 const base = parseUciGet('firewall', JSON.stringify(firewallJson));
 const lan = base.sections.find((section) => section.options['name'] === 'lan')!;
@@ -106,5 +106,17 @@ describe('nextRef', () => {
   it('gives the first free name', () => {
     expect(nextRef([])).toBe('new-1');
     expect(nextRef([{ kind: 'add', type: 'rule', ref: 'new-1', values: {} }, { kind: 'add', type: 'rule', ref: 'new-3', values: {} }])).toBe('new-2');
+  });
+});
+
+describe('movedSections', () => {
+  it('names the one dragged, not those it passed', () => {
+    expect(movedSections(['a', 'b', 'c', 'd', 'e'], ['e', 'a', 'b', 'c', 'd'])).toEqual(new Set(['e']));
+    expect(movedSections(['a', 'b', 'c', 'd'], ['b', 'c', 'a', 'd'])).toEqual(new Set(['a']));
+    expect(movedSections(['a', 'b', 'c'], ['a', 'b', 'c'])).toEqual(new Set());
+  });
+
+  it('leaves out sections new or gone', () => {
+    expect(movedSections(['a', 'b', 'c'], ['new-1', 'c', 'a'])).toEqual(new Set(['c']));
   });
 });

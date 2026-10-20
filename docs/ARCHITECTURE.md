@@ -825,6 +825,10 @@ What hopdeck changes there is UCI's own, and LuCI shows it.
   hopdeck's own. Includes of others, and the files fw4 includes without a
   section (`/etc/nftables.d`, `/usr/share/nftables.d`), are shown, read
   through an API that reads no other file.
+- On the test router of `dev/vm-host/router.sh` (WAN on the admin's network,
+  LAN on an isolated bridge with a Debian client), a port forward made
+  through a plan is fetched through from the WAN side and, by NAT loopback,
+  from the client; the client is found among the DHCP hosts.
 - Tested on OpenWrt 24.10 and 25.12 VMs and the OpenWrt container: staging,
   keeping, rpcd's rollback after the deadline, rolling back at once, a rule
   that blocks new SSH connections (VMs only: a container's SSH bypasses

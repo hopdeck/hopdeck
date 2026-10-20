@@ -27,6 +27,8 @@ export interface TestHost {
   passwords: boolean;
   /** A VM of dev/vm-host, with a kernel of its own that logs packets and forwards them; a container has neither. */
   vmid?: number;
+  /** The router of dev/vm-host/router.sh: the client behind it, reached as hopdeck-test-client. */
+  client?: { address: string; vmid: number };
   dir: string;
   sshConfig: string;
   /** The test key, the same for every system. */

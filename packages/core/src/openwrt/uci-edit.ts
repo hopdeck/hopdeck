@@ -163,3 +163,33 @@ function sameValue(a: UciValue | undefined, b: UciValue): boolean {
   const [x, y] = [uciList(a), uciList(b)];
   return x.length === y.length && x.every((item, index) => item === y[index]);
 }
+
+/**
+ * The sections of `after` that moved against `before`: the fewest that, put
+ * elsewhere, give the new order, as one dragged rule moves one rule and not
+ * every one it passes. Those keeping their order form the longest run that
+ * stays increasing in the old order; the others moved. Sections new in
+ * `after` are not counted.
+ */
+export function movedSections(before: readonly string[], after: readonly string[]): Set<string> {
+  const place = new Map(before.map((name, index) => [name, index]));
+  const kept = after.filter((name) => place.has(name));
+  // Longest increasing subsequence of the old places, with its members.
+  const tails: number[] = [];
+  const previous: number[] = [];
+  kept.forEach((name, index) => {
+    const value = place.get(name)!;
+    let low = 0;
+    let high = tails.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (place.get(kept[tails[middle]!]!)! < value) low = middle + 1;
+      else high = middle;
+    }
+    previous[index] = low > 0 ? tails[low - 1]! : -1;
+    tails[low] = index;
+  });
+  const staying = new Set<string>();
+  for (let index = tails.length > 0 ? tails[tails.length - 1]! : -1; index !== -1; index = previous[index]!) staying.add(kept[index]!);
+  return new Set(kept.filter((name) => !staying.has(name)));
+}

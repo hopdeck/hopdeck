@@ -27,11 +27,27 @@ if [ "$first" -lt 9000 ]; then
 	exit 2
 fi
 case "$what" in
-all) systems="debian11 debian12 debian13 alma9 alma10 alpine openwrt openwrt24" ;;
+all) systems="debian11 debian12 debian13 alma9 alma10 alpine openwrt openwrt24 router" ;;
 *) systems=$what ;;
 esac
 
 for system in $systems; do
+	if [ "$system" = router ]; then
+		# The router of router.sh and the client behind it.
+		for id in $((first + 19)) $((first + 20)); do
+			ssh -o BatchMode=yes "$pve" sh -s "$id" <<'PVE'
+set -eu
+id=$1
+qm status "$id" >/dev/null 2>&1 || exit 0
+qm config "$id" | grep -q '^name: hopdeck-' || { echo "VMID $id is not hopdeck's: leaving it alone" >&2; exit 0; }
+qm stop "$id" >/dev/null 2>&1 || :
+qm destroy "$id" --purge >/dev/null
+echo "Removed VM $id."
+PVE
+		done
+		rm -rf "$repo/.dev/vm-host/router"
+		continue
+	fi
 	case "$system" in
 	debian11) n=1 ;; debian12) n=2 ;; debian13) n=3 ;; alma9) n=4 ;; alma10) n=5 ;; alpine) n=6 ;; openwrt) n=7 ;; openwrt24) n=8 ;;
 	*) echo "unknown system: $system" >&2; exit 2 ;;

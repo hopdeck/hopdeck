@@ -23,9 +23,14 @@
   hopdeck reads the configuration. Each version keeps /etc/config/firewall
   and hopdeck's nftables files, shows what changed in them, and can be put
   back through the usual review and rollback.
+- The port forward form on OpenWrt offers the hosts the router knows as the
+  internal address: its DHCP leases and the fixed addresses of
+  /etc/config/dhcp.
 
 ### Changed
 
+- A traffic rule dragged elsewhere on OpenWrt is marked as changed, not the
+  rules it passed.
 - The tabs of a host wrap onto a second row when they do not fit, each group
   together, instead of scrolling out of sight.
 

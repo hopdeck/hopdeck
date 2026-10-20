@@ -34,11 +34,11 @@ import type {
   TraceView,
   UsedKey,
 } from '@hopdeck/core';
-import { cpuPercent, liveState, parseUsage, platform, USAGE_COMMAND, type CpuSample, type HostUsage, type UciChange, type UciConfig, type UciHistoryDetail, type UciHistoryState, type UciPlanView } from '@hopdeck/core';
+import { cpuPercent, liveState, parseUsage, platform, USAGE_COMMAND, type CpuSample, type DhcpHost, type HostUsage, type UciChange, type UciConfig, type UciHistoryDetail, type UciHistoryState, type UciPlanView } from '@hopdeck/core';
 import { HostError } from './errors.ts';
 import { Deployments, firewallReadOnly, type DeployLogEntry, type DeployTarget } from '../firewall/deploy.ts';
 import { UciHistory, type UciHistoryTarget } from '../openwrt/uci-history.ts';
-import { automaticIncludes, configHash, readConfig, readInclude, UciPlans, type IncludeFile } from '../openwrt/uci-plans.ts';
+import { automaticIncludes, configHash, dhcpHosts, readConfig, readInclude, UciPlans, type IncludeFile } from '../openwrt/uci-plans.ts';
 import { History, type HistoryTarget } from '../firewall/history.ts';
 import { journal } from './journal.ts';
 import { Traces, type TraceOptions } from '../firewall/trace.ts';
@@ -342,6 +342,13 @@ export class HostManager {
     const entry = this.#entries.get(id);
     if (entry === undefined) return undefined;
     return readInclude(this.#target(entry), path);
+  }
+
+  /** The hosts an OpenWrt router knows on its networks, by DHCP or by its configuration. */
+  async dhcpHosts(id: string): Promise<DhcpHost[] | undefined> {
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return undefined;
+    return dhcpHosts(this.#target(entry));
   }
 
   async uciAutomaticIncludes(id: string): Promise<string[] | undefined> {
