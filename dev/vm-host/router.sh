@@ -210,7 +210,9 @@ printf '%s %s\n' "$address" "$(cut -d' ' -f1,2 "$keys/other_host_key.pub")" >"$s
 	printf 'Host hopdeck-test-*\n\tIdentityFile "%s"\n\tIdentitiesOnly yes\n\tUserKnownHostsFile "%s"\n\tStrictHostKeyChecking yes\n' "$keys/id_ed25519" "$state/known_hosts"
 } >"$state/ssh_config"
 ssh -F "$state/ssh_config" -o BatchMode=yes hopdeck-test-root true
-ssh -F "$state/ssh_config" -o BatchMode=yes hopdeck-test-client true
+# The client as every test VM is: nftables, sudo, the test accounts, keys only.
+echo "Accounts, nftables and sshd on the client..."
+ssh -F "$state/ssh_config" -o BatchMode=yes hopdeck-test-client sh -s "\"$key\"" <"$here/provision.sh" >/dev/null
 
 {
 	printf '{\n  "version": 1,\n  "hosts": [\n'

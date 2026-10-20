@@ -34,6 +34,12 @@
 - The tabs of a host wrap onto a second row when they do not fit, each group
   together, instead of scrolling out of sight.
 
+### Fixed
+
+- A new panel link pasted into a tab that has the panel open already loads
+  the panel with its token, instead of going on with the old one and
+  refusing every request.
+
 ## 0.4.0 (2026-10-18)
 
 ### Added

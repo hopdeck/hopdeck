@@ -20,6 +20,13 @@ function takeToken(): string | null {
 
 const token = takeToken();
 
+// A link pasted into a tab that is open already changes only the fragment,
+// which loads nothing again: the panel would go on with the token it had,
+// and every request would be refused. A token there starts it afresh.
+window.addEventListener('hashchange', () => {
+  if (new URLSearchParams(location.hash.slice(1)).get('token') !== null) location.reload();
+});
+
 /** The server answers errors with `{ error: { code, message } }`; the UI translates `code`. */
 export class ApiError extends Error {
   override name = 'ApiError';
