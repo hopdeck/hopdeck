@@ -23,7 +23,7 @@ describe.skipIf(testHost?.platform !== 'openwrt')('the UCI history on the OpenWr
   });
   const sh = async (script: string) => (await target.executor.exec(['sh', '-c', script])).stdout.trim();
   const clean = () =>
-    sh(`for s in $(uci show firewall | sed -n "s/^firewall\\.\\([^.]*\\)\\.name='hd-hist-.*/\\1/p"); do uci delete firewall.$s; done; uci -q delete firewall.hopdeck_hdhist; uci commit firewall; rm -f /etc/hopdeck/fw4/hdhist.*; /sbin/fw4 reload >/dev/null 2>&1; true`);
+    sh(`for s in $(uci -X show firewall | sed -n "s/^firewall\\.\\([^.]*\\)\\.name='hd-hist-.*/\\1/p"); do uci delete firewall.$s; done; uci -q delete firewall.hopdeck_hdhist; uci commit firewall; rm -f /etc/hopdeck/fw4/hdhist.*; /sbin/fw4 reload >/dev/null 2>&1; true`);
 
   beforeAll(async () => {
     const deploy = await hostTarget('root', await mkdtemp(`${tmpdir()}/hopdeck-uci-history-`));

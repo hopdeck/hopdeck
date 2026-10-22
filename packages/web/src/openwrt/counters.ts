@@ -18,14 +18,15 @@ export interface UciCounter {
  * rule after its section's name, or `@rule[3]` for one without (counting the
  * sections of the type), in a comment "!fw4: NAME". One section may make
  * several rules, IPv4 and IPv6 for one; their counts add up. Port forwards
- * are in the dstnat chains, rules in the others.
+ * are in the dstnat chains, NAT rules in the srcnat ones, rules in the others.
  */
-export function fw4Counters(model: RulesetModel, live: LiveInfo | undefined, kind: 'rule' | 'redirect'): Map<string, UciCounter> {
+export function fw4Counters(model: RulesetModel, live: LiveInfo | undefined, kind: 'rule' | 'redirect' | 'nat'): Map<string, UciCounter> {
   const counters = new Map<string, UciCounter>();
   const table = model.ruleset.tables.find((node) => node.table.family === 'inet' && node.table.name === 'fw4');
   if (table === undefined) return counters;
   for (const { chain, rules } of table.chains) {
-    if (chain.name.startsWith('dstnat') !== (kind === 'redirect')) continue;
+    const of = chain.name.startsWith('dstnat') ? 'redirect' : chain.name.startsWith('srcnat') ? 'nat' : 'rule';
+    if (of !== kind) continue;
     for (const rule of rules) {
       const name = /^!fw4: (.+)$/.exec(rule.comment ?? '')?.[1];
       if (name === undefined) continue;

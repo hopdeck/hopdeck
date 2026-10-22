@@ -1,19 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import {
-  ipSetReference,
-  movedSections,
-  RULE_TARGETS,
-  trafficRuleChanges,
-  trafficRuleForm,
-  trafficRuleProblems,
-  typeOrder,
-  type FirewallRule,
-  type TrafficRuleForm,
-} from '@hopdeck/core';
+import { ipSetReference, RULE_TARGETS, trafficRuleChanges, trafficRuleForm, trafficRuleProblems, type FirewallRule, type TrafficRuleForm } from '@hopdeck/core';
 import { useState } from 'react';
-import { ArrowDownIcon, ArrowUpIcon, EditIcon, PlusIcon, TrashIcon } from '../components/icons.tsx';
+import { EditIcon, PlusIcon, TrashIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
 import { Field } from '../firewall/edit/fields.tsx';
 import editor from '../firewall/edit/Editor.module.css';
@@ -22,6 +12,7 @@ import type { LiveInfo } from '../firewall/ruleset/useLive.ts';
 import { fw4Counters, fw4Name } from './counters.ts';
 import { fieldErrors, FormDialog } from './FormDialog.tsx';
 import styles from './OpenWrt.module.css';
+import { useSectionOrder } from './useSectionOrder.tsx';
 import { touchedSections, type UciFirewallState } from './useUciFirewall.ts';
 import { Policy, problemText } from './ZonesPanel.tsx';
 
@@ -39,28 +30,12 @@ interface TrafficRulesPanelProps {
 export function TrafficRulesPanel({ state, model, live }: TrafficRulesPanelProps) {
   const { t, locale } = useI18n();
   const [dialog, setDialog] = useState<{ rule?: FirewallRule; opening: number }>();
-  const [dragged, setDragged] = useState<number>();
-  const [over, setOver] = useState<{ index: number; after: boolean }>();
   const firewall = state.firewall!;
   const rules = firewall.rules;
   const touched = touchedSections(state.pending);
-  // A dragged rule is marked as changed, not the ones it passed.
-  const moved = movedSections(
-    state.base?.sections.filter((section) => section.type === 'rule').map((section) => section.name) ?? [],
-    rules.map((rule) => rule.section.name),
-  );
+  const order = useSectionOrder(state, 'rule', rules.map((rule) => rule.section.name));
   const counters = model === undefined ? undefined : fw4Counters(model, live, 'rule');
   const number = new Intl.NumberFormat(locale);
-
-  /** Puts the rule at `from` before the one at `to`, or after it. */
-  const move = (from: number, to: number, after: boolean) => {
-    const names = rules.map((rule) => rule.section.name);
-    const [moved] = names.splice(from, 1);
-    const target = to > from ? to - 1 : to;
-    names.splice(after ? target + 1 : target, 0, moved!);
-    if (names.every((name, index) => name === rules[index]!.section.name)) return;
-    state.change([typeOrder(state.preview!, 'rule', names)]);
-  };
   const zoneText = (zone: string | undefined) => (zone === undefined || zone === '' ? t('uci.rules.device') : zone === '*' ? t('uci.rules.anyZone') : zone);
 
   return (
@@ -98,47 +73,12 @@ export function TrafficRulesPanel({ state, model, live }: TrafficRulesPanelProps
             ].filter((part) => part !== '');
             const rowClass = [
               rule.enabled ? '' : styles.off,
-              touched.has(rule.section.name) || moved.has(rule.section.name) ? styles.changed : '',
-              dragged === index ? styles.dragging : '',
-              over?.index === index ? (over.after ? styles.dropAfter : styles.dropBefore) : '',
+              touched.has(rule.section.name) || order.moved.has(rule.section.name) ? styles.changed : '',
+              order.rowClass(index),
             ].join(' ');
             return (
-              <tr
-                key={rule.section.name}
-                className={rowClass}
-                onDragOver={(event) => {
-                  if (dragged === undefined) return;
-                  event.preventDefault();
-                  const box = event.currentTarget.getBoundingClientRect();
-                  setOver({ index, after: event.clientY > box.top + box.height / 2 });
-                }}
-                onDragLeave={() => setOver((current) => (current?.index === index ? undefined : current))}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  if (dragged !== undefined && over !== undefined) move(dragged, over.index, over.after);
-                  setDragged(undefined);
-                  setOver(undefined);
-                }}
-              >
-                <td>
-                  <span
-                    className={styles.handle}
-                    draggable
-                    title={t('uci.rules.drag')}
-                    onDragStart={(event) => {
-                      event.dataTransfer.effectAllowed = 'move';
-                      // Firefox starts a drag only with some data.
-                      event.dataTransfer.setData('text/plain', rule.section.name);
-                      setDragged(index);
-                    }}
-                    onDragEnd={() => {
-                      setDragged(undefined);
-                      setOver(undefined);
-                    }}
-                  >
-                    ⠿
-                  </span>
-                </td>
+              <tr key={rule.section.name} className={rowClass} {...order.rowEvents(index)}>
+                <td>{order.handle(index)}</td>
                 <td>
                   <input
                     type="checkbox"
@@ -172,12 +112,7 @@ export function TrafficRulesPanel({ state, model, live }: TrafficRulesPanelProps
                 </td>
                 <td className={styles.actionsCell}>
                   <span className={styles.buttons}>
-                    <button type="button" className="btn btn-ghost btn-sm btn-icon" title={t('editor.up')} aria-label={t('editor.up')} disabled={index === 0} onClick={() => move(index, index - 1, false)}>
-                      <ArrowUpIcon />
-                    </button>
-                    <button type="button" className="btn btn-ghost btn-sm btn-icon" title={t('editor.down')} aria-label={t('editor.down')} disabled={index === rules.length - 1} onClick={() => move(index, index + 1, true)}>
-                      <ArrowDownIcon />
-                    </button>
+                    {order.arrows(index)}
                     <button type="button" className="btn btn-ghost btn-sm btn-icon" title={t('uci.edit')} aria-label={t('uci.edit')} onClick={() => setDialog({ rule, opening: Date.now() })}>
                       <EditIcon />
                     </button>

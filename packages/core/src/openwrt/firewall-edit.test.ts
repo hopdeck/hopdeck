@@ -12,6 +12,9 @@ import {
   includeProblems,
   includeVersion,
   deleteZoneChanges,
+  natChanges,
+  natForm,
+  natProblems,
   ipSetChanges,
   ipSetForm,
   ipSetProblems,
@@ -149,6 +152,66 @@ describe('port forwards', () => {
     const form = redirectForm(undefined, ['lan', 'wan']);
     expect(redirectProblems(form).map((problem) => problem.field)).toEqual(['srcDport', 'destIp']);
     expect(redirectProblems({ ...form, srcDport: '80', destIp: 'host' })).toEqual([{ field: 'destIp', code: 'address', value: 'host' }]);
+  });
+});
+
+describe('NAT rules', () => {
+  const withNat = parseUciGet(
+    'firewall',
+    JSON.stringify({
+      values: {
+        wan: { '.anonymous': true, '.type': 'zone', '.name': 'cfg01', '.index': 0, name: 'wan', network: ['wan'], masq: '1' },
+        vpn: { '.anonymous': true, '.type': 'nat', '.name': 'cfg02', '.index': 1, name: 'Office', src: 'wan', src_ip: '192.168.1.0/24', dest_ip: '10.8.0.0/16' },
+        snat: { '.anonymous': true, '.type': 'nat', '.name': 'cfg03', '.index': 2, src: 'wan', target: 'SNAT', src_ip: '192.168.1.20', snat_ip: '203.0.113.5' },
+      },
+    }),
+  );
+  const nats = openwrtFirewall(withNat);
+  const [office, fixed] = nats.nats;
+
+  it('reads the rules, masquerading where they do not say', () => {
+    expect(office).toMatchObject({ name: 'Office', src: 'wan', target: 'MASQUERADE', srcIp: '192.168.1.0/24', destIp: '10.8.0.0/16', protocols: [] });
+    expect(fixed).toMatchObject({ name: undefined, target: 'SNAT', snatIp: '203.0.113.5' });
+  });
+
+  it('starts from wan, masquerading all protocols, and says the target it writes', () => {
+    const form = { ...natForm(undefined, ['lan', 'wan']), name: 'Guests', srcIp: '192.168.2.0/24' };
+    expect(natProblems(form)).toEqual([]);
+    expect(natChanges(undefined, form, 'new-1')).toEqual([
+      { kind: 'add', type: 'nat', ref: 'new-1', values: { name: 'Guests', src: 'wan', src_ip: '192.168.2.0/24', target: 'MASQUERADE' } },
+    ]);
+  });
+
+  it('leaves out the target a rule left out, and the rewrite of a target that has none', () => {
+    expect(natChanges(office, natForm(office, ['wan']), 'new-1')).toEqual([]);
+    expect(natChanges(office, { ...natForm(office, ['wan']), target: 'ACCEPT', snatIp: '203.0.113.9' }, 'new-1')).toEqual([
+      { kind: 'set', section: 'cfg02', values: { target: 'ACCEPT' } },
+    ]);
+    expect(natChanges(fixed, { ...natForm(fixed, ['wan']), target: 'MASQUERADE' }, 'new-1')).toEqual([
+      { kind: 'set', section: 'cfg03', values: { target: 'MASQUERADE' } },
+      { kind: 'unset', section: 'cfg03', options: ['snat_ip'] },
+    ]);
+  });
+
+  it('wants what fw4 wants: an address or port for SNAT, TCP or UDP for ports, one family', () => {
+    const form = { ...natForm(undefined, ['wan']), target: 'SNAT' };
+    expect(natProblems(form)).toEqual([{ field: 'snatIp', code: 'snat-needs' }]);
+    expect(natProblems({ ...form, snatPort: '1000-2000', protocols: ['icmp'] })).toEqual([{ field: 'snatPort', code: 'ports-tcpudp' }]);
+    expect(natProblems({ ...form, snatPort: '1000 2000' })).toEqual([{ field: 'snatPort', code: 'ports', value: '1000 2000' }]);
+    expect(natProblems({ ...form, snatIp: '203.0.113.0/24' })).toEqual([{ field: 'snatIp', code: 'address', value: '203.0.113.0/24' }]);
+    expect(natProblems({ ...form, snatIp: '2001:db8::1', srcIp: '192.168.1.0/24' })).toEqual([{ field: 'family', code: 'families' }]);
+    expect(natProblems({ ...form, snatIp: '2001:db8::1', family: 'ipv4' })).toEqual([{ field: 'family', code: 'family' }]);
+    expect(natProblems({ ...form, snatIp: '203.0.113.5', destPort: '53', protocols: ['all'], device: 'eth1' })).toEqual([]);
+    expect(natProblems({ ...form, snatIp: '203.0.113.5', device: 'a very long name' }).map((problem) => problem.code)).toEqual(['device']);
+  });
+
+  it('follows a renamed zone, and keeps a zone they leave through', () => {
+    const wan = nats.zones[0]!;
+    expect(zoneChanges(nats, wan, { ...zoneForm(nats, wan), name: 'internet' }, 'new-1').filter((change) => change.kind === 'set' && change.section !== 'cfg01')).toEqual([
+      { kind: 'set', section: 'cfg02', values: { src: 'internet' } },
+      { kind: 'set', section: 'cfg03', values: { src: 'internet' } },
+    ]);
+    expect(deleteZoneChanges(nats, wan).usedBy).toEqual(['Office', 'cfg03']);
   });
 });
 

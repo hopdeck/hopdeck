@@ -40,6 +40,7 @@ import { HistoryPanel } from '../firewall/history/HistoryPanel.tsx';
 import { IncludesPanel } from '../openwrt/IncludesPanel.tsx';
 import { UciHistoryPanel } from '../openwrt/UciHistoryPanel.tsx';
 import { IpSetsPanel } from '../openwrt/IpSetsPanel.tsx';
+import { NatPanel } from '../openwrt/NatPanel.tsx';
 import { RedirectsPanel } from '../openwrt/RedirectsPanel.tsx';
 import { TrafficRulesPanel } from '../openwrt/TrafficRulesPanel.tsx';
 import { UciPlanDialog } from '../openwrt/UciPlanDialog.tsx';
@@ -153,7 +154,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   const live = useLive(
     host.id,
     liveSeconds,
-    readable && ['rules', 'logs', 'forwards', 'uci-rules', 'redirects'].includes(tab) && ruleset.model !== undefined && loginLost === undefined,
+    readable && ['rules', 'logs', 'forwards', 'uci-rules', 'redirects', 'nat'].includes(tab) && ruleset.model !== undefined && loginLost === undefined,
   );
   // While hopdeck applies a change itself, the host differing is expected.
   const changed =
@@ -302,6 +303,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                     uciTab('zones', 'tabs.zones', () => <ZonesPanel state={uciFirewall} />),
                     uciTab('uci-rules', 'tabs.uciRules', () => <TrafficRulesPanel state={uciFirewall} model={ruleset.model} live={live.info} />),
                     uciTab('redirects', 'tabs.forwards', () => <RedirectsPanel hostId={host.id} state={uciFirewall} model={ruleset.model} live={live.info} />),
+                    uciTab('nat', 'tabs.nat', () => <NatPanel state={uciFirewall} model={ruleset.model} live={live.info} />),
                     uciTab('ipsets', 'tabs.ipsets', () => <IpSetsPanel state={uciFirewall} />),
                     uciTab('includes', 'tabs.includes', () => <IncludesPanel hostId={host.id} state={uciFirewall} model={ruleset.model} />),
                     uciTab('uci-history', 'tabs.history', () => (

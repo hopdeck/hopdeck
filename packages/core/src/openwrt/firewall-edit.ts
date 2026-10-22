@@ -2,7 +2,17 @@
 // Copyright (C) 2026 Mateusz T (Tenir)
 
 import { isIpAddress } from '../firewall/port-forward.ts';
-import { INCLUDE_DIRECTORY, INCLUDE_SECTION_PREFIX, type FirewallInclude, type FirewallIpSet, type FirewallRedirect, type FirewallRule, type FirewallZone, type OpenWrtFirewall } from './firewall.ts';
+import {
+  INCLUDE_DIRECTORY,
+  INCLUDE_SECTION_PREFIX,
+  type FirewallInclude,
+  type FirewallIpSet,
+  type FirewallNat,
+  type FirewallRedirect,
+  type FirewallRule,
+  type FirewallZone,
+  type OpenWrtFirewall,
+} from './firewall.ts';
 import { sectionChanges } from './uci-edit.ts';
 import type { UciChange, UciValue } from './uci.ts';
 
@@ -14,6 +24,8 @@ import type { UciChange, UciValue } from './uci.ts';
 
 export const ZONE_POLICIES = ['ACCEPT', 'REJECT', 'DROP'] as const;
 export const RULE_TARGETS = ['ACCEPT', 'REJECT', 'DROP'] as const;
+/** What a NAT rule does: the address of the interface the packet leaves by, one given, or none. */
+export const NAT_TARGETS = ['MASQUERADE', 'SNAT', 'ACCEPT'] as const;
 /** Protocols with ports. */
 const PORT_PROTOCOLS = ['tcp', 'udp', 'sctp', 'udplite', 'dccp'];
 
@@ -70,6 +82,29 @@ export interface RedirectForm {
   destPort: string;
   /** NAT loopback (hairpin). */
   reflection: boolean;
+}
+
+/** A NAT rule: what leaves through a zone, and what source it gets. */
+export interface NatForm {
+  name: string;
+  enabled: boolean;
+  /** "" leaves it to fw4: IPv4, or IPv6 when the addresses are; "any" for both. */
+  family: '' | 'any' | 'ipv4' | 'ipv6';
+  /** None means all, as fw4 takes it. */
+  protocols: string[];
+  /** The zone the packets leave through; "*" or "" for any. */
+  src: string;
+  /** An interface they leave by; "" for any. */
+  device: string;
+  srcIp: string;
+  srcPort: string;
+  destIp: string;
+  destPort: string;
+  /** One of NAT_TARGETS, or what the rule has. */
+  target: string;
+  /** For SNAT, the address and the port written as the source; one of them at least. */
+  snatIp: string;
+  snatPort: string;
 }
 
 export function zoneForm(firewall: OpenWrtFirewall, zone: FirewallZone | undefined): ZoneForm {
@@ -130,6 +165,29 @@ export function redirectForm(redirect: FirewallRedirect | undefined, zones: read
   };
 }
 
+export function natForm(nat: FirewallNat | undefined, zones: readonly string[]): NatForm {
+  if (nat === undefined) {
+    const src = zones.includes('wan') ? 'wan' : (zones[0] ?? '*');
+    return { name: '', enabled: true, family: '', protocols: [], src, device: '', srcIp: '', srcPort: '', destIp: '', destPort: '', target: 'MASQUERADE', snatIp: '', snatPort: '' };
+  }
+  const family = nat.family === 'any' || nat.family === 'ipv4' || nat.family === 'ipv6' ? nat.family : '';
+  return {
+    name: nat.name ?? '',
+    enabled: nat.enabled,
+    family,
+    protocols: nat.protocols,
+    src: nat.src ?? '',
+    device: nat.device ?? '',
+    srcIp: nat.srcIp ?? '',
+    srcPort: nat.srcPort ?? '',
+    destIp: nat.destIp ?? '',
+    destPort: nat.destPort ?? '',
+    target: nat.target,
+    snatIp: nat.snatIp ?? '',
+    snatPort: nat.snatPort ?? '',
+  };
+}
+
 /** The zone's own options, its forwardings, and for a new name the rules, forwardings and port forwards that name it. */
 export function zoneChanges(firewall: OpenWrtFirewall, zone: FirewallZone | undefined, form: ZoneForm, ref: string): UciChange[] {
   const changes = sectionChanges(
@@ -163,14 +221,15 @@ export function zoneChanges(firewall: OpenWrtFirewall, zone: FirewallZone | unde
 }
 
 /**
- * Removing a zone takes its forwardings along; rules and port forwards that
- * name it would be left pointing nowhere, so they are named instead and the
- * zone stays until they are changed or removed.
+ * Removing a zone takes its forwardings along; rules, port forwards and NAT
+ * rules that name it would be left pointing nowhere, so they are named
+ * instead and the zone stays until they are changed or removed.
  */
 export function deleteZoneChanges(firewall: OpenWrtFirewall, zone: FirewallZone): { changes: UciChange[]; usedBy: string[] } {
   const usedBy = [
     ...firewall.rules.filter((rule) => rule.src === zone.name || rule.dest === zone.name).map((rule) => rule.name ?? rule.section.name),
     ...firewall.redirects.filter((redirect) => redirect.src === zone.name || redirect.dest === zone.name).map((redirect) => redirect.name ?? redirect.section.name),
+    ...firewall.nats.filter((nat) => nat.src === zone.name).map((nat) => nat.name ?? nat.section.name),
   ];
   if (usedBy.length > 0) return { changes: [], usedBy };
   const forwardings = firewall.forwardings.filter((forwarding) => forwarding.src === zone.name || forwarding.dest === zone.name);
@@ -229,10 +288,57 @@ export function redirectChanges(redirect: FirewallRedirect | undefined, form: Re
   );
 }
 
+export function natChanges(nat: FirewallNat | undefined, form: NatForm, ref: string): UciChange[] {
+  const options = nat?.section.options ?? {};
+  const text = (value: string) => (value.trim() === '' ? undefined : value.trim());
+  const snat = form.target === 'SNAT';
+  return sectionChanges(
+    nat?.section,
+    'nat',
+    {
+      name: text(form.name),
+      enabled: form.enabled ? undefined : '0',
+      family: form.family === '' ? undefined : form.family,
+      proto: form.protocols.length > 0 ? form.protocols : undefined,
+      src: form.src === '' ? undefined : form.src,
+      device: text(form.device),
+      src_ip: text(form.srcIp),
+      src_port: text(form.srcPort),
+      dest_ip: text(form.destIp),
+      dest_port: text(form.destPort),
+      // fw4 masquerades when a rule does not say; one that leaves it out keeps leaving it out.
+      target: nat !== undefined && !('target' in options) && form.target === 'MASQUERADE' ? undefined : form.target,
+      snat_ip: snat ? text(form.snatIp) : undefined,
+      snat_port: snat ? text(form.snatPort) : undefined,
+    },
+    ref,
+  );
+}
+
 /** What is wrong where, for the form to say in its language at that field. */
 export interface UciFormProblem {
   field: string;
-  code: 'zone-name' | 'zone-taken' | 'required' | 'ports' | 'ports-protocol' | 'address' | 'icmp-protocol' | 'protocols' | 'family' | 'set-name' | 'set-taken' | 'set-unknown' | 'entry' | 'include-name' | 'include-taken' | 'content';
+  code:
+    | 'zone-name'
+    | 'zone-taken'
+    | 'required'
+    | 'ports'
+    | 'ports-protocol'
+    | 'ports-tcpudp'
+    | 'address'
+    | 'icmp-protocol'
+    | 'protocols'
+    | 'family'
+    | 'families'
+    | 'device'
+    | 'snat-needs'
+    | 'set-name'
+    | 'set-taken'
+    | 'set-unknown'
+    | 'entry'
+    | 'include-name'
+    | 'include-taken'
+    | 'content';
   value?: string;
 }
 
@@ -278,6 +384,39 @@ export function redirectProblems(form: RedirectForm): UciFormProblem[] {
   else if (!isIpAddress(form.destIp.trim())) problems.push({ field: 'destIp', code: 'address', value: form.destIp });
   const wrong = form.srcIps.find((value) => !validAddress(value));
   if (wrong !== undefined) problems.push({ field: 'srcIps', code: 'address', value: wrong });
+  return problems;
+}
+
+/** What fw4 would skip a NAT rule for, with a warning only it sees, and what it could not load. */
+export function natProblems(form: NatForm): UciFormProblem[] {
+  const problems: UciFormProblem[] = [];
+  const snat = form.target === 'SNAT';
+  // fw4 puts ports on the TCP and UDP of a rule, and takes "all" with ports as TCP and UDP.
+  const ports = form.protocols.length === 0 || form.protocols.every((protocol) => protocol === 'tcp' || protocol === 'udp' || protocol === 'all');
+  for (const field of ['srcPort', 'destPort', 'snatPort'] as const) {
+    const value = form[field].trim();
+    if (value === '' || (field === 'snatPort' && !snat)) continue;
+    if (!validPorts(value) || (field === 'snatPort' && /\s/.test(value))) problems.push({ field, code: 'ports', value });
+    else if (!ports) problems.push({ field, code: 'ports-tcpudp' });
+  }
+  const addresses: string[] = [];
+  for (const field of ['srcIp', 'destIp'] as const) {
+    const value = form[field].trim();
+    if (value === '') continue;
+    if (!validAddress(value)) problems.push({ field, code: 'address', value });
+    else addresses.push(value);
+  }
+  if (snat) {
+    const value = form.snatIp.trim();
+    if (value !== '' && !isIpAddress(value)) problems.push({ field: 'snatIp', code: 'address', value });
+    else if (value !== '') addresses.push(value);
+    if (value === '' && form.snatPort.trim() === '') problems.push({ field: 'snatIp', code: 'snat-needs' });
+  }
+  const families = new Set(addresses.map((address) => (address.includes(':') ? 'ipv6' : 'ipv4')));
+  if (families.size > 1) problems.push({ field: 'family', code: 'families' });
+  else if ((form.family === 'ipv4' || form.family === 'ipv6') && families.size === 1 && !families.has(form.family)) problems.push({ field: 'family', code: 'family' });
+  // An interface's name, which fw4 puts in quotes: up to 15 characters, as Linux takes them.
+  if (form.device.trim() !== '' && !/^[^\s"'\\]{1,15}$/.test(form.device.trim())) problems.push({ field: 'device', code: 'device', value: form.device });
   return problems;
 }
 
@@ -456,13 +595,13 @@ function validEntry(kind: string, entry: string, family: 'ipv4' | 'ipv6'): boole
   }
 }
 
-/** Rules, forwardings and port forwards naming a renamed zone, renamed with it. */
+/** Rules, forwardings, port forwards and NAT rules naming a renamed zone, renamed with it. */
 function renameZone(firewall: OpenWrtFirewall, from: string, to: string): UciChange[] {
   const changes: UciChange[] = [];
-  for (const part of [...firewall.forwardings, ...firewall.rules, ...firewall.redirects]) {
+  for (const part of [...firewall.forwardings, ...firewall.rules, ...firewall.redirects, ...firewall.nats]) {
     const values: Record<string, UciValue> = {};
     if (part.src === from) values['src'] = to;
-    if (part.dest === from) values['dest'] = to;
+    if ('dest' in part && part.dest === from) values['dest'] = to;
     if (Object.keys(values).length > 0) changes.push({ kind: 'set', section: part.section.name, values });
   }
   return changes;

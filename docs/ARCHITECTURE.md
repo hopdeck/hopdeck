@@ -764,7 +764,10 @@ What hopdeck changes there is UCI's own, and LuCI shows it.
 
 - **Scope:** zones and the forwardings between them, traffic rules
   (`rule`), port forwards (`redirect`; hairpin is its `reflection`,
-  masquerade a setting of the zone) and IP sets (`ipset`, which fw4 declares
+  masquerade a setting of the zone), NAT rules (`nat`: in the srcnat chain
+  of the zone a packet leaves through, before the zone's masquerade;
+  MASQUERADE, SNAT to an address or port, or ACCEPT to keep the source; an
+  SNAT `redirect` of fw3's is shown only) and IP sets (`ipset`, which fw4 declares
   as named sets; a rule's `ipset` matches one, "!name" its complement), and
   nftables includes, below.
   The nft view of `inet fw4` stays read-only; fw4 names each rule it makes
@@ -790,13 +793,14 @@ What hopdeck changes there is UCI's own, and LuCI shows it.
   a changed table does on other hosts.
 - **The panel** ([`web/src/openwrt`](../packages/web/src/openwrt)) shows
   Zones (networks, policies, masquerading, the zones each forwards to),
-  Traffic rules and Port forwards, and the nftables fw4 made, read-only.
+  Traffic rules, Port forwards and NAT rules, and the nftables fw4 made,
+  read-only.
   Edits from every tab collect as pending changes, LuCI's unsaved changes:
   one per section, a section added and removed again leaves nothing, and an
   edit back to the router's value drops out (`core/openwrt/uci-edit.ts`).
   The tabs show the configuration with them; one review lists them all.
   Forms keep every option they do not show; renaming a zone renames it
-  where rules, port forwards and forwardings name it.
+  where rules, port forwards, NAT rules and forwardings name it.
 - **Names of anonymous sections** (`cfg0592bd`) come from their place in the
   file, so after a section is added or removed elsewhere, the same name may
   mean another section. The panel reads the configuration with its file's
@@ -806,11 +810,12 @@ What hopdeck changes there is UCI's own, and LuCI shows it.
 - **Rule order** is what fw4 follows. rpcd's `uci order` puts each section
   named at an absolute place in the file, so hopdeck names every section,
   with the rules in their new order in the rules' own places: only the rules
-  trade places. Rows are dragged by a handle, or moved with arrows.
+  trade places. Rows are dragged by a handle, or moved with arrows. NAT
+  rules are ordered the same way.
 - **Counters:** fw4 names each rule after its section (`!fw4: NAME`, or
-  `@rule[3]` without a name), so the Traffic rules and Port forwards tabs show
-  the sum of what fw4's rules of a section counted (port forwards in the
-  dstnat chains).
+  `@rule[3]` without a name), so the Traffic rules, Port forwards and NAT
+  tabs show the sum of what fw4's rules of a section counted (port forwards
+  in the dstnat chains, NAT rules in the srcnat ones).
 - **Full nftables power there** comes from fw4's includes (the nftables
   files tab): files hopdeck writes in `/etc/hopdeck/fw4`, `NAME.VERSION.nft`,
   that a named section `hopdeck_NAME` (`config include`, type `nftables`,

@@ -15,9 +15,10 @@ export interface OpenWrtFirewall {
   forwardings: FirewallForwarding[];
   rules: FirewallRule[];
   redirects: FirewallRedirect[];
+  nats: FirewallNat[];
   ipsets: FirewallIpSet[];
   includes: FirewallInclude[];
-  /** Sections of other types (nat, ...), shown as they are. */
+  /** Sections of other types, shown as they are. */
   other: UciSection[];
 }
 
@@ -129,6 +130,35 @@ export interface FirewallRedirect {
 }
 
 /**
+ * A NAT rule, as LuCI's NAT Rules are: what leaves through a zone gets the
+ * address of the interface it leaves by (MASQUERADE, fw4's default), an
+ * address or port given (SNAT), or keeps its own (ACCEPT). fw4 follows them
+ * in their order, before the zone's own masquerading.
+ */
+export interface FirewallNat {
+  section: UciSection;
+  name: string | undefined;
+  /** The zone the packets leave through; "*" or nothing for any. */
+  src: string | undefined;
+  /** An interface they leave by. */
+  device: string | undefined;
+  /** None for all, as fw4 takes it. */
+  protocols: string[];
+  srcIp: string | undefined;
+  srcPort: string | undefined;
+  destIp: string | undefined;
+  destPort: string | undefined;
+  /** MASQUERADE, SNAT or ACCEPT. */
+  target: string;
+  /** For SNAT: the source address and port it writes. */
+  snatIp: string | undefined;
+  snatPort: string | undefined;
+  /** ipv4, ipv6 or any; with none, fw4 takes IPv4, or IPv6 when the addresses are. */
+  family: string | undefined;
+  enabled: boolean;
+}
+
+/**
  * A named set fw4 declares in its table, for rules to match against: of
  * addresses, networks, ports or MAC addresses, from the source or the
  * destination of a packet.
@@ -149,7 +179,7 @@ export interface FirewallIpSet {
 
 /** The firewall's sections, typed; sections fw4 would ignore keep their place in `other`. */
 export function openwrtFirewall(config: UciConfig): OpenWrtFirewall {
-  const firewall: OpenWrtFirewall = { defaults: undefined, zones: [], forwardings: [], rules: [], redirects: [], ipsets: [], includes: [], other: [] };
+  const firewall: OpenWrtFirewall = { defaults: undefined, zones: [], forwardings: [], rules: [], redirects: [], nats: [], ipsets: [], includes: [], other: [] };
   for (const section of config.sections) {
     const option = (name: string): string | undefined => {
       const value: UciValue | undefined = section.options[name];
@@ -237,6 +267,24 @@ export function openwrtFirewall(config: UciConfig): OpenWrtFirewall {
           destPort: option('dest_port'),
           protocols: uciList(section.options['proto']),
           reflection: uciBoolean(section.options['reflection'], true),
+          enabled,
+        });
+        break;
+      case 'nat':
+        firewall.nats.push({
+          section,
+          name: option('name'),
+          src: option('src'),
+          device: option('device'),
+          protocols: uciList(section.options['proto']),
+          srcIp: option('src_ip'),
+          srcPort: option('src_port'),
+          destIp: option('dest_ip'),
+          destPort: option('dest_port'),
+          target: (option('target') ?? 'MASQUERADE').toUpperCase(),
+          snatIp: option('snat_ip'),
+          snatPort: option('snat_port'),
+          family: option('family'),
           enabled,
         });
         break;

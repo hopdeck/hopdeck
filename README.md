@@ -25,8 +25,9 @@ only easier:
 
 - OpenWrt routers through UCI, as LuCI changes them, so LuCI shows every
   change: zones, traffic rules (in the order fw4 follows them, dragged into
-  another, with fw4's counts), port forwards, IP sets, and nftables files of
-  your own that fw4 includes where you say. Changes from every tab
+  another, with fw4's counts), port forwards, NAT rules (masquerading, SNAT
+  to an address or port, or none, in their order too), IP sets, and
+  nftables files of your own that fw4 includes where you say. Changes from every tab
   collect for one review, and rpcd rolls them back unless you keep them.
 
 Planned: more network tools, such as a topology view.

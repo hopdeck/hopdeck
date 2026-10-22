@@ -26,6 +26,11 @@
 - The port forward form on OpenWrt offers the hosts the router knows as the
   internal address: its DHCP leases and the fixed addresses of
   /etc/config/dhcp.
+- NAT rules on OpenWrt, LuCI's NAT Rules: what leaves through a zone gets
+  the address of the interface it leaves by, an address or port you give
+  (SNAT), or keeps its own, before the zone's masquerading. In the order fw4
+  follows them, dragged into another, with fw4's counts; the form checks
+  what fw4 would otherwise skip with a warning only it sees.
 
 ### Changed
 

@@ -33,7 +33,7 @@ describe.skipIf(testHost?.platform !== 'openwrt')('UCI plans on the OpenWrt test
   const inConfig = async (name: string) => (await sh(`grep -c "'${name}'" /etc/config/firewall || true`)) !== '0';
   /** Removes what a failed run left: test rules, through UCI as everything else, and sessions with test changes staged. */
   const removeTestRules = () =>
-    sh(`for s in $(uci show firewall | sed -n "s/^firewall\\.\\([^.]*\\)\\.name='hd-test-.*/\\1/p"); do uci delete firewall.$s; done; uci commit firewall; /sbin/fw4 reload >/dev/null 2>&1
+    sh(`for s in $(uci -X show firewall | sed -n "s/^firewall\\.\\([^.]*\\)\\.name='hd-test-.*/\\1/p"); do uci delete firewall.$s; done; uci commit firewall; /sbin/fw4 reload >/dev/null 2>&1
       for s in $(uci show firewall | sed -n "s/^firewall\\.\\(hopdeck_hd[a-z0-9_]*\\)=include$/\\1/p"); do uci delete firewall.$s; done; uci commit firewall; rm -f /etc/hopdeck/fw4/hd*.nft; /sbin/fw4 reload >/dev/null 2>&1
       for d in /var/run/rpcd/uci-*; do grep -q hd-test "$d"/firewall 2>/dev/null && ubus call session destroy "{\\"ubus_rpc_session\\":\\"\${d##*/uci-}\\"}"; done; true`);
 
@@ -104,6 +104,22 @@ describe.skipIf(testHost?.platform !== 'openwrt')('UCI plans on the OpenWrt test
     // fw4 follows UCI's order: the rule comes before the others from wan.
     const input = await sh("nft list chain inet fw4 input_wan | grep -o '!fw4: [A-Za-z-]*' | head -n 1");
     expect(input).toBe('!fw4: hd-test-first');
+  });
+
+  it('writes NAT rules, which fw4 follows in their order before the zone masquerades', async () => {
+    const plan = await prepare(target, 'firewall', [
+      { kind: 'add', type: 'nat', values: { name: 'hd-test-snat', src: 'wan', proto: 'tcp', src_ip: '192.168.1.20', target: 'SNAT', snat_ip: '192.0.2.10', snat_port: '40000-40999' } },
+      { kind: 'add', type: 'nat', values: { name: 'hd-test-keep', src: 'wan', dest_ip: '10.8.0.0/16', target: 'ACCEPT' } },
+    ]);
+    expect(plan.validation).toEqual({ ok: true, message: '' });
+    expect(plan.staged[0]).toMatchObject({ kind: 'add', option: 'nat', label: 'nat "hd-test-snat"' });
+    await plans.apply(plan.id, target);
+    await plans.confirm(plan.id, target);
+    const chain = await sh('nft list chain inet fw4 srcnat_wan');
+    expect(chain).toMatch(/ip saddr 192\.168\.1\.20 counter packets \d+ bytes \d+ snat ip to 192\.0\.2\.10:40000-40999 comment "!fw4: hd-test-snat"/);
+    expect(chain).toMatch(/ip daddr 10\.8\.0\.0\/16 counter packets \d+ bytes \d+ accept comment "!fw4: hd-test-keep"/);
+    const order = [...chain.matchAll(/comment "!fw4: ([^"]+)"/g)].map((match) => match[1]!);
+    expect(order.filter((name) => name.startsWith('hd-test-') || name.startsWith('Masquerade'))).toEqual(['hd-test-snat', 'hd-test-keep', 'Masquerade IPv4 wan traffic']);
   });
 
   it('is rolled back by rpcd when nobody confirms in time', async () => {
@@ -205,7 +221,7 @@ describe.skipIf(testHost?.platform !== 'openwrt')('UCI plans on the OpenWrt test
 
     const undone = await prepare(target, 'firewall', [add], { files: [{ path, content: 'set hdgone { type ipv4_addr; }\n' }] });
     await plans.apply(undone.id, target);
-    expect(await sh('nft list sets inet fw4')).toContain('hdgone');
+    expect(await sh('nft list table inet fw4')).toContain('set hdgone');
     await plans.rollback(undone.id, target);
     expect(await sh(`test -f ${path} && echo there || echo gone`)).toBe('gone');
 
