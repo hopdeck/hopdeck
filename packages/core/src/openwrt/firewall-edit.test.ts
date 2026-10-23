@@ -109,6 +109,26 @@ describe('rules', () => {
     ]);
   });
 
+  it('logs with "1", keeping a prefix of the rule’s own, and a "0" while it stays off', () => {
+    expect(trafficRuleChanges(ping, { ...trafficRuleForm(ping), log: true }, 'new-1')).toEqual([{ kind: 'set', section: ping.section.name, values: { log: '1' } }]);
+    const logging = parseUciGet(
+      'firewall',
+      JSON.stringify({
+        values: {
+          own: { '.anonymous': true, '.type': 'rule', '.name': 'cfg01', '.index': 0, name: 'SSH', log: 'ssh in: ' },
+          off: { '.anonymous': true, '.type': 'rule', '.name': 'cfg02', '.index': 1, name: 'Quiet', log: '0' },
+        },
+      }),
+    );
+    const [own, off] = openwrtFirewall(logging).rules;
+    expect(trafficRuleForm(own).log).toBe(true);
+    expect(trafficRuleChanges(own, trafficRuleForm(own), 'new-1')).toEqual([]);
+    expect(trafficRuleChanges(own, { ...trafficRuleForm(own), log: false }, 'new-1')).toEqual([{ kind: 'unset', section: 'cfg01', options: ['log'] }]);
+    expect(trafficRuleForm(off).log).toBe(false);
+    expect(trafficRuleChanges(off, trafficRuleForm(off), 'new-1')).toEqual([]);
+    expect(trafficRuleChanges(off, { ...trafficRuleForm(off), log: true }, 'new-1')).toEqual([{ kind: 'set', section: 'cfg02', values: { log: '1' } }]);
+  });
+
   it('says what is wrong at each field', () => {
     const form = { ...trafficRuleForm(undefined), destPort: '22 1000-2000', srcIps: ['192.0.2.0/24', '!10.0.0.1'] };
     expect(trafficRuleProblems(form)).toEqual([]);

@@ -87,7 +87,7 @@
 
 .summary {
   display: grid;
-  grid-template-columns: 8.5em 3.5em 6.5em minmax(16em, 1fr) minmax(6em, auto) minmax(10em, auto);
+  grid-template-columns: 8.5em 3.5em 9em minmax(16em, 1fr) minmax(6em, auto) minmax(10em, auto);
   align-items: center;
   gap: 4px 10px;
   padding: 4px 10px;
@@ -128,6 +128,10 @@
   font-weight: 700;
   line-height: 16px;
   white-space: nowrap;
+  /* A long one, such as a jump, ends in "…"; its title has it whole. */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .verdict:empty {

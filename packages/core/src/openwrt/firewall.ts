@@ -177,6 +177,19 @@ export interface FirewallIpSet {
   enabled: boolean;
 }
 
+/**
+ * The name fw4 gives a section's rules, in their comments ("!fw4: NAME") and
+ * log prefixes: its name option, else a named section's own name, else its
+ * place among the sections of its type, as `@rule[3]`.
+ */
+export function fw4Name(section: UciSection, sections: readonly UciSection[]): string {
+  const name = section.options['name'];
+  if (typeof name === 'string' && name !== '') return name;
+  if (!section.anonymous) return section.name;
+  const nth = sections.filter((other) => other.type === section.type && other.index < section.index).length;
+  return `@${section.type}[${nth}]`;
+}
+
 /** The firewall's sections, typed; sections fw4 would ignore keep their place in `other`. */
 export function openwrtFirewall(config: UciConfig): OpenWrtFirewall {
   const firewall: OpenWrtFirewall = { defaults: undefined, zones: [], forwardings: [], rules: [], redirects: [], nats: [], ipsets: [], includes: [], other: [] };

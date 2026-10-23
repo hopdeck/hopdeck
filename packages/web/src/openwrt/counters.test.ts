@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import type { UciSection } from '@hopdeck/core';
 import { describe, expect, it } from 'vitest';
 import { buildModel } from '../firewall/ruleset/model.ts';
-import { fw4Counters, fw4Name } from './counters.ts';
+import { fw4Counters } from './counters.ts';
 
 const rule = (chain: string, handle: number, comment: string, packets: number) => ({
   rule: { family: 'inet', table: 'fw4', chain, handle, comment, expr: [{ counter: { packets, bytes: packets * 100 } }, { accept: null }] },
@@ -47,17 +46,5 @@ describe('fw4Counters', () => {
       rates: { rules: { [JSON.stringify(['inet', 'fw4', 10])]: { packets: 3, bytes: 300 } }, counters: {} },
     };
     expect(fw4Counters(model, live, 'rule').get('Allow-Ping')).toEqual({ packets: 52, bytes: 5200, rate: 3 });
-  });
-});
-
-describe('fw4Name', () => {
-  it('is the section’s name, or its place among its type', () => {
-    const sections: UciSection[] = [
-      { name: 'cfg01', type: 'zone', anonymous: true, index: 0, options: { name: 'lan' } },
-      { name: 'cfg02', type: 'rule', anonymous: true, index: 1, options: { name: 'SSH' } },
-      { name: 'cfg03', type: 'rule', anonymous: true, index: 2, options: {} },
-    ];
-    expect(fw4Name(sections[1]!, sections)).toBe('SSH');
-    expect(fw4Name(sections[2]!, sections)).toBe('@rule[1]');
   });
 });

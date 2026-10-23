@@ -31,6 +31,10 @@
   (SNAT), or keeps its own, before the zone's masquerading. In the order fw4
   follows them, dragged into another, with fw4's counts; the form checks
   what fw4 would otherwise skip with a warning only it sees.
+- On OpenWrt the Logs tab names where a line came from in UCI, and opens its
+  tab: the zone and policy for what a zone with logging turns away ("reject
+  wan in"), or the traffic rule, port forward or NAT rule that logs it. Those
+  three forms can now turn logging on.
 
 ### Changed
 
@@ -44,6 +48,8 @@
 - A new panel link pasted into a tab that has the panel open already loads
   the panel with its token, instead of going on with the old one and
   refusing every request.
+- Long verdicts in the Logs tab, such as "policy drop", ran into the packet
+  beside them.
 
 ## 0.4.0 (2026-10-18)
 

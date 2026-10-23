@@ -13,8 +13,9 @@ import {
   type FirewallZone,
   type OpenWrtFirewall,
 } from './firewall.ts';
+import { fw4Flag } from './log-origin.ts';
 import { sectionChanges } from './uci-edit.ts';
-import type { UciChange, UciValue } from './uci.ts';
+import type { UciChange, UciSection, UciValue } from './uci.ts';
 
 /**
  * The forms of the OpenWrt firewall and the UCI options they write, as LuCI
@@ -63,6 +64,8 @@ export interface TrafficRuleForm {
   ipset: string;
   /** "" leaves it to fw4, for a rule that does not say. */
   target: string;
+  /** Logs what it matches to the kernel log, as "NAME: ". */
+  log: boolean;
 }
 
 /** A port forward: DNAT from a zone, usually wan, to an address in another. */
@@ -82,6 +85,7 @@ export interface RedirectForm {
   destPort: string;
   /** NAT loopback (hairpin). */
   reflection: boolean;
+  log: boolean;
 }
 
 /** A NAT rule: what leaves through a zone, and what source it gets. */
@@ -105,6 +109,7 @@ export interface NatForm {
   /** For SNAT, the address and the port written as the source; one of them at least. */
   snatIp: string;
   snatPort: string;
+  log: boolean;
 }
 
 export function zoneForm(firewall: OpenWrtFirewall, zone: FirewallZone | undefined): ZoneForm {
@@ -126,7 +131,7 @@ export function zoneForm(firewall: OpenWrtFirewall, zone: FirewallZone | undefin
 
 export function trafficRuleForm(rule: FirewallRule | undefined): TrafficRuleForm {
   if (rule === undefined) {
-    return { name: '', enabled: true, family: '', protocols: ['tcp'], src: 'wan', srcIps: [], srcPort: '', dest: '', destIps: [], destPort: '', icmpTypes: [], ipset: '', target: 'ACCEPT' };
+    return { name: '', enabled: true, family: '', protocols: ['tcp'], src: 'wan', srcIps: [], srcPort: '', dest: '', destIps: [], destPort: '', icmpTypes: [], ipset: '', target: 'ACCEPT', log: false };
   }
   const family = rule.family === 'ipv4' || rule.family === 'ipv6' ? rule.family : '';
   return {
@@ -143,13 +148,14 @@ export function trafficRuleForm(rule: FirewallRule | undefined): TrafficRuleForm
     icmpTypes: rule.icmpTypes,
     ipset: rule.ipset ?? '',
     target: rule.target ?? '',
+    log: logs(rule.section),
   };
 }
 
 export function redirectForm(redirect: FirewallRedirect | undefined, zones: readonly string[]): RedirectForm {
   if (redirect === undefined) {
     const inside = zones.find((zone) => zone === 'lan') ?? zones.find((zone) => zone !== 'wan') ?? '';
-    return { name: '', enabled: true, protocols: ['tcp'], src: zones.includes('wan') ? 'wan' : (zones[0] ?? ''), srcDport: '', srcIps: [], dest: inside, destIp: '', destPort: '', reflection: true };
+    return { name: '', enabled: true, protocols: ['tcp'], src: zones.includes('wan') ? 'wan' : (zones[0] ?? ''), srcDport: '', srcIps: [], dest: inside, destIp: '', destPort: '', reflection: true, log: false };
   }
   return {
     name: redirect.name ?? '',
@@ -162,13 +168,14 @@ export function redirectForm(redirect: FirewallRedirect | undefined, zones: read
     destIp: redirect.destIp ?? '',
     destPort: redirect.destPort ?? '',
     reflection: redirect.reflection,
+    log: logs(redirect.section),
   };
 }
 
 export function natForm(nat: FirewallNat | undefined, zones: readonly string[]): NatForm {
   if (nat === undefined) {
     const src = zones.includes('wan') ? 'wan' : (zones[0] ?? '*');
-    return { name: '', enabled: true, family: '', protocols: [], src, device: '', srcIp: '', srcPort: '', destIp: '', destPort: '', target: 'MASQUERADE', snatIp: '', snatPort: '' };
+    return { name: '', enabled: true, family: '', protocols: [], src, device: '', srcIp: '', srcPort: '', destIp: '', destPort: '', target: 'MASQUERADE', snatIp: '', snatPort: '', log: false };
   }
   const family = nat.family === 'any' || nat.family === 'ipv4' || nat.family === 'ipv6' ? nat.family : '';
   return {
@@ -185,6 +192,7 @@ export function natForm(nat: FirewallNat | undefined, zones: readonly string[]):
     target: nat.target,
     snatIp: nat.snatIp ?? '',
     snatPort: nat.snatPort ?? '',
+    log: logs(nat.section),
   };
 }
 
@@ -258,6 +266,7 @@ export function trafficRuleChanges(rule: FirewallRule | undefined, form: Traffic
       icmp_type: icmp && form.icmpTypes.length > 0 ? form.icmpTypes : undefined,
       ipset: form.ipset.trim() === '' ? undefined : form.ipset.trim(),
       target: form.target === '' ? undefined : form.target,
+      log: logOption(rule?.section, form.log),
     },
     ref,
   );
@@ -283,6 +292,7 @@ export function redirectChanges(redirect: FirewallRedirect | undefined, form: Re
       dest_ip: form.destIp.trim() === '' ? undefined : form.destIp.trim(),
       dest_port: form.destPort.trim() === '' ? undefined : form.destPort.trim(),
       reflection: form.reflection ? undefined : '0',
+      log: logOption(redirect?.section, form.log),
     },
     ref,
   );
@@ -310,6 +320,7 @@ export function natChanges(nat: FirewallNat | undefined, form: NatForm, ref: str
       target: nat !== undefined && !('target' in options) && form.target === 'MASQUERADE' ? undefined : form.target,
       snat_ip: snat ? text(form.snatIp) : undefined,
       snat_port: snat ? text(form.snatPort) : undefined,
+      log: logOption(nat?.section, form.log),
     },
     ref,
   );
@@ -625,6 +636,20 @@ function validAddress(text: string): boolean {
   if (prefix === undefined) return true;
   const bits = Number(prefix);
   return /^\d{1,3}$/.test(prefix) && bits <= (address.includes(':') ? 128 : 32);
+}
+
+/** Whether a section logs: its `log` is on, or a prefix of its own. */
+function logs(section: UciSection): boolean {
+  const log = section.options['log'];
+  return typeof log === 'string' && fw4Flag(log) !== false;
+}
+
+/** The `log` a form writes: "1", or a section's own prefix, which stays; a section that says it does not keep saying so. */
+function logOption(section: UciSection | undefined, on: boolean): string | undefined {
+  const log = section?.options['log'];
+  const own = typeof log === 'string' ? log : undefined;
+  if (on) return own !== undefined && fw4Flag(own) !== false ? own : '1';
+  return own !== undefined && fw4Flag(own) === false ? own : undefined;
 }
 
 function flag(on: boolean): string | undefined {

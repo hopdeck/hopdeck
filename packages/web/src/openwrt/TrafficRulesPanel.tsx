@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import { ipSetReference, RULE_TARGETS, trafficRuleChanges, trafficRuleForm, trafficRuleProblems, type FirewallRule, type TrafficRuleForm } from '@hopdeck/core';
+import { fw4Name, ipSetReference, RULE_TARGETS, trafficRuleChanges, trafficRuleForm, trafficRuleProblems, type FirewallRule, type TrafficRuleForm } from '@hopdeck/core';
 import { useState } from 'react';
 import { EditIcon, PlusIcon, TrashIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n/I18nProvider.tsx';
@@ -9,7 +9,7 @@ import { Field } from '../firewall/edit/fields.tsx';
 import editor from '../firewall/edit/Editor.module.css';
 import type { RulesetModel } from '../firewall/ruleset/model.ts';
 import type { LiveInfo } from '../firewall/ruleset/useLive.ts';
-import { fw4Counters, fw4Name } from './counters.ts';
+import { fw4Counters } from './counters.ts';
 import { fieldErrors, FormDialog } from './FormDialog.tsx';
 import styles from './OpenWrt.module.css';
 import { useSectionOrder } from './useSectionOrder.tsx';
@@ -306,6 +306,10 @@ function TrafficRuleDialog({ state, rule, opening, onClose }: { state: UciFirewa
           ))}
         </select>
       </Field>
+      <label className={editor.option}>
+        <input type="checkbox" checked={form.log} onChange={(event) => edit('log', { log: event.target.checked })} />
+        {t('uci.log')}
+      </label>
     </FormDialog>
   );
 }

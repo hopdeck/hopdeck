@@ -657,6 +657,15 @@ The npm supply chain is a real risk for a tool with this access.
     one rule has it; the line then links to the rule's chain and shows what
     the rule did: its verdict, or the chain's policy for the last rule of a
     base chain. Lines of other tools, such as iptables' LOG, show unlinked.
+  - On OpenWrt a line links to the part of UCI that made its rule
+    (`core/openwrt/log-origin.ts`): fw4 logs what a zone with `log` turns
+    away as "reject wan in: " ("out", "forward"; "drop" for DROP), and what a
+    rule, port forward or NAT rule with `log 1` matches as "NAME: " (fw4's
+    name for the section), or with the prefix its `log` gives. The line then
+    names the zone and policy, or the section, and opens its tab; the forms
+    of rules, port forwards and NAT rules have the `log` flag. Not yet seen
+    on a router's own kernel log: the container logs nothing, so the tab was
+    tried with lines in the kernel's format written to logread.
   - The same packet again within a second (same prefix, interfaces,
     protocol, addresses, destination port, ICMP type, TCP flags; the source
     port may differ) is one line with its count.

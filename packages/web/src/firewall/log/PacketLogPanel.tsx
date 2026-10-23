@@ -24,6 +24,16 @@ interface PacketLogPanelProps {
   live: LiveInfo | undefined;
   /** Shows a chain in the rules tab. */
   onShowChain(anchor: string): void;
+  /** Where a prefix comes from in the host's own configuration, such as OpenWrt's UCI, when that is known. */
+  origin?: ((prefix: string) => PrefixOrigin | undefined) | undefined;
+}
+
+/** The part of a host's configuration that made a logging rule, with a way to show it. */
+export interface PrefixOrigin {
+  label: string;
+  /** What it does with the packet, where the rule that logs leaves that to another. */
+  verdict?: string;
+  onShow(): void;
 }
 
 const INTERVALS = [0, 2, 5, 15];
@@ -44,7 +54,7 @@ const SOURCES: Readonly<Record<PacketLogSource['kind'], MessageKey>> = {
  * count; each line names the rule its prefix belongs to, and what that rule
  * did with the packet. hopdeck keeps none of it: it reads the host's log.
  */
-export function PacketLogPanel({ hostId, active, model, live, onShowChain }: PacketLogPanelProps) {
+export function PacketLogPanel({ hostId, active, model, live, onShowChain, origin }: PacketLogPanelProps) {
   const { t, locale } = useI18n();
   const [seconds, setSeconds] = useState(5);
   const [filter, setFilter] = useState('');
@@ -127,9 +137,11 @@ export function PacketLogPanel({ hostId, active, model, live, onShowChain }: Pac
             <ul className={styles.ruleList}>
               {all.map((rule) => {
                 const count = counted(rule);
+                const from = origin?.(rule.prefix);
                 return (
                   <li key={ruleKey(rule.family, rule.table, rule.handle)} className={styles.ruleRow}>
                     <span className="mono">{rule.prefix === '' ? t('log.noPrefix') : JSON.stringify(rule.prefix)}</span>
+                    {from !== undefined && <OriginLink origin={from} />}
                     <ChainLink rule={rule} onShowChain={onShowChain} />
                     {rule.verdict !== undefined && <Verdict verdict={rule.verdict} />}
                     {count !== undefined && <span className={styles.count}>{t('log.counted', { count, formatted: count.toLocaleString(locale) })}</span>}
@@ -151,7 +163,7 @@ export function PacketLogPanel({ hostId, active, model, live, onShowChain }: Pac
       {shown.length > 0 && (
         <ol className={styles.entries}>
           {shown.map((group) => (
-            <Line key={group.key} group={group} rules={rules.get(group.entries[0]!.prefix)} onShowChain={onShowChain} />
+            <Line key={group.key} group={group} rules={rules.get(group.entries[0]!.prefix)} origin={origin?.(group.entries[0]!.prefix)} onShowChain={onShowChain} />
           ))}
         </ol>
       )}
@@ -160,11 +172,12 @@ export function PacketLogPanel({ hostId, active, model, live, onShowChain }: Pac
   );
 }
 
-function Line({ group, rules, onShowChain }: { group: PacketLogGroup; rules: LoggingRule[] | undefined; onShowChain(anchor: string): void }) {
+function Line({ group, rules, origin, onShowChain }: { group: PacketLogGroup; rules: LoggingRule[] | undefined; origin: PrefixOrigin | undefined; onShowChain(anchor: string): void }) {
   const { t, locale } = useI18n();
   const entry = group.entries[0]!;
   const count = group.entries.length;
   const rule = rules?.length === 1 ? rules[0] : undefined;
+  const verdict = origin?.verdict ?? rule?.verdict;
   return (
     <li className={styles.entry}>
       <details>
@@ -173,11 +186,13 @@ function Line({ group, rules, onShowChain }: { group: PacketLogGroup; rules: Log
           <span className={styles.times} title={t('log.timesHint', { count })}>
             {count > 1 ? `×${count}` : ''}
           </span>
-          {rule?.verdict !== undefined ? <Verdict verdict={rule.verdict} /> : <span className={styles.verdict} />}
+          {verdict !== undefined ? <Verdict verdict={verdict} /> : <span className={styles.verdict} />}
           <span className="mono">{packet(entry, count)}</span>
           <span className={styles.interfaces}>{interfaces(entry)}</span>
           <span className={styles.prefix}>
-            {rule !== undefined ? (
+            {origin !== undefined ? (
+              <OriginLink origin={origin} />
+            ) : rule !== undefined ? (
               <ChainLink rule={rule} onShowChain={onShowChain} />
             ) : (
               <span title={t(rules === undefined ? 'log.unmatched' : 'log.ambiguous', { count: rules?.length ?? 0 })}>
@@ -200,10 +215,22 @@ function ChainLink({ rule, onShowChain }: { rule: LoggingRule; onShowChain(ancho
   );
 }
 
+function OriginLink({ origin }: { origin: PrefixOrigin }) {
+  return (
+    <button type="button" className={styles.chainLink} onClick={origin.onShow}>
+      {origin.label}
+    </button>
+  );
+}
+
 function Verdict({ verdict }: { verdict: string }) {
   const word = verdict.replace(/^policy /, '');
   const tone = word === 'drop' || word === 'reject' ? styles.drop : word === 'accept' ? styles.accept : '';
-  return <span className={`${styles.verdict} ${tone}`}>{verdict}</span>;
+  return (
+    <span className={`${styles.verdict} ${tone}`} title={verdict}>
+      {verdict}
+    </span>
+  );
 }
 
 /** The time of day, with the date when it is not today. */

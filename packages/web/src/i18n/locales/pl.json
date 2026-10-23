@@ -1202,5 +1202,10 @@
   "uci.problem.ports-tcpudp": "Porty wymagają TCP lub UDP.",
   "uci.problem.families": "Adresy są z obu rodzin; jedna reguła bierze adresy IPv4 albo IPv6, nie oba naraz.",
   "uci.problem.device": "{{value}} to nie nazwa interfejsu: do 15 znaków, bez spacji i cudzysłowów.",
-  "uci.problem.snat-needs": "SNAT wymaga adresu albo portu do wpisania."
+  "uci.problem.snat-needs": "SNAT wymaga adresu albo portu do wpisania.",
+  "log.fw4.zone": "Strefa {{zone}} · {{policy}}",
+  "log.fw4.rule": "Reguła ruchu {{name}}",
+  "log.fw4.redirect": "Przekierowanie {{name}}",
+  "log.fw4.nat": "Reguła NAT {{name}}",
+  "uci.log": "Loguj pakiety, które pasują; pokazuje je zakładka Logi"
 }

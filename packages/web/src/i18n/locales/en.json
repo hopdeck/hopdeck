@@ -1132,5 +1132,10 @@
   "uci.problem.ports-tcpudp": "Ports need TCP or UDP.",
   "uci.problem.families": "The addresses are of both families; one rule takes IPv4 or IPv6 addresses, not both.",
   "uci.problem.device": "{{value}} is no interface name: up to 15 characters, without spaces or quotes.",
-  "uci.problem.snat-needs": "SNAT needs an address or a port to write."
+  "uci.problem.snat-needs": "SNAT needs an address or a port to write.",
+  "log.fw4.zone": "Zone {{zone}} · {{policy}}",
+  "log.fw4.rule": "Traffic rule {{name}}",
+  "log.fw4.redirect": "Port forward {{name}}",
+  "log.fw4.nat": "NAT rule {{name}}",
+  "uci.log": "Log the packets it matches; the Logs tab shows them"
 }

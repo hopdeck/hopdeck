@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Mateusz T (Tenir)
 
 import {
+  fw4LogOrigin,
+  openwrtFirewall,
   platform,
   tableKey,
   type Family,
@@ -26,7 +28,7 @@ import { ListingView } from '../firewall/ruleset/ListingView.tsx';
 import { changedTables } from '../firewall/ruleset/model.ts';
 import { PacketPathView } from '../firewall/ruleset/PacketPathView.tsx';
 import { NEW_TRACE_SESSION, TracePanel, type TraceSession } from '../firewall/trace/TracePanel.tsx';
-import { PacketLogPanel } from '../firewall/log/PacketLogPanel.tsx';
+import { PacketLogPanel, type PrefixOrigin } from '../firewall/log/PacketLogPanel.tsx';
 import { ForwardsPanel } from '../firewall/forward/ForwardsPanel.tsx';
 import { RulesetView } from '../firewall/ruleset/RulesetView.tsx';
 import { useRuleset, type RulesetState } from '../firewall/ruleset/useRuleset.ts';
@@ -138,6 +140,22 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
   useEffect(() => {
     if (uci) setTab((current) => (current === 'rules' ? 'zones' : current));
   }, [uci]);
+  // What made a line of the packet log on OpenWrt: a zone's policy, or a section that logs, as the router has them.
+  const committed = uciFirewall.base;
+  const logOrigin = useMemo(() => {
+    if (committed === undefined) return undefined;
+    const firewall = openwrtFirewall(committed);
+    const policies = { in: 'uci.zones.input', out: 'uci.zones.output', forward: 'uci.zones.forward' } as const;
+    const tabs = { rule: 'uci-rules', redirect: 'redirects', nat: 'nat' } as const;
+    return (prefix: string): PrefixOrigin | undefined => {
+      const origin = fw4LogOrigin(firewall, committed.sections, prefix);
+      if (origin === undefined) return undefined;
+      if (origin.kind === 'zone') {
+        return { label: t('log.fw4.zone', { zone: origin.zone, policy: t(policies[origin.direction]) }), verdict: `policy ${origin.verdict}`, onShow: () => setTab('zones') };
+      }
+      return { label: t(`log.fw4.${origin.kind}`, { name: origin.name }), onShow: () => setTab(tabs[origin.kind]) };
+    };
+  }, [committed, t]);
   // A chain to scroll to once the rules tab is shown, e.g. picked in the packet path.
   const [scrollTarget, setScrollTarget] = useState<string>();
   // Changes being planned and applied in the deployment dialog.
@@ -445,6 +463,7 @@ export function HostView({ host, connecting, onConnect, onRemove, onUnlock, onUp
                         setScrollTarget(anchor);
                         setTab('rules');
                       }}
+                      origin={logOrigin}
                     />
                   ),
               },

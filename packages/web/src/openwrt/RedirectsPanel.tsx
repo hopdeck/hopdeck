@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import { redirectChanges, redirectForm, redirectProblems, type DhcpHost, type FirewallRedirect, type RedirectForm } from '@hopdeck/core';
+import { fw4Name, redirectChanges, redirectForm, redirectProblems, type DhcpHost, type FirewallRedirect, type RedirectForm } from '@hopdeck/core';
 import { useEffect, useState } from 'react';
 import { api } from '../api.ts';
 import { EditIcon, PlusIcon, TrashIcon } from '../components/icons.tsx';
@@ -11,7 +11,7 @@ import { Field } from '../firewall/edit/fields.tsx';
 import editor from '../firewall/edit/Editor.module.css';
 import type { RulesetModel } from '../firewall/ruleset/model.ts';
 import type { LiveInfo } from '../firewall/ruleset/useLive.ts';
-import { fw4Counters, fw4Name } from './counters.ts';
+import { fw4Counters } from './counters.ts';
 import { fieldErrors, FormDialog } from './FormDialog.tsx';
 import styles from './OpenWrt.module.css';
 import { touchedSections, type UciFirewallState } from './useUciFirewall.ts';
@@ -248,6 +248,10 @@ function RedirectDialog({ hostId, state, redirect, opening, onClose }: { hostId:
       </label>
       <p className={editor.note}>{t('uci.redirects.reflectionHint')}</p>
       <p className={editor.note}>{t(masquerading ? 'uci.redirects.masqOn' : 'uci.redirects.masqNote', { zone: form.dest })}</p>
+      <label className={editor.option}>
+        <input type="checkbox" checked={form.log} onChange={(event) => edit('log', { log: event.target.checked })} />
+        {t('uci.log')}
+      </label>
     </FormDialog>
   );
 }

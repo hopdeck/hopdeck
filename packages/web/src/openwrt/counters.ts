@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Mateusz T (Tenir)
 
-import { ruleKey, type Counter, type UciSection } from '@hopdeck/core';
+import { ruleKey, type Counter } from '@hopdeck/core';
 import { ruleCounter, type RulesetModel } from '../firewall/ruleset/model.ts';
 import type { LiveInfo } from '../firewall/ruleset/useLive.ts';
 
@@ -43,12 +43,4 @@ export function fw4Counters(model: RulesetModel, live: LiveInfo | undefined, kin
     }
   }
   return counters;
-}
-
-/** The name fw4 gives a section's rules: its name option, else its place among the sections of its type. */
-export function fw4Name(section: UciSection, sections: readonly UciSection[]): string {
-  const name = section.options['name'];
-  if (typeof name === 'string' && name !== '') return name;
-  const nth = sections.filter((other) => other.type === section.type && other.index < section.index).length;
-  return `@${section.type}[${nth}]`;
 }

@@ -17,8 +17,9 @@ only easier:
 - Port forwards with a wizard: DNAT, the accepts every forward chain needs,
   masquerade and hairpin NAT, listed, changed and removed as one.
 - A packet log: what rules with a log statement wrote to the host's kernel
-  log, each line linked to its rule, the same packet within a second folded
-  into one line; one click logs what a chain's policy drops.
+  log, each line linked to its rule (on OpenWrt, to its zone or UCI rule),
+  the same packet within a second folded into one line; one click logs what
+  a chain's policy drops.
 - A history of every change, kept on each host: who made it, from where and
   with which SSH key, changes made outside hopdeck, and a way back to any
   version.
